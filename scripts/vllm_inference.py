@@ -1,3 +1,5 @@
+import json
+import logging
 import os
 from functools import partial
 
@@ -13,6 +15,14 @@ from infreqact.inference.zeroshot import collate_fn
 from infreqact.metrics.base import compute_metrics
 
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
@@ -34,12 +44,13 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
 
         dataset = Subset(dataset, range(min(num_samples, len(dataset))))
 
-    print(
+    logger.info(
         f"Processing {len(dataset)} samples with batch_size={batch_size}, num_workers={num_workers}"
     )
-    print(f"Chain-of-thought: {cot}")
+    logger.info(f"Chain-of-thought: {cot}")
 
     checkpoint_path = "Qwen/Qwen3-VL-4B-Instruct"
+    logger.info(f"Loading model and processor: {checkpoint_path}")
     processor = AutoProcessor.from_pretrained(checkpoint_path)
 
     # Create DataLoader with custom collate function
@@ -75,7 +86,7 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
     all_outputs = []
     all_samples = []
 
-    print("\nGenerating predictions...")
+    logger.info("Generating predictions...")
     for batch_messages, batch_samples in tqdm(dataloader, desc="Processing batches"):
         # Prepare inputs for vLLM
         batch_inputs = [prepare_inputs_for_vllm([msg], processor) for msg in batch_messages]
@@ -86,62 +97,68 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
         all_outputs.extend(batch_outputs)
         all_samples.extend(batch_samples)
 
-    print(f"\nGenerated {len(all_outputs)} predictions")
+    logger.info(f"Generated {len(all_outputs)} predictions")
 
     predictions, predicted_labels, true_labels = parse_llm_outputs(
         all_outputs, all_samples, verbose=verbose
     )
 
-    with open("outputs/vllm_inference_predictions.json", "w") as f:
-        import json
-
+    predictions_file = "outputs/vllm_inference_predictions.json"
+    with open(predictions_file, "w") as f:
         json.dump(predictions, f, indent=4)
+    logger.info(f"Saved predictions to {predictions_file}")
 
     # Compute comprehensive metrics
-    print("\n" + ">" * 40)
-    print("EVALUATION METRICS")
-    print(">" * 40)
+    logger.info("=" * 80)
+    logger.info("EVALUATION METRICS")
+    logger.info("=" * 80)
 
     metrics = compute_metrics(y_pred=predicted_labels, y_true=true_labels)
-    with open("outputs/vllm_inference_metrics.json", "w") as f:
-        import json
-
+    metrics_file = "outputs/vllm_inference_metrics.json"
+    with open(metrics_file, "w") as f:
         json.dump(metrics, f, indent=4)
+    logger.info(f"Saved metrics to {metrics_file}")
 
-    # Print key metrics
-    print("\n📊 Overall Performance:")
-    print(f"  Accuracy:          {metrics['accuracy']:.3f}")
-    print(f"  Balanced Accuracy: {metrics['balanced_accuracy']:.3f}")
-    print(f"  Macro F1:          {metrics['macro_f1']:.3f}")
+    # Log key metrics
+    logger.info("")
+    logger.info("📊 Overall Performance:")
+    logger.info(f"  Accuracy:          {metrics['accuracy']:.3f}")
+    logger.info(f"  Balanced Accuracy: {metrics['balanced_accuracy']:.3f}")
+    logger.info(f"  Macro F1:          {metrics['macro_f1']:.3f}")
 
-    print("\n🚨 Fall Detection (Binary):")
-    print(f"  Sensitivity:  {metrics['fall_sensitivity']:.3f}")
-    print(f"  Specificity:  {metrics['fall_specificity']:.3f}")
-    print(f"  F1 Score:     {metrics['fall_f1']:.3f}")
+    logger.info("")
+    logger.info("🚨 Fall Detection (Binary):")
+    logger.info(f"  Sensitivity:  {metrics['fall_sensitivity']:.3f}")
+    logger.info(f"  Specificity:  {metrics['fall_specificity']:.3f}")
+    logger.info(f"  F1 Score:     {metrics['fall_f1']:.3f}")
 
-    print("\n🤕 Fallen Detection (Binary):")
-    print(f"  Sensitivity:  {metrics['fallen_sensitivity']:.3f}")
-    print(f"  Specificity:  {metrics['fallen_specificity']:.3f}")
-    print(f"  F1 Score:     {metrics['fallen_f1']:.3f}")
+    logger.info("")
+    logger.info("🤕 Fallen Detection (Binary):")
+    logger.info(f"  Sensitivity:  {metrics['fallen_sensitivity']:.3f}")
+    logger.info(f"  Specificity:  {metrics['fallen_specificity']:.3f}")
+    logger.info(f"  F1 Score:     {metrics['fallen_f1']:.3f}")
 
-    print("\n⚠️  Fall ∪ Fallen (Binary):")
-    print(f"  Sensitivity:  {metrics['fall_union_fallen_sensitivity']:.3f}")
-    print(f"  Specificity:  {metrics['fall_union_fallen_specificity']:.3f}")
-    print(f"  F1 Score:     {metrics['fall_union_fallen_f1']:.3f}")
+    logger.info("")
+    logger.info("⚠️  Fall ∪ Fallen (Binary):")
+    logger.info(f"  Sensitivity:  {metrics['fall_union_fallen_sensitivity']:.3f}")
+    logger.info(f"  Specificity:  {metrics['fall_union_fallen_specificity']:.3f}")
+    logger.info(f"  F1 Score:     {metrics['fall_union_fallen_f1']:.3f}")
 
-    # Print per-class F1 scores for classes present in the test set
-    print("\n📈 Per-Class F1 Scores:")
+    # Log per-class F1 scores for classes present in the test set
+    logger.info("")
+    logger.info("📈 Per-Class F1 Scores:")
     for key, value in sorted(metrics.items()):
         if key.endswith("_f1") and not key.startswith(("fall_", "fallen_", "fall_union")):
             class_name = key.replace("_f1", "")
-            print(f"  {class_name:15s}: {value:.3f}")
+            logger.info(f"  {class_name:15s}: {value:.3f}")
 
-    print("\n📦 Sample Counts:")
-    print(f"  Total: {metrics['sample_count']}")
+    logger.info("")
+    logger.info("📦 Sample Counts:")
+    logger.info(f"  Total: {metrics['sample_count']}")
     for key, value in sorted(metrics.items()):
         if key.startswith("sample_count_"):
             class_name = key.replace("sample_count_", "")
-            print(f"  {class_name:15s}: {value}")
+            logger.info(f"  {class_name:15s}: {value}")
 
 
 if __name__ == "__main__":
@@ -157,8 +174,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--verbose", type=int, default=5, help="Number of samples to print (0 for none)"
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set logging level",
+    )
 
     args = parser.parse_args()
+
+    # Set logging level based on argument
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     main(
         batch_size=args.batch_size,
