@@ -6,6 +6,7 @@ Adapted from fall-da/training/metrics_factory.py to work without HuggingFace Tra
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     f1_score,
     precision_recall_fscore_support,
     precision_score,
@@ -13,27 +14,6 @@ from sklearn.metrics import (
 )
 
 from infreqact.data.video_dataset import idx2label, label2idx
-
-
-def balanced_accuracy_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Compute balanced accuracy (average of per-class recall).
-
-    Args:
-        y_true: Ground truth labels (numeric indices)
-        y_pred: Predicted labels (numeric indices)
-
-    Returns:
-        Balanced accuracy score
-    """
-    # Get per-class recall scores
-    per_class_recall = recall_score(y_true, y_pred, average=None, zero_division=0)
-
-    # Only average over classes that appear in y_true
-    unique_classes = np.unique(y_true)
-    class_recalls = [per_class_recall[i] for i in unique_classes if i < len(per_class_recall)]
-
-    return np.mean(class_recalls) if class_recalls else 0.0
 
 
 def compute_metrics(

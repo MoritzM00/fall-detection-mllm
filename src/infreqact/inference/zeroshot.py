@@ -19,7 +19,7 @@ def get_system_prompt(cot=False):
             Output Format:
             Return a JSON object:
             {
-              "reasoning": "Brief analysis of intent, movement type, and objects.",
+              "reason": "Brief analysis of intent, movement type, and objects.",
               "label": "<class_label>"
             }
         """).strip()

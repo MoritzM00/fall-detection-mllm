@@ -1,10 +1,21 @@
 import json
 import logging
 import os
+
+from infreqact.utils.logging import setup_logging
+
+# Configure logging before importing heavy libraries
+console, rich_handler, file_handler = setup_logging(
+    log_file="logs/local_logs.log",
+    console_level=logging.INFO,
+    file_level=logging.DEBUG,
+)
+logger = logging.getLogger(__name__)
+
 from functools import partial
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
@@ -15,14 +26,6 @@ from infreqact.inference.zeroshot import collate_fn
 from infreqact.metrics.base import compute_metrics
 
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
 
 
 def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
@@ -40,8 +43,6 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
 
     # Limit dataset size if specified
     if num_samples is not None:
-        from torch.utils.data import Subset
-
         dataset = Subset(dataset, range(min(num_samples, len(dataset))))
 
     logger.info(

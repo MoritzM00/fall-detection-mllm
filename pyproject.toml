@@ -42,9 +42,11 @@ select = [
     "I",
 ]
 extend-ignore = [
+    "E402",    # module level import not at top of file
     "E501",    # dont enforce line too long
     "D203",    # One blank line before class docstring
     "D213",    # Multi-line docstring summary should start at the second line
+    "SIM108",   # dont always prefer ternary operator
 ]
 
 [tool.ruff.lint.pydocstyle]
