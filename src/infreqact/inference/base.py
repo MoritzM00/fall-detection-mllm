@@ -1,3 +1,4 @@
+import logging
 import time
 import warnings
 
@@ -6,6 +7,8 @@ from qwen_vl_utils import process_vision_info
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+
+logger = logging.getLogger(__name__)
 
 
 def init_hf_qwen_model(size="2B", attn_implementation="flash_attention_2", cache_dir=".cache"):
@@ -214,9 +217,12 @@ def parse_llm_outputs(outputs: list[dict], samples: list[dict], verbose: bool | 
             prediction["reasoning"] = json_obj.get("reasoning", "")
             predictions[f"sample_{i}"] = prediction
         except Exception as e:
-            if should_print:
-                print(f"  Error parsing JSON: {e}")
-                print(f"  Raw generated text: {generated_text!r}")
+            import traceback
+
+            logger.error(f"Failed to parse JSON for sample {i}: {e}")
+            logger.error(f"Generated text: {generated_text}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
             # Default to 'other' for failed parses
             predicted_labels.append("other")
 

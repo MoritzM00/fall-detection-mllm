@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+from infreqact.evaluation.visual import visualize_evaluation_results
 from infreqact.utils.logging import setup_logging
 
 # Configure logging before importing heavy libraries
@@ -21,9 +22,9 @@ from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 
 from infreqact.data.utils import load_test_omnifall_dataset
+from infreqact.evaluation import evaluate_predictions
 from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
 from infreqact.inference.zeroshot import collate_fn
-from infreqact.metrics.base import compute_metrics
 
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 
@@ -50,7 +51,7 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
     )
     logger.info(f"Chain-of-thought: {cot}")
 
-    checkpoint_path = "Qwen/Qwen3-VL-4B-Instruct"
+    checkpoint_path = "Qwen/Qwen3-VL-8B-Instruct"
     logger.info(f"Loading model and processor: {checkpoint_path}")
     processor = AutoProcessor.from_pretrained(checkpoint_path)
 
@@ -114,60 +115,24 @@ def main(batch_size=32, num_workers=8, num_samples=None, cot=False, verbose=5):
     logger.info("EVALUATION METRICS")
     logger.info("=" * 80)
 
-    metrics = compute_metrics(y_pred=predicted_labels, y_true=true_labels)
-    metrics_file = "outputs/vllm_inference_metrics.json"
-    with open(metrics_file, "w") as f:
-        json.dump(metrics, f, indent=4)
-    logger.info(f"Saved metrics to {metrics_file}")
+    metrics = evaluate_predictions(
+        predictions=predicted_labels,
+        references=true_labels,
+        dataset_name="vllm_inference",
+        output_dir="outputs",
+        save_results=True,
+    )
 
-    # Log key metrics
-    logger.info("")
-    logger.info("📊 Overall Performance:")
-    logger.info(f"  Accuracy:          {metrics['accuracy']:.3f}")
-    logger.info(f"  Balanced Accuracy: {metrics['balanced_accuracy']:.3f}")
-    logger.info(f"  Macro F1:          {metrics['macro_f1']:.3f}")
-
-    logger.info("")
-    logger.info("🚨 Fall Detection (Binary):")
-    logger.info(f"  Sensitivity:  {metrics['fall_sensitivity']:.3f}")
-    logger.info(f"  Specificity:  {metrics['fall_specificity']:.3f}")
-    logger.info(f"  F1 Score:     {metrics['fall_f1']:.3f}")
-
-    logger.info("")
-    logger.info("🤕 Fallen Detection (Binary):")
-    logger.info(f"  Sensitivity:  {metrics['fallen_sensitivity']:.3f}")
-    logger.info(f"  Specificity:  {metrics['fallen_specificity']:.3f}")
-    logger.info(f"  F1 Score:     {metrics['fallen_f1']:.3f}")
-
-    logger.info("")
-    logger.info("⚠️  Fall ∪ Fallen (Binary):")
-    logger.info(f"  Sensitivity:  {metrics['fall_union_fallen_sensitivity']:.3f}")
-    logger.info(f"  Specificity:  {metrics['fall_union_fallen_specificity']:.3f}")
-    logger.info(f"  F1 Score:     {metrics['fall_union_fallen_f1']:.3f}")
-
-    # Log per-class F1 scores for classes present in the test set
-    logger.info("")
-    logger.info("📈 Per-Class F1 Scores:")
-    for key, value in sorted(metrics.items()):
-        if key.endswith("_f1") and not key.startswith(("fall_", "fallen_", "fall_union")):
-            class_name = key.replace("_f1", "")
-            logger.info(f"  {class_name:15s}: {value:.3f}")
-
-    logger.info("")
-    logger.info("📦 Sample Counts:")
-    logger.info(f"  Total: {metrics['sample_count']}")
-    for key, value in sorted(metrics.items()):
-        if key.startswith("sample_count_"):
-            class_name = key.replace("sample_count_", "")
-            logger.info(f"  {class_name:15s}: {value}")
+    # Print formatted results
+    visualize_evaluation_results(metrics)
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run vLLM inference on Omnifall dataset")
-    parser.add_argument("--batch-size", type=int, default=8, help="Batch size for processing")
-    parser.add_argument("--num-workers", type=int, default=4, help="Number of DataLoader workers")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size for processing")
+    parser.add_argument("--num-workers", type=int, default=8, help="Number of DataLoader workers")
     parser.add_argument(
         "--num-samples", type=int, default=None, help="Number of samples to process (default: all)"
     )
@@ -175,18 +140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--verbose", type=int, default=5, help="Number of samples to print (0 for none)"
     )
-    parser.add_argument(
-        "--log-level",
-        type=str,
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        help="Set logging level",
-    )
-
     args = parser.parse_args()
-
-    # Set logging level based on argument
-    logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     main(
         batch_size=args.batch_size,
