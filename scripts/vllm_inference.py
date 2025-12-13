@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 from functools import partial
 from pathlib import Path
 
@@ -67,10 +68,10 @@ def main(cfg: DictConfig):
         dataset = Subset(dataset, range(min(cfg.num_samples, len(dataset))))
 
     logger.info(
-        f"Processing {len(dataset)} samples with batch_size={cfg.inference.batch_size}, "
-        f"num_workers={cfg.inference.num_workers}"
+        f"Processing {len(dataset)} samples with batch_size={cfg.batch_size}, "
+        f"num_workers={cfg.num_workers}"
     )
-    logger.info(f"Chain-of-thought: {cfg.inference.cot}")
+    logger.info(f"Chain-of-thought: {cfg.cot}")
 
     checkpoint_path = cfg.model.checkpoint_path
     model_name = cfg.model.name
@@ -79,11 +80,11 @@ def main(cfg: DictConfig):
     processor = AutoProcessor.from_pretrained(checkpoint_path)
 
     # Create DataLoader with custom collate function
-    collate_fn_with_cot = partial(collate_fn, cot=cfg.inference.cot)
+    collate_fn_with_cot = partial(collate_fn, cot=cfg.cot)
     dataloader = DataLoader(
         dataset,
-        batch_size=cfg.inference.batch_size,
-        num_workers=cfg.inference.num_workers,
+        batch_size=cfg.batch_size,
+        num_workers=cfg.num_workers,
         collate_fn=collate_fn_with_cot,
         shuffle=False,
         pin_memory=True,
@@ -150,7 +151,7 @@ def main(cfg: DictConfig):
         # Create filename based on model and dataset
         model_name = cfg.model.name.replace("/", "_").replace(".", "_")
         dataset_name = cfg.dataset.name.replace("-", "_")
-        cot_suffix = "_cot" if cfg.inference.cot else ""
+        cot_suffix = "_cot" if cfg.cot else ""
 
         predictions_file = (
             predictions_dir / f"{model_name}_{dataset_name}_predictions{cot_suffix}.json"
@@ -182,7 +183,11 @@ def main(cfg: DictConfig):
 @hydra.main(version_base=None, config_path="../config", config_name="inference_config")
 def hydra_main(cfg: DictConfig):
     """Hydra entry point for the inference script."""
-    main(cfg)
+    try:
+        main(cfg)
+    except Exception as e:
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

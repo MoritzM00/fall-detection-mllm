@@ -1,0 +1,21 @@
+# @package _global_
+
+# Debug experiment - quick testing with small sample size
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+  - override /model: qwen/instruct
+
+# Limit to small number of samples for fast testing
+num_samples: 10
+verbose: 10  # Print all samples
+
+# Use smaller model for faster testing
+model:
+  params: "2B"  # Override to use 2B model instead of default 4B
+
+batch_size: 10
+num_workers: 0  # Single-threaded for easier debugging
+
+# speed up vllm
+vllm:
+  tensor_parallel_size: 1

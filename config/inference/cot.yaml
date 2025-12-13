@@ -1,4 +1,0 @@
-# Chain of Thought Inference Configuration
-batch_size: 16  # Smaller batch for longer outputs
-num_workers: 8
-cot: true  # Enable chain of thought reasoning

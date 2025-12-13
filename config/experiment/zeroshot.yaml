@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+
+# Full dataset evaluation
+num_samples: null  # Process all samples
+verbose: false
+cot: false  # No chain-of-thought for baseline
+
+# Model configuration
+model:
+  params: "4B"  # Use 4B model for zero-shot
+
+# Output settings
+output_dir: "outputs/zeroshot"

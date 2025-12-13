@@ -1,14 +1,19 @@
 defaults:
+  # dataset specified by experiment config
   - vllm: default
   - sampling: greedy
   - model: qwen/instruct
-  - /dataset/omnifall/video/oops@dataset
-  - inference: default
   - _self_
+  - experiment: debug
 
 # Global video processing parameters
 model_fps: 8.0  # Target frame rate for video sampling
 num_frames: 16  # Number of frames to extract per video
+
+# Inference settings
+batch_size: 50
+num_workers: 8
+cot: false  # Chain of thought reasoning
 
 # Output configuration
 output_dir: "outputs"

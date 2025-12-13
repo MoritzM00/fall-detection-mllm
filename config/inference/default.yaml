@@ -1,4 +1,0 @@
-# Default Inference Configuration
-batch_size: 32
-num_workers: 8
-cot: false  # Chain of thought reasoning
