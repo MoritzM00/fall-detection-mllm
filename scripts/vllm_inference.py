@@ -19,32 +19,11 @@ from infreqact.evaluation import evaluate_predictions
 from infreqact.evaluation.visual import visualize_evaluation_results
 from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
 from infreqact.inference.zeroshot import collate_fn
-from infreqact.utils.logging import setup_logging
+from infreqact.utils.logging import reconfigure_logging_after_wandb, setup_logging
+from infreqact.utils.wandb import initialize_run_from_config
 
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 logger = logging.getLogger(__name__)
-
-
-def cleanup_vllm(llm):
-    """Properly cleanup vLLM resources to avoid NCCL warnings."""
-    try:
-        # Destroy the LLM engine
-        if hasattr(llm, "llm_engine"):
-            del llm.llm_engine
-        del llm
-
-        # Force garbage collection
-        import gc
-
-        gc.collect()
-
-        # Clear CUDA cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-
-    except Exception as e:
-        logger.warning(f"Error during vLLM cleanup: {e}")
 
 
 def main(cfg: DictConfig):
@@ -66,22 +45,14 @@ def main(cfg: DictConfig):
     )
 
     # Resolve all OmegaConf interpolations once at the beginning
-    cfg = OmegaConf.to_container(cfg, resolve=True)
-    cfg = OmegaConf.create(cfg)  # Convert back to DictConfig for dot notation access
+    OmegaConf.resolve(cfg)
 
     logger.info("Configuration:")
     logger.info(f"\n{OmegaConf.to_yaml(cfg)}")
 
     # Initialize Weights & Biases
-    wandb_mode = cfg.get("wandb", {}).get("mode", "online")
-    logger.info(f"Initializing W&B in {wandb_mode} mode")
-    run = wandb.init(
-        project=cfg.get("wandb", {}).get("project", "vllm-inference"),
-        name=cfg.get("wandb", {}).get("name", None),
-        tags=cfg.get("wandb", {}).get("tags", []),
-        config=OmegaConf.to_container(cfg, resolve=True),
-        mode=wandb_mode,
-    )
+    run = initialize_run_from_config(cfg)
+    reconfigure_logging_after_wandb(rich_handler, file_handler)
 
     # Create config structure compatible with get_video_datasets
     # Wrap dataset config as dataset_test for the factory
@@ -110,7 +81,6 @@ def main(cfg: DictConfig):
     checkpoint_path = cfg.model.checkpoint_path
     model_name = cfg.model.name
     logger.info(f"Loading model and processor: {checkpoint_path}")
-    logger.info(f"Model name: {model_name}")
     processor = AutoProcessor.from_pretrained(checkpoint_path)
 
     # Create DataLoader with custom collate function
@@ -128,7 +98,7 @@ def main(cfg: DictConfig):
     tensor_parallel_size = cfg.vllm.tensor_parallel_size
     if tensor_parallel_size is None:
         tensor_parallel_size = torch.cuda.device_count()
-        logger.info(f"Auto-detected tensor_parallel_size: {tensor_parallel_size} (using all GPUs)")
+    logger.info(f"Using tensor_parallel_size={tensor_parallel_size}")
 
     # Initialize vLLM model with config parameters
     vllm_kwargs = {

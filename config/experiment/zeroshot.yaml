@@ -15,8 +15,8 @@ model:
 # W&B tracking
 wandb:
   project: "fall-detection-zeroshot"
-  name: "qwen-4b-oops-zeroshot"
-  tags: ["zeroshot", "qwen", "oops"]
+  name:
+  tags: ["zeroshot"]
 
 # Output settings
 output_dir: "outputs/zeroshot"

@@ -2,7 +2,7 @@
 
 # Debug experiment - quick testing with small sample size
 defaults:
-  - /dataset/omnifall/video@dataset: oops
+  - /dataset/omnifall/video@dataset: cmdfall
   - override /model: qwen/instruct
 
 # Limit to small number of samples for fast testing
