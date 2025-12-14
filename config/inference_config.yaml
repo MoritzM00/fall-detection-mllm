@@ -22,7 +22,6 @@ save_metrics: true
 
 # Inference settings
 num_samples: null  # null = all samples
-verbose: 5  # Number of samples to print
 
 # Weights & Biases configuration
 wandb:

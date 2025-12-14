@@ -162,74 +162,47 @@ def prepare_inputs_for_vllm(messages, processor):
     return {"prompt": text, "multi_modal_data": mm_data, "mm_processor_kwargs": video_kwargs}
 
 
-def parse_llm_outputs(outputs: list[dict], samples: list[dict], verbose: bool | int = False):
+def parse_llm_outputs(outputs: list[dict], samples: list[dict], label2idx: dict):
     """
     Parse LLM outputs and extract predicted labels.
 
     Args:
         outputs: List of LLM output objects containing generated text
         samples: List of ground truth samples with labels
-        verbose: Controls output printing:
-            - False/0: No printing
-            - True: Print first 10 samples
-            - int > 0: Print first N samples
+        label2idx: Dictionary mapping label strings to indices for validation
 
     Returns:
         tuple: (predictions dict, predicted_labels list, true_labels list)
     """
-    # Extract predicted labels from LLM outputs
     predicted_labels = []
     true_labels = []
-
-    # Determine how many samples to print
-    if verbose is False or verbose == 0:
-        n_print = 0
-    elif verbose is True:
-        n_print = 10
-    else:
-        n_print = int(verbose)
-
     predictions = {}
+
     for i, (output, sample) in enumerate(zip(outputs, samples)):
         generated_text = output.outputs[0].text
-
-        # Print output if within verbosity limit
-        should_print = i < n_print
-        if should_print:
-            print()
-            print("=" * 40)
-            print(f"Sample {i + 1}/{len(outputs)}")
-
         true_labels.append(sample["label_str"])
+
         try:
             json_obj = json_repair.loads(generated_text)
-            predicted_label = json_obj.get("label", "other")  # Default to 'other' if missing
+            predicted_label = json_obj.get("label", "other")
 
-            if should_print:
-                print(f"JSON output: {json_obj}")
-                print(f"  predicted label: {predicted_label}")
-                print(f"  true label: {sample['label_str']}")
+            # Validate that the label exists in label2idx
+            if predicted_label not in label2idx:
+                logger.warning(
+                    f"Sample {i}: Invalid label '{predicted_label}' not in label2idx. Defaulting to 'other'."
+                )
+                predicted_label = "other"
 
             predicted_labels.append(predicted_label)
 
             prediction = sample.copy()
             prediction["predicted_label"] = predicted_labels[-1]
-            prediction["reasoning"] = json_obj.get("reasoning", "")
+            prediction["reason"] = json_obj.get("reason", "")
             predictions[f"sample_{i}"] = prediction
         except Exception as e:
-            import traceback
-
-            logger.error(f"Failed to parse JSON for sample {i}: {e}")
-            logger.error(f"Generated text: {generated_text}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-
-            # Default to 'other' for failed parses
+            logger.error(
+                f"Failed to parse JSON for sample {i}: {e}\nGenerated text: {generated_text}"
+            )
             predicted_labels.append("other")
-
-    # Print summary if verbosity is enabled but there are more samples
-    if n_print > 0 and len(outputs) > n_print:
-        print()
-        print("=" * 40)
-        print(f"... {len(outputs) - n_print} more samples (use verbose={len(outputs)} to see all)")
 
     return predictions, predicted_labels, true_labels

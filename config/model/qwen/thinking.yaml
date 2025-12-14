@@ -1,8 +1,13 @@
 # Qwen QwQ (Thinking) models
 
+# Model identification
+family: "Qwen"
 version: "3"
 variant: "Thinking"
 params: "4B"
 
-name: "Qwen${model.version}-${model.variant}"
-checkpoint_path: "Qwen/${model.name}"
+# Computed paths
+name: "${model.family}${model.version}-${model.variant}"
+checkpoint_path: "${model.family}/${model.name}"
+
+# potentially alter the sampling params for thinking models

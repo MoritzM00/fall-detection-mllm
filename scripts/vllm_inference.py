@@ -14,6 +14,7 @@ from transformers import AutoProcessor
 from vllm import LLM, SamplingParams
 
 import wandb
+from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
 from infreqact.evaluation.visual import visualize_evaluation_results
@@ -144,7 +145,7 @@ def main(cfg: DictConfig):
     logger.info(f"Generated {len(all_outputs)} predictions")
 
     predictions, predicted_labels, true_labels = parse_llm_outputs(
-        all_outputs, all_samples, verbose=cfg.get("verbose", 5)
+        all_outputs, all_samples, label2idx
     )
 
     # Create filename components for reuse
@@ -212,6 +213,7 @@ def main(cfg: DictConfig):
             run.log_artifact(artifact)
 
     logger.info(f"Logged results to W&B: {run.url}")
+    wandb.finish()
 
 
 @hydra.main(version_base=None, config_path="../config", config_name="inference_config")
@@ -221,6 +223,7 @@ def hydra_main(cfg: DictConfig):
         main(cfg)
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
+        wandb.finish(exit_code=1)
         sys.exit(1)
 
 

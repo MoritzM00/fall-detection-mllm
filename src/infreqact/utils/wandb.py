@@ -53,8 +53,8 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
     if tags is None:
         tags = []
     tags.append(cfg.dataset.get("name", "unknown_dataset"))
-    # extract model family from model name
-    model_family = cfg.model.name.split("-")[0]
+    # Use model family from config
+    model_family = cfg.model.get("family", cfg.model.name.split("-")[0])
     tags.append(model_family)
 
     if cfg.get("cot", False):

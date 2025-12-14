@@ -1,12 +1,15 @@
 # Qwen MoE models
 
+# Model identification
+family: "Qwen"
 version: "3"
 variant: "Instruct"
 total_params: "30B"
 active_params: "A3B"
 
-name: "Qwen${model.version}-VL-${model.total_params}-${model.active_params}-${model.variant}"
-checkpoint_path: "Qwen/${model.name}"
+# Computed paths
+name: "${model.family}${model.version}-VL-${model.total_params}-${model.active_params}-${model.variant}"
+checkpoint_path: "${model.family}/${model.name}"
 
 # Override vLLM settings for MoE
 vllm:
