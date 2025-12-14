@@ -17,7 +17,6 @@ import wandb
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.evaluation.visual import visualize_evaluation_results
 from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
 from infreqact.inference.zeroshot import collate_fn
 from infreqact.utils.logging import reconfigure_logging_after_wandb, setup_logging
@@ -57,17 +56,25 @@ def main(cfg: DictConfig):
 
     # Create config structure compatible with get_video_datasets
     # Wrap dataset config as dataset_test for the factory
-    temp_cfg = OmegaConf.create(
-        {"dataset_test": cfg.dataset, "model_fps": cfg.model_fps, "num_frames": cfg.num_frames}
-    )
+    temp_cfg = OmegaConf.create({"dataset_test": cfg.dataset})
 
     dataset = get_video_datasets(
         cfg=temp_cfg,
         mode=cfg.dataset.get("mode", "test"),
         run=run,
-        return_individual=False,
+        return_individual=True,
         split=cfg.dataset.get("split", "cs"),
     )
+    for dataset_name, dataset in dataset["individual"].items():
+        # TODO: support multiple datasets in vLLM inference
+        # we probably need to loop over datasets and aggregate predictions for metrics computation
+        if len(dataset["individual"]) > 1:
+            logger.error(
+                "vLLM inference currently supports only a single dataset. "
+                f"Found multiple datasets: {list(dataset['individual'].keys())}. "
+                f"Using the first one: {dataset_name}."
+            )
+        break
 
     # Limit dataset size if specified
     if cfg.get("num_samples") is not None:
@@ -174,19 +181,15 @@ def main(cfg: DictConfig):
     # Create metrics subdirectory
     metrics_dir = Path(cfg.output_dir) / "metrics" if cfg.get("save_metrics", True) else None
 
-    metrics = evaluate_predictions(
+    evaluate_predictions(
+        dataset=dataset,
         predictions=predicted_labels,
         references=true_labels,
-        dataset_name=f"{model_name}_{dataset_name}",
+        dataset_name=dataset_name,
         output_dir=str(metrics_dir) if metrics_dir else None,
         save_results=cfg.get("save_metrics", True),
+        run=run,
     )
-
-    # Print formatted results
-    visualize_evaluation_results(metrics)
-
-    # Log to W&B
-    wandb.log(metrics)
 
     # Log predictions as artifact
     if predictions_file is not None:

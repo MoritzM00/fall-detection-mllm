@@ -1,101 +1,136 @@
-import json
-import time
-from pathlib import Path
+import logging
 from typing import Any
 
 import numpy as np
 
-from .base import evaluate_predictions, logger
+import wandb
+from infreqact.data.dataset import GenericVideoDataset
+from infreqact.metrics.subgroup import compute_subgroup_metrics, print_subgroup_summary
+
+from .visual import visualize_subgroup_results
+
+logger = logging.getLogger(__name__)
 
 
-def evaluate_with_subgroups(
-    predictions: list[str] | list[int] | np.ndarray,
-    references: list[str] | list[int] | np.ndarray,
-    metadata: dict[str, list],
-    dataset_name: str = "test",
-    subgroup_keys: list[str] | None = None,
-    output_dir: str | None = None,
-    save_results: bool = True,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def perform_subgroup_evaluation(
+    dataset: Any,
+    predictions: np.ndarray,
+    references: np.ndarray,
+    dataset_name: str,
+    run: wandb.Run | None = None,
+) -> dict[str, Any] | None:
     """
-    Evaluate predictions with subgroup analysis.
+    Perform subgroup evaluation for datasets with demographic metadata.
 
     Args:
-        predictions: Predicted labels (strings or indices)
-        references: Ground truth labels (strings or indices)
-        metadata: Dictionary of metadata for subgroup analysis
-                  e.g., {"age_group": [...], "gender": [...], ...}
-        dataset_name: Name of the dataset for logging
-        subgroup_keys: List of metadata keys to analyze (default: all available)
-        output_dir: Directory to save results (default: "outputs")
-        save_results: Whether to save results to JSON files
+        dataset: The dataset to extract metadata from
+        predictions: Array of predicted labels
+        references: Array of ground truth labels
+        dataset_name: Name of the dataset (for logging)
+        run: WandB run for logging
 
     Returns:
-        Tuple of (overall_metrics, subgroup_metrics)
+        Dictionary of subgroup metrics, or None if no metadata available
     """
-    # First, compute overall metrics
-    overall_metrics = evaluate_predictions(
-        predictions=predictions,
-        references=references,
-        dataset_name=dataset_name,
-        output_dir=output_dir,
-        save_results=save_results,
-    )
+    logger.info(f"Performing subgroup evaluation for {dataset_name}")
 
-    # Determine which subgroups to evaluate
-    if subgroup_keys is None:
-        subgroup_keys = list(metadata.keys())
-
-    # Import subgroup evaluation utilities if available
     try:
-        from fall_da.utils.subgroup_evaluation import (
-            compute_subgroup_metrics,
-            print_subgroup_summary,
-        )
+        # Extract metadata directly from the dataset
+        # The dataset should be in the same order as predictions/references
+        logger.info(f"Extracting metadata from {len(dataset)} samples...")
 
-        logger.info(f"Computing subgroup metrics for: {subgroup_keys}")
+        metadata = {
+            "age_group": [],
+            "gender": [],
+            "ethnicity": [],
+            "bmi_band": [],
+        }
 
-        # Convert predictions and references to numpy arrays
-        pred_array = (
-            np.array(predictions) if not isinstance(predictions, np.ndarray) else predictions
-        )
-        ref_array = np.array(references) if not isinstance(references, np.ndarray) else references
+        # Check if dataset has video_segments (WanfallVideoDataset)
+        if hasattr(dataset, "video_segments"):
+            # Direct access from video_segments list (very fast, no video loading)
+            logger.info("Using fast metadata extraction via video_segments")
+            for segment in dataset.video_segments:
+                for key in metadata:
+                    value = segment.get(key, None)
+                    metadata[key].append(value)
+        # Check if dataset has direct metadata access via dataframe
+        elif hasattr(dataset, "data") and hasattr(dataset.data, "to_dict"):
+            # Direct access from underlying dataframe (also fast)
+            logger.info("Using fast metadata extraction via dataframe")
+            data_dict = dataset.data.to_dict("list")
+            for key in metadata:
+                if key in data_dict:
+                    metadata[key] = data_dict[key]
+                else:
+                    metadata[key] = [None] * len(dataset)
+        else:
+            # Fallback: iterate through dataset (very slow, loads videos!)
+            logger.warning("No fast metadata access available, falling back to dataset iteration")
+            logger.warning(f"This will load {len(dataset)} videos and may take a VERY long time...")
+
+            for i in range(len(dataset)):
+                if i % 100 == 0:
+                    logger.info(f"  Processed {i}/{len(dataset)} samples...")
+                sample = dataset[i]
+                for key in metadata:
+                    # Get metadata value from sample, default to None if not present
+                    value = sample.get(key, None)
+                    metadata[key].append(value)
+
+        logger.info(f"Metadata extraction complete: extracted {len(metadata['age_group'])} samples")
+
+        # Verify we have the right number of samples
+        if len(metadata["age_group"]) != len(predictions):
+            logger.warning(
+                f"Metadata length ({len(metadata['age_group'])}) does not match predictions length ({len(predictions)}). Skipping subgroup evaluation."
+            )
+            return None
+
+        # Check if metadata is actually available
+        if all(all(v is None for v in values) for values in metadata.values()):
+            logger.warning(
+                f"No metadata available in dataset {dataset_name}. Skipping subgroup evaluation."
+            )
+            return None
 
         # Compute subgroup metrics
         subgroup_metrics = compute_subgroup_metrics(
-            predictions=pred_array,
-            references=ref_array,
+            predictions=predictions,
+            references=references,
             metadata=metadata,
-            subgroup_keys=subgroup_keys,
+            subgroup_keys=["age_group", "ethnicity", "gender", "bmi_band"],
         )
 
-        # Print subgroup summary
+        # Visualize subgroup results with horizontal bar charts
+        visualize_subgroup_results(subgroup_metrics, dataset_name=dataset_name)
+
+        # Print summary to console (table format)
         print_subgroup_summary(subgroup_metrics)
 
-        # Save subgroup results
-        if save_results and subgroup_metrics:
-            if output_dir is None:
-                output_dir = "outputs"
-            output_path = Path(output_dir)
-            output_path.mkdir(parents=True, exist_ok=True)
+        # Log to WandB
+        if run:
+            for subgroup_key, categories in subgroup_metrics.items():
+                for category, metrics in categories.items():
+                    for metric_name, metric_value in metrics.items():
+                        run.log(
+                            {
+                                f"{dataset_name}/subgroup/{subgroup_key}/{category}/{metric_name}": metric_value
+                            }
+                        )
 
-            subgroup_file = (
-                output_path
-                / f"{dataset_name}_subgroup_metrics_{time.strftime('%Y%m%d-%H%M%S')}.json"
-            )
-            with open(subgroup_file, "w") as f:
-                json.dump(subgroup_metrics, f, indent=4)
-            logger.info(f"Saved subgroup metrics to {subgroup_file}")
+        return subgroup_metrics
 
-        return overall_metrics, subgroup_metrics
+    except Exception as e:
+        logger.error(f"Error in subgroup evaluation for {dataset_name}: {e}")
+        import traceback
 
-    except ImportError:
-        logger.warning("Subgroup evaluation utilities not available. Skipping subgroup analysis.")
-        return overall_metrics, {}
+        logger.error(traceback.format_exc())
+        return None
 
 
 def extract_metadata_from_dataset(
-    dataset: Any,
+    dataset: GenericVideoDataset,
     metadata_keys: list[str] | None = None,
 ) -> dict[str, list] | None:
     """

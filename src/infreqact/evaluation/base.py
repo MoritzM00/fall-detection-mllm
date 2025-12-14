@@ -4,25 +4,35 @@ This module provides evaluation functions that work with vLLM inference outputs,
 without requiring HuggingFace Trainer or Accelerator dependencies.
 """
 
-import json
 import logging
+import os
 import time
-from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
+import wandb
+from infreqact.data.dataset import GenericVideoDataset
+from infreqact.evaluation.subgroup import perform_subgroup_evaluation
+from infreqact.evaluation.visual import visualize_evaluation_results
 from infreqact.metrics.base import compute_metrics
+from infreqact.utils.latex import format_subgroup_latex_table
 
 logger = logging.getLogger(__name__)
 
+# TODO: implement combined evaluation function that handles multiple datasets
 
+
+# adapted from fall-da/evaluation_utils::evaluate_individual_dataset
 def evaluate_predictions(
+    dataset: GenericVideoDataset,
     predictions: list[str] | list[int] | np.ndarray,
     references: list[str] | list[int] | np.ndarray,
-    dataset_name: str = "test",
-    output_dir: str | None = None,
+    dataset_name: str,
+    output_dir: str = "outputs",
     save_results: bool = True,
+    run: wandb.Run | None = None,
 ) -> dict[str, Any]:
     """
     Evaluate predictions against ground truth labels.
@@ -38,53 +48,119 @@ def evaluate_predictions(
         Dictionary of computed metrics
     """
     logger.info(f"Evaluating {len(predictions)} predictions on {dataset_name}")
+    is_wanfall = dataset_name.lower().startswith("wanfall") or dataset_name.lower().startswith(
+        "wan_fall"
+    )
 
     # Compute comprehensive metrics
     metrics = compute_metrics(y_pred=predictions, y_true=references)
 
-    # Save results if requested
-    if save_results:
-        if output_dir is None:
-            output_dir = "outputs"
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+    visualize_evaluation_results(metrics, title=f"Test Results: {dataset_name}")
 
-        metrics_file = output_path / f"{dataset_name}_metrics_{time.strftime('%Y%m%d-%H%M%S')}.json"
-        with open(metrics_file, "w") as f:
-            json.dump(metrics, f, indent=4)
-        logger.info(f"Saved metrics to {metrics_file}")
+    # Perform subgroup evaluation if applicable
+    subgroup_results = None
+    if is_wanfall and predictions is not None:
+        subgroup_results = perform_subgroup_evaluation(
+            dataset=dataset,
+            predictions=predictions,
+            references=references,
+            dataset_name=dataset_name,
+            run=run,
+        )
+
+    if run:
+        for k, v in metrics.items():
+            wandb.log({f"{dataset_name}_{k}": v})
+
+    if save_results:
+        save_evaluation_results(metrics, subgroup_results, output_dir)
 
     return metrics
 
 
-def save_predictions(
-    predictions: list[Any],
-    output_file: str,
-    references: list[Any] | None = None,
-    additional_data: dict[str, Any] | None = None,
+def save_evaluation_results(
+    all_results: dict[str, Any],
+    subgroup_results: dict[str, Any],
+    output_dir: str,
 ) -> None:
     """
-    Save predictions to a JSON file.
+    Save evaluation results to files (YAML and LaTeX).
 
     Args:
-        predictions: List of predictions
-        output_file: Path to output JSON file
-        references: Optional list of ground truth labels
-        additional_data: Optional additional data to save
+        all_results: All evaluation results
+        subgroup_results: Subgroup evaluation results
+        output_dir: Directory to save results
     """
-    data = {
-        "predictions": predictions,
-    }
+    results_dir = os.path.join(output_dir, "evaluation_results")
+    os.makedirs(results_dir, exist_ok=True)
 
-    if references is not None:
-        data["references"] = references
+    # Save YAML results
+    results_file = os.path.join(results_dir, f"test_results_{time.strftime('%Y%m%d-%H%M%S')}.yaml")
+    with open(results_file, "w") as f:
+        yaml.dump(all_results, f, default_flow_style=False)
+    logger.info(f"Saved evaluation results to {results_file}")
 
-    if additional_data is not None:
-        data.update(additional_data)
+    # Save subgroup LaTeX tables if available
+    if subgroup_results:
+        latex_file = os.path.join(
+            results_dir, f"subgroup_tables_{time.strftime('%Y%m%d-%H%M%S')}.tex"
+        )
+        logger.info(f"Generating subgroup LaTeX tables for {len(subgroup_results)} dataset(s)")
 
-    output_path = Path(output_file)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        json.dump(data, f, indent=4)
+        with open(latex_file, "w") as f:
+            f.write("% Subgroup Evaluation LaTeX Tables\n")
+            f.write("% Generated automatically from WanFall evaluation\n\n")
 
-    logger.info(f"Saved predictions to {output_file}")
+            for dataset_name, subgroup_metrics in subgroup_results.items():
+                f.write(f"\n% Dataset: {dataset_name}\n")
+                logger.info(
+                    f"  Processing dataset: {dataset_name} with subgroups: {list(subgroup_metrics.keys())}"
+                )
+
+                for subgroup_key in ["age_group", "ethnicity", "gender", "bmi_band"]:
+                    if subgroup_key in subgroup_metrics:
+                        logger.info(f"    Generating LaTeX table for {subgroup_key}")
+                        table_latex = format_subgroup_latex_table(
+                            subgroup_metrics,
+                            subgroup_key,
+                            metric_keys=[
+                                "accuracy",
+                                "balanced_accuracy",
+                                "macro_f1",
+                                "fall_sensitivity",
+                                "fall_specificity",
+                                "fall_f1",
+                            ],
+                        )
+                        f.write("\n" + table_latex + "\n")
+                    else:
+                        logger.info(f"    No data for {subgroup_key}")
+
+        logger.info(f"Saved subgroup LaTeX tables to {latex_file}")
+
+        # Also print LaTeX tables to console for easy copy-paste
+        print("\n" + "=" * 80)
+        print("SUBGROUP LATEX TABLES (copy-paste ready)".center(80))
+        print("=" * 80)
+
+        for dataset_name, subgroup_metrics in subgroup_results.items():
+            print(f"\n% Dataset: {dataset_name.upper()}")
+            print("-" * 80)
+
+            for subgroup_key in ["age_group", "ethnicity", "gender", "bmi_band"]:
+                if subgroup_key in subgroup_metrics:
+                    table_latex = format_subgroup_latex_table(
+                        subgroup_metrics,
+                        subgroup_key,
+                        metric_keys=[
+                            "accuracy",
+                            "balanced_accuracy",
+                            "macro_f1",
+                            "fall_sensitivity",
+                            "fall_specificity",
+                            "fall_f1",
+                        ],
+                    )
+                    print(f"\n{table_latex}\n")
+
+        print("=" * 80)

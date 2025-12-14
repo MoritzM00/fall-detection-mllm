@@ -2,13 +2,13 @@
 
 from .base import (
     evaluate_predictions,
-    save_predictions,
+    save_evaluation_results,
 )
-from .subgroup import evaluate_with_subgroups, extract_metadata_from_dataset
+from .subgroup import extract_metadata_from_dataset, perform_subgroup_evaluation
 
 __all__ = [
     "evaluate_predictions",
-    "evaluate_with_subgroups",
+    "save_evaluation_results",
     "extract_metadata_from_dataset",
-    "save_predictions",
+    "perform_subgroup_evaluation",
 ]
