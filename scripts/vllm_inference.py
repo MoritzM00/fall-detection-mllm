@@ -58,20 +58,20 @@ def main(cfg: DictConfig):
     # Wrap dataset config as dataset_test for the factory
     temp_cfg = OmegaConf.create({"dataset_test": cfg.dataset})
 
-    dataset = get_video_datasets(
+    multi_dataset = get_video_datasets(
         cfg=temp_cfg,
         mode=cfg.dataset.get("mode", "test"),
         run=run,
         return_individual=True,
         split=cfg.dataset.get("split", "cs"),
     )
-    for dataset_name, dataset in dataset["individual"].items():
+    for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference
         # we probably need to loop over datasets and aggregate predictions for metrics computation
         if len(dataset["individual"]) > 1:
-            logger.error(
+            logger.warning(
                 "vLLM inference currently supports only a single dataset. "
-                f"Found multiple datasets: {list(dataset['individual'].keys())}. "
+                f"Found multiple datasets: {list(multi_dataset['individual'].keys())}. "
                 f"Using the first one: {dataset_name}."
             )
         break
@@ -156,8 +156,6 @@ def main(cfg: DictConfig):
     )
 
     # Create filename components for reuse
-    model_name = cfg.model.name.replace("/", "_").replace(".", "_")
-    dataset_name = cfg.dataset.name.replace("-", "_")
     cot_suffix = "_cot" if cfg.cot else ""
 
     # Save predictions if enabled
@@ -167,7 +165,7 @@ def main(cfg: DictConfig):
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
         predictions_file = (
-            predictions_dir / f"{model_name}_{dataset_name}_predictions{cot_suffix}.json"
+            predictions_dir / f"{cfg.model.name}_{dataset_name}_predictions{cot_suffix}.json"
         )
         with open(predictions_file, "w") as f:
             json.dump(predictions, f, indent=4)
