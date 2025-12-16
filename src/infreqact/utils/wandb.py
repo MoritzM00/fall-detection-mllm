@@ -1,8 +1,11 @@
 import logging
 
+import numpy as np
+import torch
 from omegaconf import DictConfig, OmegaConf
 
 import wandb
+from infreqact.data.dataset import GenericVideoDataset
 
 logger = logging.getLogger(__name__)
 
@@ -69,3 +72,34 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
     tags = [tag.lower() for tag in tags]
     tags = list(set(tags))  # Ensure uniqueness
     return run_name, tags
+
+
+def log_videos_with_predictions(
+    dataset: GenericVideoDataset | torch.utils.data.Subset,
+    predictions: list[str] | list[int] | np.ndarray,
+    references: list[str] | list[int] | np.ndarray,
+    dataset_name: str,
+    n_videos: int = 5,
+) -> None:
+    # Get target_fps from dataset or underlying dataset if it's a Subset
+    target_fps = (
+        dataset.target_fps if hasattr(dataset, "target_fps") else dataset.dataset.target_fps
+    )
+
+    for idx in range(min(n_videos, len(predictions))):
+        sample = dataset[idx]
+        # reshape video to (number of frames, channel, height, width)
+        # sample video is a list of ndarrays
+        video_reshaped = np.transpose(sample["video"], (0, 3, 1, 2))
+
+        caption = f"Predicted: {predictions[idx]}, True: {references[idx]}"
+        wandb.log(
+            {
+                f"{dataset_name}_{sample['video_path']}": wandb.Video(
+                    video_reshaped,
+                    caption=caption,
+                    format="mp4",
+                    fps=target_fps,
+                )
+            }
+        )

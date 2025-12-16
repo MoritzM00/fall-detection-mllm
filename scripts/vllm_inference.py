@@ -31,6 +31,8 @@ from infreqact.inference.zeroshot import collate_fn
 from infreqact.utils.wandb import initialize_run_from_config
 
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
+
 logger = logging.getLogger(__name__)
 
 
@@ -173,17 +175,15 @@ def main(cfg: DictConfig):
             json.dump(predictions, f, indent=4)
         logger.info(f"Saved predictions to {predictions_file}")
 
-    # Create metrics subdirectory
-    metrics_dir = Path(cfg.output_dir) / "metrics" if cfg.get("save_metrics", True) else None
-
     evaluate_predictions(
         dataset=dataset,
         predictions=predicted_labels,
         references=true_labels,
         dataset_name=dataset_name,
-        output_dir=str(metrics_dir) if metrics_dir else None,
+        output_dir=cfg.output_dir,
         save_results=cfg.get("save_metrics", True),
         run=run,
+        log_videos=cfg.get("log_videos", 0),
     )
 
     logger.info(f"Logged results to W&B: {run.url}")

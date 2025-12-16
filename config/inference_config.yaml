@@ -20,6 +20,8 @@ output_dir: "outputs"
 save_predictions: true
 save_metrics: true
 
+log_videos: 5
+
 # Inference settings
 num_samples: null  # null = all samples
 

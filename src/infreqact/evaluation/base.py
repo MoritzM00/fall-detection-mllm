@@ -18,6 +18,7 @@ from infreqact.evaluation.subgroup import perform_subgroup_evaluation
 from infreqact.evaluation.visual import visualize_evaluation_results
 from infreqact.metrics.base import compute_metrics
 from infreqact.utils.latex import format_subgroup_latex_table
+from infreqact.utils.wandb import log_videos_with_predictions
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ def evaluate_predictions(
     output_dir: str = "outputs",
     save_results: bool = True,
     run: wandb.Run | None = None,
+    log_videos: bool = True,
 ) -> dict[str, Any]:
     """
     Evaluate predictions against ground truth labels.
@@ -56,6 +58,15 @@ def evaluate_predictions(
     metrics = compute_metrics(y_pred=predictions, y_true=references)
 
     visualize_evaluation_results(metrics, title=f"Test Results: {dataset_name}")
+
+    if run and log_videos > 0:
+        log_videos_with_predictions(
+            dataset=dataset,
+            predictions=predictions,
+            references=references,
+            dataset_name=dataset_name,
+            n_videos=log_videos,
+        )
 
     # Perform subgroup evaluation if applicable
     subgroup_results = None
