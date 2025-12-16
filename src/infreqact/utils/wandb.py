@@ -52,7 +52,13 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
     tags = cfg.wandb.get("tags", [])
     if tags is None:
         tags = []
-    tags.append(cfg.dataset.get("name", "unknown_dataset"))
+
+    # name is inside cfg.dataset.video_dataset[i].name
+    for dataset_cfg in cfg.dataset.get("video_datasets", []):
+        dataset_name = dataset_cfg.get("name", None)
+        if dataset_name is not None:
+            tags.append(dataset_name)
+
     # Use model family from config
     model_family = cfg.model.get("family", cfg.model.name.split("-")[0])
     tags.append(model_family)
