@@ -4,13 +4,13 @@ This module provides evaluation functions that work with vLLM inference outputs,
 without requiring HuggingFace Trainer or Accelerator dependencies.
 """
 
+import json
 import logging
 import os
 import time
 from typing import Any
 
 import numpy as np
-import yaml
 
 import wandb
 from infreqact.data.dataset import GenericVideoDataset
@@ -94,10 +94,10 @@ def save_evaluation_results(
     results_dir = os.path.join(output_dir, "evaluation_results")
     os.makedirs(results_dir, exist_ok=True)
 
-    # Save YAML results
-    results_file = os.path.join(results_dir, f"test_results_{time.strftime('%Y%m%d-%H%M%S')}.yaml")
+    # Save JSON results
+    results_file = os.path.join(results_dir, f"test_results_{time.strftime('%Y%m%d-%H%M%S')}.json")
     with open(results_file, "w") as f:
-        yaml.dump(all_results, f, default_flow_style=False)
+        json.dump(all_results, f, indent=4)
     logger.info(f"Saved evaluation results to {results_file}")
 
     # Save subgroup LaTeX tables if available
