@@ -53,15 +53,16 @@ def get_system_prompt(cot=False):
         * Moment of Rest: If a person transitions Sit -> Lie without pausing, use only the destination label.
         * Fall Termination: fall ends when inertia stops. fallen begins only when the person is on the ground in a resting state.
 
-        {output_format}
+    {output_format}
+
+    Only use the allowed labels and stick exactly to the output format. If uncertain between two labels,
+    choose the one that best fits the definitions above. Don't invent new labels.
     """).strip()  # .strip() removes the very first and last newlines caused by the triple quotes
 
     return prompt
 
 
-def build_prompts(
-    dataset, n_samples=5, cot=False
-):  # loads the omnifall test set and creates prompts with video samples
+def build_prompts(dataset, n_samples=5, cot=False):
     """
     Build prompts for video classification.
 
@@ -99,7 +100,7 @@ def build_prompts(
     return messages, samples
 
 
-def build_prompt_for_sample(sample, cot=False):
+def build_prompt_for_sample(sample, cot=False, model_fps=8):
     """
     Build a single prompt message for one sample.
 
@@ -118,6 +119,8 @@ def build_prompt_for_sample(sample, cot=False):
 
     # Convert to PIL images
     video_sample = [Image.fromarray(frame) for frame in video_sample]
+    if len(video_sample) == 0:
+        raise RuntimeError("Video sample contains no frames.")
 
     message = {
         "role": "user",
@@ -125,6 +128,7 @@ def build_prompt_for_sample(sample, cot=False):
             {
                 "type": "video",
                 "video": video_sample,
+                "sample_fps": model_fps,
             },
             {"type": "text", "text": prompt},
         ],
@@ -133,7 +137,7 @@ def build_prompt_for_sample(sample, cot=False):
     return message, sample_metadata
 
 
-def collate_fn(batch, cot=False):
+def collate_fn(batch, cot=False, model_fps=8):
     """
     Collate function for DataLoader to process batches of samples.
 
@@ -148,7 +152,7 @@ def collate_fn(batch, cot=False):
     samples = []
 
     for sample in batch:
-        message, sample_metadata = build_prompt_for_sample(sample, cot=cot)
+        message, sample_metadata = build_prompt_for_sample(sample, cot=cot, model_fps=model_fps)
         messages.append(message)
         samples.append(sample_metadata)
 
