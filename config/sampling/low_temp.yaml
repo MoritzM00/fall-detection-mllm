@@ -1,20 +1,21 @@
-# Greedy sampling (deterministic)
-# Use for reproducible, deterministic outputs
+# Low temperature sampling configuration
+# Slightly creative but constrained - good for structured JSON with minor variation
+# More deterministic than qwen3_instruct but not fully greedy
 
 # Temperature: Controls randomness (0 = greedy/deterministic, higher = more random)
 # Range: 0.0 to 2.0 (typically 0.0-1.0 for structured output)
-temperature: 0
+temperature: 0.2
 
 # Maximum number of tokens to generate
 max_tokens: 512
 
 # Top-k filtering: Only sample from the k most likely tokens
 # Range: -1 (disabled), or positive integer (e.g., 20, 50)
-top_k: -1
+top_k: 20
 
 # Top-p (nucleus) sampling: Sample from smallest set of tokens with cumulative prob >= top_p
 # Range: 0.0 to 1.0 (1.0 = disabled, lower = more focused)
-top_p: 1.0
+top_p: 0.9
 
 # Presence penalty: Penalizes tokens that have appeared at all (additive)
 # Range: -2.0 to 2.0 (0.0 = no penalty, positive = discourage repetition)
@@ -26,10 +27,9 @@ frequency_penalty: 0.0
 
 # Repetition penalty: Multiplicative penalty for repeated tokens
 # Range: 1.0 to 2.0 (1.0 = no penalty, >1.0 = penalize repetition)
-repetition_penalty: 1.0
-
-# Random seed for reproducibility (null = random seed each run)
-seed: 0
+repetition_penalty: 1.05
 
 # Token IDs that trigger generation stop
 stop_token_ids: null
+
+seed: 0

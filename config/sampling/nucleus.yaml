@@ -1,12 +1,13 @@
-# Greedy sampling (deterministic)
-# Use for reproducible, deterministic outputs
+# Nucleus sampling configuration
+# Balanced middle-ground between greedy and creative sampling
+# General-purpose config suitable for most structured output tasks
 
 # Temperature: Controls randomness (0 = greedy/deterministic, higher = more random)
 # Range: 0.0 to 2.0 (typically 0.0-1.0 for structured output)
-temperature: 0
+temperature: 0.5
 
 # Maximum number of tokens to generate
-max_tokens: 512
+max_tokens: 1024
 
 # Top-k filtering: Only sample from the k most likely tokens
 # Range: -1 (disabled), or positive integer (e.g., 20, 50)
@@ -14,7 +15,7 @@ top_k: -1
 
 # Top-p (nucleus) sampling: Sample from smallest set of tokens with cumulative prob >= top_p
 # Range: 0.0 to 1.0 (1.0 = disabled, lower = more focused)
-top_p: 1.0
+top_p: 0.9
 
 # Presence penalty: Penalizes tokens that have appeared at all (additive)
 # Range: -2.0 to 2.0 (0.0 = no penalty, positive = discourage repetition)
@@ -26,7 +27,7 @@ frequency_penalty: 0.0
 
 # Repetition penalty: Multiplicative penalty for repeated tokens
 # Range: 1.0 to 2.0 (1.0 = no penalty, >1.0 = penalize repetition)
-repetition_penalty: 1.0
+repetition_penalty: 1.1
 
 # Random seed for reproducibility (null = random seed each run)
 seed: 0

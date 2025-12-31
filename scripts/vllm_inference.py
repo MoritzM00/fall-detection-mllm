@@ -142,6 +142,11 @@ def main(cfg: DictConfig):
         temperature=cfg.sampling.temperature,
         max_tokens=cfg.sampling.max_tokens,
         top_k=cfg.sampling.top_k,
+        top_p=cfg.sampling.get("top_p", 1.0),
+        presence_penalty=cfg.sampling.get("presence_penalty", 0.0),
+        frequency_penalty=cfg.sampling.get("frequency_penalty", 0.0),
+        repetition_penalty=cfg.sampling.get("repetition_penalty", 1.0),
+        seed=cfg.sampling.get("seed", None),
         stop_token_ids=cfg.sampling.stop_token_ids,
     )
 

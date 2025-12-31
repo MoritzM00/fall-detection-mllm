@@ -1,23 +1,29 @@
-# Greedy sampling (deterministic)
-# Use for reproducible, deterministic outputs
+# from https://github.com/QwenLM/Qwen3-VL?tab=readme-ov-file#thinking-models
+
+# Thinking / Reasoning model sampling configuration
+# Optimized for Qwen3-VL thinking models and chain-of-thought reasoning
+# Allows longer generation for extended reasoning chains
 
 # Temperature: Controls randomness (0 = greedy/deterministic, higher = more random)
 # Range: 0.0 to 2.0 (typically 0.0-1.0 for structured output)
-temperature: 0
+temperature: 0.6
 
 # Maximum number of tokens to generate
-max_tokens: 512
+# Note: Higher limit to accommodate thinking/reasoning tokens + output
+max_tokens: 40960
 
 # Top-k filtering: Only sample from the k most likely tokens
 # Range: -1 (disabled), or positive integer (e.g., 20, 50)
-top_k: -1
+top_k: 20
 
 # Top-p (nucleus) sampling: Sample from smallest set of tokens with cumulative prob >= top_p
 # Range: 0.0 to 1.0 (1.0 = disabled, lower = more focused)
-top_p: 1.0
+# Note: Higher top_p (0.95) allows more diverse reasoning paths
+top_p: 0.95
 
 # Presence penalty: Penalizes tokens that have appeared at all (additive)
 # Range: -2.0 to 2.0 (0.0 = no penalty, positive = discourage repetition)
+# Note: Set to 0.0 for thinking models to allow natural repetition in reasoning
 presence_penalty: 0.0
 
 # Frequency penalty: Penalizes tokens based on how often they've appeared (additive)
@@ -29,7 +35,7 @@ frequency_penalty: 0.0
 repetition_penalty: 1.0
 
 # Random seed for reproducibility (null = random seed each run)
-seed: 0
+seed: 1234
 
 # Token IDs that trigger generation stop
 stop_token_ids: null
