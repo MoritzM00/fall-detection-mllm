@@ -14,9 +14,9 @@ model:
 
 # W&B tracking
 wandb:
-  project: "fall-detection-zeroshot"
+  project: "fall-detection-zeroshot-v2"
   name:
   tags: ["zeroshot"]
 
 # Output settings
-output_dir: "outputs/zeroshot"
+output_dir: "outputs/zeroshot-v2"
