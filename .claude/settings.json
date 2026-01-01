@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff:*)",
+      "Bash(pytest:*)",
+      "Grep"
+    ],
+    "deny": [
+      "Bash(curl:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check && ruff format --fix",
+            "timeout": 30
+          }
+       ]
+      }
+    ]
+  },
+  "model": "opusplan"
+}
