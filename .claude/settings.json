@@ -13,13 +13,13 @@
     ]
   },
   "hooks": {
-    "PostToolUse": [
+    "Stop": [
       {
         "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "ruff check && ruff format --fix",
+            "command": "ruff check --fix && ruff format",
             "timeout": 30
           }
        ]
