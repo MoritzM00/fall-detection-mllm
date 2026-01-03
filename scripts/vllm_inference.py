@@ -24,7 +24,15 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
-from vllm import LLM, SamplingParams
+
+# vLLM imports are done conditionally inside main() based on cfg.vllm.use_mock
+# This allows switching between real and mock vLLM without code changes
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    # vLLM not installed, will use mock if configured
+    LLM = None
+    SamplingParams = None
 
 import wandb
 from infreqact.data.video_dataset import label2idx
@@ -55,6 +63,22 @@ def main(cfg: DictConfig):
 
     logger.info("Configuration:")
     logger.info(f"\n{OmegaConf.to_yaml(cfg)}")
+
+    # Import real or mock vLLM based on configuration
+    if cfg.vllm.get("use_mock", False):
+        from infreqact.inference.mock_vllm import (
+            MockLLM as LLM,
+        )
+        from infreqact.inference.mock_vllm import (
+            MockSamplingParams as SamplingParams,
+        )
+
+        logger.info("=" * 80)
+        logger.info("MOCK MODE ENABLED - Using Mock vLLM for debugging")
+        logger.info("No GPU required, random predictions will be generated")
+        logger.info("=" * 80)
+    else:
+        from vllm import LLM, SamplingParams
 
     # Initialize Weights & Biases
     run = initialize_run_from_config(cfg)
@@ -130,6 +154,10 @@ def main(cfg: DictConfig):
         "enable_expert_parallel": cfg.vllm.enable_expert_parallel,
         "limit_mm_per_prompt": cfg.vllm.limit_mm_per_prompt,
     }
+
+    # Add CoT flag for mock mode
+    if cfg.vllm.get("use_mock", False):
+        vllm_kwargs["cot"] = cfg.cot
 
     llm = LLM(**vllm_kwargs)
 

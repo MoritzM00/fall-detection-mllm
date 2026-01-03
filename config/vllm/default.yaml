@@ -1,3 +1,5 @@
+use_mock: false  # Set to true to use mock vLLM for debugging (no GPU required)
+
 mm_encoder_tp_mode: "data"
 mm_processor_cache_gb: 0
 seed: 0
