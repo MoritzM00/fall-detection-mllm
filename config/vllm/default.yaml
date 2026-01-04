@@ -6,7 +6,10 @@ seed: 0
 dtype: "bfloat16"
 gpu_memory_utilization: 0.9
 mm_processor_kwargs:
-  do_resize: false
+  do_resize: true
+  size:
+    shortest_edge: 524288 # 256
+    longest_edge: 33554432 # 16384*32*32*2
 limit_mm_per_prompt:
   image: 0
   video: 1

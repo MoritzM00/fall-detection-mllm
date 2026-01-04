@@ -7,11 +7,13 @@ from functools import partial
 from pathlib import Path
 
 import hydra
+import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
+from transformers.video_utils import VideoMetadata
 
 from infreqact.utils.logging import reconfigure_logging_after_wandb, setup_logging
 
@@ -28,8 +30,8 @@ import wandb
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
-from infreqact.inference.zeroshot import collate_fn
+from infreqact.inference.base import parse_llm_outputs
+from infreqact.inference.zeroshot import collate_fn, get_system_prompt
 from infreqact.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
@@ -164,12 +166,55 @@ def main(cfg: DictConfig):
     all_outputs = []
     all_samples = []
 
+    prompt = get_system_prompt(cot=cfg.cot)
+
     logger.info("Generating predictions...")
     start = time.perf_counter()
-    for batch_messages, batch_samples in tqdm(dataloader, desc="Processing batches"):
-        batch_inputs = [prepare_inputs_for_vllm([msg], processor) for msg in batch_messages]
-        batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
+    for batch in tqdm(dataloader, desc="Processing batches"):
+        batch_inputs = []
+        batch_samples = []
+        for sample in batch:
+            video_tensor = np.array(sample["video"]).transpose(
+                0, 3, 1, 2
+            )  # (T, H, W, C) -> (T, C, H, W)
+            metadata = {k: v for k, v in sample.items() if k != "video"}
+            batch_samples.append(metadata)
+            message = {
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": video_tensor},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+            text = processor.apply_chat_template(
+                [message], tokenize=False, add_generation_prompt=True
+            )
 
+            needs_video_metadata = cfg.model.name.startswith(
+                "Qwen"
+            )  # Qwen3-VL requires VideoMetadata
+            if needs_video_metadata:
+                video_meta = VideoMetadata(
+                    total_num_frames=video_tensor.shape[0],
+                    fps=cfg.model_fps,
+                    frames_indices=list(range(video_tensor.shape[0])),
+                )
+                mm_data = {
+                    "video": (video_tensor, video_meta),
+                }
+            else:
+                mm_data = {
+                    "video": video_tensor,
+                }
+
+            video_kwargs = {"do_sample_frames": False}
+
+            batch_inputs.append(
+                {"prompt": text, "multi_modal_data": mm_data, "mm_processor_kwargs": video_kwargs}
+            )
+
+        # batch_inputs = [prepare_inputs_for_vllm([msg], processor) for msg in batch_messages]
+        batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
         all_outputs.extend(batch_outputs)
         all_samples.extend(batch_samples)
 
