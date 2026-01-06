@@ -3,11 +3,9 @@ import logging
 import os
 import sys
 import time
-from functools import partial
 from pathlib import Path
 
 import hydra
-import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Subset
@@ -31,7 +29,7 @@ from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
 from infreqact.inference.base import parse_llm_outputs
-from infreqact.inference.zeroshot import collate_fn, get_system_prompt
+from infreqact.inference.zeroshot import get_system_prompt
 from infreqact.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
@@ -110,19 +108,12 @@ def main(cfg: DictConfig):
     logger.info(f"Loading model and processor: {checkpoint_path}")
     processor = AutoProcessor.from_pretrained(checkpoint_path)
 
-    # Create DataLoader with custom collate function
-    collate_fn_with_kwargs = partial(
-        collate_fn,
-        cot=cfg.cot,
-        model_fps=cfg.model_fps,
-        min_pixels=cfg.model.min_pixels,
-        max_pixels=cfg.model.max_pixels,
-    )
+    # collate fn should be a no-op (just a list of dict as return), pytorch collates over keys by default
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
-        collate_fn=collate_fn_with_kwargs,
+        collate_fn=lambda batch: batch,
         shuffle=False,
         pin_memory=True,
     )
@@ -174,15 +165,13 @@ def main(cfg: DictConfig):
         batch_inputs = []
         batch_samples = []
         for sample in batch:
-            video_tensor = np.array(sample["video"]).transpose(
-                0, 3, 1, 2
-            )  # (T, H, W, C) -> (T, C, H, W)
+            frames = sample["video"]
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
             message = {
                 "role": "user",
                 "content": [
-                    {"type": "video", "video": video_tensor},
+                    {"type": "video", "video": frames},
                     {"type": "text", "text": prompt},
                 ],
             }
@@ -195,16 +184,16 @@ def main(cfg: DictConfig):
             )  # Qwen3-VL requires VideoMetadata
             if needs_video_metadata:
                 video_meta = VideoMetadata(
-                    total_num_frames=video_tensor.shape[0],
+                    total_num_frames=frames.shape[0],
                     fps=cfg.model_fps,
-                    frames_indices=list(range(video_tensor.shape[0])),
+                    frames_indices=list(range(frames.shape[0])),
                 )
                 mm_data = {
-                    "video": (video_tensor, video_meta),
+                    "video": (frames, video_meta),
                 }
             else:
                 mm_data = {
-                    "video": video_tensor,
+                    "video": frames,
                 }
 
             video_kwargs = {"do_sample_frames": False}

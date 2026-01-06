@@ -155,7 +155,6 @@ def collate_fn(batch, **kwargs):
     Returns:
         tuple: (list of messages, list of sample metadata)
     """
-    return batch
     messages = []
     samples = []
 

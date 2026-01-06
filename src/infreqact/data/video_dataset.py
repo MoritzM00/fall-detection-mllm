@@ -2,6 +2,7 @@ import logging
 import random
 from collections import OrderedDict
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -237,4 +238,9 @@ class OmnifallVideoDataset(GenericVideoDataset):
         )
 
     def transform_frames(self, frames):
+        # frames is a list of ndarrays
+
+        frames = np.array(frames)  # (T, H, W, C)
+        frames = np.transpose(frames, (0, 3, 1, 2))  # channels first
+
         return {"video": frames}
