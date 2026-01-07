@@ -92,7 +92,7 @@ def setup_logging(
     rich_handler = RichHandler(
         console=console,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
         show_time=False,  # No timestamps in console
         show_path=False,
         markup=True,

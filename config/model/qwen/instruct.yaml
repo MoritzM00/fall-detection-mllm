@@ -9,3 +9,9 @@ params: "4B"
 # Computed paths
 name: "${model.family}${model.version}-VL-${model.params}-${model.variant}"
 checkpoint_path: "${model.family}/${model.name}"
+
+mm_processor_kwargs:
+  min_pixels: 16*32*32
+  max_pixels: 256*32*32
+  # shortest_edge: 524288 # 256*32*32*2
+  # longest_edge: 33554432 # 16384*32*32*2

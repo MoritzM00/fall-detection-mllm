@@ -11,7 +11,6 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
-from transformers.video_utils import VideoMetadata
 
 from infreqact.utils.logging import reconfigure_logging_after_wandb, setup_logging
 
@@ -122,18 +121,26 @@ def main(cfg: DictConfig):
     tensor_parallel_size = cfg.vllm.tensor_parallel_size or torch.cuda.device_count()
     logger.info(f"Using tensor_parallel_size={tensor_parallel_size}")
 
-    vllm_kwargs = {
-        "model": checkpoint_path,
-        "tensor_parallel_size": tensor_parallel_size,
-        "mm_encoder_tp_mode": cfg.vllm.mm_encoder_tp_mode,
-        "mm_processor_cache_gb": cfg.vllm.mm_processor_cache_gb,
-        "seed": cfg.vllm.seed,
-        "dtype": getattr(torch, cfg.vllm.dtype),
-        "gpu_memory_utilization": cfg.vllm.gpu_memory_utilization,
-        "mm_processor_kwargs": cfg.vllm.mm_processor_kwargs,
-        "enable_expert_parallel": cfg.vllm.enable_expert_parallel,
-        "limit_mm_per_prompt": cfg.vllm.limit_mm_per_prompt,
-    }
+    mm_processor_kwargs = OmegaConf.to_object(cfg.vllm.mm_processor_kwargs)
+    # update model-specific overrides
+    mm_processor_kwargs |= cfg.model.get("mm_processor_kwargs", {})
+    logger.info(f"Using mm_processor_kwargs={mm_processor_kwargs}")
+
+    vllm_kwargs = dict(
+        model=checkpoint_path,
+        tensor_parallel_size=tensor_parallel_size,
+        mm_encoder_tp_mode=cfg.vllm.mm_encoder_tp_mode,
+        mm_processor_cache_gb=cfg.vllm.mm_processor_cache_gb,
+        seed=cfg.vllm.seed,
+        dtype=cfg.vllm.dtype,
+        gpu_memory_utilization=cfg.vllm.gpu_memory_utilization,
+        mm_processor_kwargs=mm_processor_kwargs,
+        enable_expert_parallel=cfg.vllm.enable_expert_parallel,
+        limit_mm_per_prompt=cfg.vllm.limit_mm_per_prompt,
+        trust_remote_code=cfg.vllm.trust_remote_code,
+        max_model_len=cfg.vllm.max_model_len,
+        enforce_eager=cfg.vllm.enforce_eager,
+    )
 
     # Add CoT flag for mock mode
     if cfg.vllm.get("use_mock", False):
@@ -179,15 +186,13 @@ def main(cfg: DictConfig):
                 [message], tokenize=False, add_generation_prompt=True
             )
 
-            needs_video_metadata = cfg.model.name.startswith(
-                "Qwen"
-            )  # Qwen3-VL requires VideoMetadata
+            needs_video_metadata = True
             if needs_video_metadata:
-                video_meta = VideoMetadata(
-                    total_num_frames=frames.shape[0],
-                    fps=cfg.model_fps,
-                    frames_indices=list(range(frames.shape[0])),
-                )
+                video_meta = {
+                    "total_num_frames": frames.shape[0],
+                    "fps": cfg.model_fps,
+                    "frames_indices": list(range(frames.shape[0])),
+                }
                 mm_data = {
                     "video": (frames, video_meta),
                 }

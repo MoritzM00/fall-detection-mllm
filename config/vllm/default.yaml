@@ -1,15 +1,19 @@
-use_mock: false  # Set to true to use mock vLLM for debugging (no GPU required)
+use_mock: false  # Set to true to use mock vLLM for faster debugging
 
 mm_encoder_tp_mode: "data"
 mm_processor_cache_gb: 0
 seed: 0
 dtype: "bfloat16"
 gpu_memory_utilization: 0.9
+enforce_eager: false
+max_model_len: null # use model default, or override based on VRAM constraints
+max_num_batched_tokens: null
+trust_remote_code: true
+
 mm_processor_kwargs:
   do_resize: true
-  size:
-    shortest_edge: 524288 # 256
-    longest_edge: 33554432 # 16384*32*32*2
+  do_sample_frames: false
+
 limit_mm_per_prompt:
   image: 0
   video: 1

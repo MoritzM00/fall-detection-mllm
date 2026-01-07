@@ -10,4 +10,10 @@ params: "4B"
 name: "${model.family}${model.version}-${model.variant}"
 checkpoint_path: "${model.family}/${model.name}"
 
-# potentially alter the sampling params for thinking models
+# potentially alter the sampling params for thinking models:
+
+mm_processor_kwargs:
+  min_pixels: 16*32*32
+  max_pixels: 256*32*32
+  # shortest_edge: 524288 # 256*32*32*2
+  # longest_edge: 33554432 # 16384*32*32*2
