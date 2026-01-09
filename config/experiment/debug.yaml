@@ -18,6 +18,7 @@ num_workers: 0
 vllm:
   use_mock: false  # Enable mock mode for debugging without GPU
   tensor_parallel_size: 1
+  skip_mm_profiling: true
 
 log_videos: 0
 # Disable W&B for debugging (offline mode)

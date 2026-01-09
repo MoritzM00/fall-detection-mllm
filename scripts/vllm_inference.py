@@ -140,6 +140,7 @@ def main(cfg: DictConfig):
         trust_remote_code=cfg.vllm.trust_remote_code,
         max_model_len=cfg.vllm.max_model_len,
         enforce_eager=cfg.vllm.enforce_eager,
+        skip_mm_profiling=cfg.vllm.skip_mm_profiling,
     )
 
     # Add CoT flag for mock mode

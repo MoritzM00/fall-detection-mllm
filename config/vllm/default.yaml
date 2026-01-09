@@ -6,9 +6,11 @@ seed: 0
 dtype: "bfloat16"
 gpu_memory_utilization: 0.9
 enforce_eager: false
-max_model_len: null # use model default, or override based on VRAM constraints
+max_model_len: 32000 # use model default, or override based on VRAM constraints
 max_num_batched_tokens: null
 trust_remote_code: true
+
+skip_mm_profiling: false
 
 mm_processor_kwargs:
   do_resize: true
