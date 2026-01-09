@@ -3,7 +3,6 @@
 # Debug experiment - quick testing with small sample size
 defaults:
   - /dataset/omnifall/video@dataset: oops
-  - override /model: qwen/instruct
 
 # Limit to small number of samples for fast testing
 num_samples: 10
@@ -20,8 +19,8 @@ vllm:
   tensor_parallel_size: 1
   skip_mm_profiling: true
 
-log_videos: 0
+log_videos: 1
 # Disable W&B for debugging (offline mode)
 wandb:
   project: "fall-detection-testing"
-  mode: disabled  # or offline, online, disabled
+  mode: online  # or offline, online, disabled

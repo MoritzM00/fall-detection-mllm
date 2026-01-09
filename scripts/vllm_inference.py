@@ -81,6 +81,7 @@ def main(cfg: DictConfig):
         run=run,
         return_individual=True,
         split=cfg.dataset.get("split", "cs"),
+        size=(cfg.input_size.height, cfg.input_size.width),
     )
     for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference
@@ -141,6 +142,7 @@ def main(cfg: DictConfig):
         max_model_len=cfg.vllm.max_model_len,
         enforce_eager=cfg.vllm.enforce_eager,
         skip_mm_profiling=cfg.vllm.skip_mm_profiling,
+        async_scheduling=cfg.vllm.async_scheduling,
     )
 
     # Add CoT flag for mock mode

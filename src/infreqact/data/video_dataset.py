@@ -2,7 +2,6 @@ import logging
 import random
 from collections import OrderedDict
 
-import numpy as np
 import pandas as pd
 import torch
 
@@ -54,6 +53,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
         max_retries=10,
         fast=True,
         ext=".mp4",
+        size=None,
         **kwargs,
     ):
         """
@@ -89,6 +89,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
         self.mode = mode
         self.split_root = split_root
         self.ext = ext
+        self.size = size
 
         logging.info(
             f"Initializing {self.dataset_name} dataset in {self.mode} mode with split {self.split}"
@@ -236,11 +237,3 @@ class OmnifallVideoDataset(GenericVideoDataset):
             f"split='{self.split}', mode='{self.mode}', "
             f"videos={len(self.samples)}, segments={len(self.video_segments)})"
         )
-
-    def transform_frames(self, frames):
-        # frames is a list of ndarrays
-
-        frames = np.array(frames)  # (T, H, W, C)
-        frames = np.transpose(frames, (0, 3, 1, 2))  # channels first
-
-        return {"video": frames}

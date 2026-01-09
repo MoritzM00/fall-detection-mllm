@@ -88,15 +88,13 @@ def log_videos_with_predictions(
 
     for idx in range(min(n_videos, len(predictions))):
         sample = dataset[idx]
-        # reshape video to (number of frames, channel, height, width)
-        # sample video is a list of ndarrays
-        video_reshaped = np.transpose(sample["video"], (0, 3, 1, 2))
+        video = sample["video"].numpy()
 
         caption = f"Predicted: {predictions[idx]}, True: {references[idx]}"
         wandb.log(
             {
                 f"{dataset_name}_{sample['video_path']}": wandb.Video(
-                    video_reshaped,
+                    video,
                     caption=caption,
                     format="mp4",
                     fps=target_fps,

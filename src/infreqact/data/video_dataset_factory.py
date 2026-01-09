@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_video_datasets(
-    cfg: DictConfig, mode: str, run: Any | None = None, return_individual: bool = False, split="cs"
+    cfg: DictConfig,
+    mode: str,
+    run: Any | None = None,
+    return_individual: bool = False,
+    split="cs",
+    size: tuple[int, int] | None = None,
 ) -> MultiVideoDataset | dict[str, Any]:
     """
     Create and return video datasets based on configuration.
@@ -35,6 +40,7 @@ def get_video_datasets(
         run: WandB run for logging
         return_individual: Whether to return individual datasets as dict (for evaluation)
         split: Split type ('cs' for cross-subject, 'cv' for cross-view)
+        size: Optional tuple specifying the (height, width) to resize frames to
 
     Returns:
         If return_individual is False:
@@ -134,6 +140,7 @@ def get_video_datasets(
             data_fps=ds_config.get("dataset_fps", None),
             path_format=dataset_config.path_format,
             max_retries=10,
+            size=size,
         )
 
         if len(dataset) > 0:

@@ -6,6 +6,7 @@ import time
 import av
 import numpy as np
 import torch
+import torchvision.transforms.functional as F
 from torch.utils.data import Dataset
 
 
@@ -21,6 +22,7 @@ class GenericVideoDataset(Dataset):
         max_retries=10,
         mode="train",
         fast=True,
+        size=None,
     ):
         self.video_root = video_root
         self.slow_video_file = annotations_file.replace(".csv", "_slow.csv")
@@ -34,6 +36,7 @@ class GenericVideoDataset(Dataset):
             self.load_video_fast if fast and vid_frame_count is not None else self.load_video_slow
         )
         self.annotations = {}
+        self.size = size
 
     def load_annotations(self, annotations_file):
         # call manually after init if needed
@@ -95,6 +98,14 @@ class GenericVideoDataset(Dataset):
         raise RuntimeError(f"Failed to load a valid video after {self.max_retries} attempts ()")
 
     def transform_frames(self, frames):
+        # frames is a list of ndarrays (H, W, C)
+        # Stack and convert to tensor: (T, H, W, C) -> (T, C, H, W)
+        frames = torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2).float()
+
+        if self.size is not None:
+            # size is (height, width)
+            frames = F.resize(frames, self.size)
+
         return {"video": frames}
 
     def get_random_offset(self, length, target_interval, idx, fps, start=0):
