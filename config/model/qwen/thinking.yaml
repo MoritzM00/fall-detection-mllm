@@ -10,6 +10,4 @@ params: "4B"
 name: "${model.family}${model.version}-${model.variant}"
 checkpoint_path: "${model.family}/${model.name}"
 
-mm_processor_kwargs:
-  min_pixels: 16384 # 16*32*32
-  max_pixels: 262144 # 256*32*32
+needs_video_metadata: true

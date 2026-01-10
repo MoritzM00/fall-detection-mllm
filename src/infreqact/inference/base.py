@@ -132,7 +132,7 @@ def inference(
     return (output_text[0], inputs) if return_inputs else output_text[0]
 
 
-def prepare_inputs_for_vllm(messages, processor):
+def prepare_inputs_for_vllm(frames, message, processor, model_fps=8, needs_video_metadata=True):
     """
     Prepare inputs for vLLM.
 
@@ -143,23 +143,21 @@ def prepare_inputs_for_vllm(messages, processor):
     Returns:
         dict: Input format required by vLLM
     """
-    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    text = processor.apply_chat_template([message], tokenize=False, add_generation_prompt=True)
 
-    # qwen_vl_utils 0.0.14+ required
-    image_inputs, video_inputs, video_kwargs = process_vision_info(
-        messages,
-        image_patch_size=processor.image_processor.patch_size,
-        return_video_kwargs=True,
-        return_video_metadata=True,
-    )
+    if needs_video_metadata:
+        video_meta = dict(
+            total_num_frames=frames.shape[0],
+            fps=model_fps,
+            frames_indices=list(range(frames.shape[0])),
+        )
+        mm_data = dict(video=(frames, video_meta))
+    else:
+        mm_data = dict(video=frames)
 
-    mm_data = {}
-    if image_inputs is not None:
-        mm_data["image"] = image_inputs
-    if video_inputs is not None:
-        mm_data["video"] = video_inputs
+    video_kwargs = dict(do_sample_frames=False)
 
-    return {"prompt": text, "multi_modal_data": mm_data, "mm_processor_kwargs": video_kwargs}
+    return dict(prompt=text, multi_modal_data=mm_data, mm_processor_kwargs=video_kwargs)
 
 
 def parse_llm_outputs(outputs: list[dict], samples: list[dict], label2idx: dict):

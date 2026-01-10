@@ -8,3 +8,5 @@ params: "2B"
 # Computed paths
 name: "${model.family}${model.version}-${model.params}-HF"
 checkpoint_path: "OpenGVLab/${model.name}"
+
+needs_video_metadata: false

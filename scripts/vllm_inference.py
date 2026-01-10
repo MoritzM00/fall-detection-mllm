@@ -27,7 +27,7 @@ import wandb
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.inference.base import parse_llm_outputs
+from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
 from infreqact.inference.zeroshot import get_system_prompt
 from infreqact.utils.wandb import initialize_run_from_config
 
@@ -185,32 +185,16 @@ def main(cfg: DictConfig):
                     {"type": "text", "text": prompt},
                 ],
             }
-            text = processor.apply_chat_template(
-                [message], tokenize=False, add_generation_prompt=True
+            inputs = prepare_inputs_for_vllm(
+                frames,
+                message,
+                processor,
+                model_fps=cfg.model_fps,
+                needs_video_metadata=cfg.model.needs_video_metadata,
             )
 
-            needs_video_metadata = True
-            if needs_video_metadata:
-                video_meta = {
-                    "total_num_frames": frames.shape[0],
-                    "fps": cfg.model_fps,
-                    "frames_indices": list(range(frames.shape[0])),
-                }
-                mm_data = {
-                    "video": (frames, video_meta),
-                }
-            else:
-                mm_data = {
-                    "video": frames,
-                }
+            batch_inputs.append(inputs)
 
-            video_kwargs = {"do_sample_frames": False}
-
-            batch_inputs.append(
-                {"prompt": text, "multi_modal_data": mm_data, "mm_processor_kwargs": video_kwargs}
-            )
-
-        # batch_inputs = [prepare_inputs_for_vllm([msg], processor) for msg in batch_messages]
         batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
         all_outputs.extend(batch_outputs)
         all_samples.extend(batch_samples)
