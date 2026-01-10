@@ -1,0 +1,6 @@
+# Few-shot example configuration for "walk" action
+# Placeholder for future implementation
+
+video_path: /path/to/example_walk.mp4
+label: walk
+description: "Person walking normally forward in a controlled manner"

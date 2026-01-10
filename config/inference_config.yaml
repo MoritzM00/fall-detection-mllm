@@ -3,6 +3,7 @@ defaults:
   - vllm: default
   - sampling: greedy
   - model: qwen/instruct
+  - prompt: default
   - _self_
   - experiment: debug
 

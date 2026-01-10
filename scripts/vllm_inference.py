@@ -27,8 +27,8 @@ import wandb
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
-from infreqact.inference.zeroshot import get_system_prompt
+from infreqact.inference.base import prepare_inputs_for_vllm
+from infreqact.inference.prompts import PromptBuilder, PromptConfig
 from infreqact.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
@@ -163,13 +163,21 @@ def main(cfg: DictConfig):
         stop_token_ids=cfg.sampling.stop_token_ids,
     )
 
+    # Build prompt from config
+    prompt_config = PromptConfig(**cfg.prompt)
+    prompt_builder = PromptBuilder(prompt_config)
+    prompt = prompt_builder.build_prompt()
+    parser = prompt_builder.get_parser()
+    system_message = prompt_builder.get_system_message()
+
+    logger.info(f"Using prompt config: {prompt_config}")
+    if system_message:
+        logger.info("Using system message for model-specific handling")
+    logger.info("Generating predictions...")
+
     # Process in batches
     all_outputs = []
     all_samples = []
-
-    prompt = get_system_prompt(cot=cfg.cot)
-
-    logger.info("Generating predictions...")
     start = time.perf_counter()
     for batch in tqdm(dataloader, desc="Processing batches"):
         batch_inputs = []
@@ -178,16 +186,25 @@ def main(cfg: DictConfig):
             frames = sample["video"]
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
-            message = {
+
+            # Construct user message
+            user_message = {
                 "role": "user",
                 "content": [
                     {"type": "video", "video": frames},
                     {"type": "text", "text": prompt},
                 ],
             }
+
+            # Build messages list (system + user, or just user)
+            if system_message:
+                messages = [system_message, user_message]
+            else:
+                messages = [user_message]
+
             inputs = prepare_inputs_for_vllm(
                 frames,
-                message,
+                messages,
                 processor,
                 model_fps=cfg.model_fps,
                 needs_video_metadata=cfg.model.needs_video_metadata,
@@ -203,9 +220,26 @@ def main(cfg: DictConfig):
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
 
-    predictions, predicted_labels, true_labels = parse_llm_outputs(
-        all_outputs, all_samples, label2idx
-    )
+    # Parse outputs using the configured parser
+    predictions = {}
+    predicted_labels = []
+    true_labels = []
+
+    for i, (output, sample) in enumerate(zip(all_outputs, all_samples)):
+        generated_text = output.outputs[0].text
+        true_labels.append(sample["label_str"])
+
+        # Parse using the configured parser
+        result = parser.parse(generated_text, label2idx)
+        predicted_labels.append(result.label)
+
+        # Build prediction dict
+        prediction = sample.copy()
+        prediction["predicted_label"] = result.label
+        prediction["reasoning"] = result.reasoning or ""
+        prediction["raw_output"] = result.raw_text
+        predictions[f"sample_{i}"] = prediction
+
     logger.info(f"Unique predicted labels: {set(predicted_labels)}")
     logger.info(f"Unique true labels: {set(true_labels)}")
 

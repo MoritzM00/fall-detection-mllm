@@ -1,0 +1,12 @@
+# Baseline prompt configuration for ablation studies
+# Minimal prompt: only labels, no role or definitions
+# Output format: JSON
+
+output_format: json
+include_role: false
+include_label_definitions: false
+include_constraints: false
+cot: false
+cot_delimiter: "Final Answer:"
+few_shot_examples: null
+model_family: ${model.family}

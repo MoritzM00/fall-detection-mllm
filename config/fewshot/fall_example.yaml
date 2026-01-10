@@ -1,0 +1,6 @@
+# Few-shot example configuration for "fall" action
+# Placeholder for future implementation
+
+video_path: /path/to/example_fall.mp4
+label: fall
+description: "Person loses balance and falls rapidly to the ground in an uncontrolled manner"

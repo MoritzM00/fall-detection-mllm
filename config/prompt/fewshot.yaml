@@ -1,0 +1,14 @@
+# Few-shot prompt configuration
+# Includes example videos with labels to help the model understand the task
+# Output format: JSON
+
+output_format: json
+include_role: true
+include_label_definitions: true
+include_constraints: true
+cot: false
+cot_delimiter: "Final Answer:"
+few_shot_examples:
+  - config/fewshot/walk_example.yaml
+  - config/fewshot/fall_example.yaml
+model_family: ${model.family}

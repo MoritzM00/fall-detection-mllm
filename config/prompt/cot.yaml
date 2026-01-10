@@ -1,0 +1,12 @@
+# Chain-of-Thought prompt configuration
+# Enables free-form reasoning followed by final answer
+# Output format: JSON (after reasoning)
+
+output_format: json
+include_role: true
+include_label_definitions: true
+include_constraints: true
+cot: true
+cot_delimiter: "Final Answer:"
+few_shot_examples: null
+model_family: ${model.family}
