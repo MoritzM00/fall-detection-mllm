@@ -1,4 +1,4 @@
-name: cuda-128
+name: cuda-129
 channels:
   - nvidia
   - conda-forge
@@ -9,4 +9,4 @@ dependencies:
   - ffmpeg
   - av
   - uv
-  - cuda-toolkit==12.8.1
+  - cuda-toolkit==12.9.1
