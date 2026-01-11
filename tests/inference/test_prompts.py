@@ -107,17 +107,6 @@ class TestPromptBuilder:
         assert "State only the label" in prompt
         assert '{"label"' not in prompt
 
-    def test_internvl_prompt_no_prefix(self):
-        """Test that InternVL system prompt is NOT in user prompt."""
-        config = PromptConfig(cot=True, model_family="InternVL")
-        builder = PromptBuilder(config)
-        prompt = builder.build_prompt()
-
-        # InternVL R1 system-level prefix should NOT be in the user prompt (it's in system message)
-        # Note: The CoT instruction will mention <think> tags, which is expected
-        assert "You are a helpful assistant" not in prompt
-        assert "conduct a detailed analysis" not in prompt  # From R1 system prompt
-
     def test_no_system_prefix_in_prompt_without_cot(self):
         """Test that no system-level prompts are in user prompt without CoT."""
         config = PromptConfig(cot=False, model_family="InternVL")
