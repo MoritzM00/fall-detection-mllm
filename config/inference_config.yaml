@@ -8,9 +8,10 @@ defaults:
   - experiment: debug
 
 input_size:
-  # 200 token for qwen-3-vl
   height: 320
   width: 576
+
+dataset_seed: 0
 
 # Global video processing parameters
 model_fps: 8.0  # Target frame rate for video sampling

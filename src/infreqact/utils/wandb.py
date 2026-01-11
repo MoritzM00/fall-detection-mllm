@@ -74,6 +74,38 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
     return run_name, tags
 
 
+def log_predictions_artifact(
+    predictions_file: str,
+    run: wandb.sdk.wandb_run.Run,
+    artifact_name: str | None = None,
+) -> None:
+    """Log predictions file as a wandb artifact.
+
+    Args:
+        predictions_file: Path to the JSONL predictions file
+        run: Active wandb run
+        artifact_name: Optional custom artifact name (default: "predictions")
+    """
+    if artifact_name is None:
+        artifact_name = "predictions"
+
+    logger.info(f"Uploading predictions to W&B as artifact: {artifact_name}")
+
+    # Create artifact
+    artifact = wandb.Artifact(
+        name=artifact_name,
+        type="predictions",
+        description="Model predictions in JSONL format with metadata",
+    )
+
+    # Add the predictions file
+    artifact.add_file(predictions_file, name="predictions.jsonl")
+
+    # Log the artifact
+    run.log_artifact(artifact)
+    logger.info(f"Predictions artifact uploaded: {artifact_name}")
+
+
 def log_videos_with_predictions(
     dataset: GenericVideoDataset | torch.utils.data.Subset,
     predictions: list[str] | list[int] | np.ndarray,
