@@ -204,7 +204,7 @@ def main(cfg: DictConfig):
     # Extract labels from label2idx (filter out special labels with negative indices)
     labels = list(label2idx.keys())
     prompt_config = PromptConfig(labels=labels, **cfg.prompt)
-    prompt_builder = PromptBuilder(prompt_config)
+    prompt_builder = PromptBuilder(prompt_config, label2idx)
     prompt = prompt_builder.build_prompt()
     parser = prompt_builder.get_parser()
     system_message = prompt_builder.get_system_message()
@@ -266,7 +266,7 @@ def main(cfg: DictConfig):
         true_labels.append(sample["label_str"])
 
         # Parse using the configured parser
-        result = parser.parse(generated_text, label2idx)
+        result = parser.parse(generated_text)
         predicted_labels.append(result.label)
 
         # Build prediction dict

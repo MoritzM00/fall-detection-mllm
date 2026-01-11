@@ -58,7 +58,7 @@ class TestPromptBuilder:
     def test_default_prompt(self):
         """Test building default prompt with all components."""
         config = PromptConfig()
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that all expected components are present
@@ -75,7 +75,7 @@ class TestPromptBuilder:
             include_role=False,
             include_definitions=False,
         )
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that role and definitions are excluded
@@ -90,7 +90,7 @@ class TestPromptBuilder:
     def test_cot_prompt(self):
         """Test building CoT prompt with reasoning instruction."""
         config = PromptConfig(cot=True)
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that CoT instruction is present
@@ -100,7 +100,7 @@ class TestPromptBuilder:
     def test_text_output_format(self):
         """Test building prompt with text output format."""
         config = PromptConfig(output_format="text")
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that text output format is used
@@ -110,7 +110,7 @@ class TestPromptBuilder:
     def test_no_system_prefix_in_prompt_without_cot(self):
         """Test that no system-level prompts are in user prompt without CoT."""
         config = PromptConfig(cot=False, model_family="InternVL")
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that no system-level instructions are in the prompt
@@ -120,7 +120,7 @@ class TestPromptBuilder:
     def test_get_parser_json(self):
         """Test getting JSON parser."""
         config = PromptConfig(output_format="json", cot=False)
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         parser = builder.get_parser()
 
         assert isinstance(parser, JSONOutputParser)
@@ -128,7 +128,7 @@ class TestPromptBuilder:
     def test_get_parser_keyword(self):
         """Test getting keyword parser."""
         config = PromptConfig(output_format="text", cot=False)
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         parser = builder.get_parser()
 
         assert isinstance(parser, KeywordOutputParser)
@@ -136,7 +136,7 @@ class TestPromptBuilder:
     def test_get_parser_cot(self):
         """Test getting CoT parser."""
         config = PromptConfig(output_format="json", cot=True)
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         parser = builder.get_parser()
 
         assert isinstance(parser, CoTOutputParser)
@@ -144,7 +144,7 @@ class TestPromptBuilder:
     def test_get_system_message_internvl_cot(self):
         """Test getting system message for InternVL with CoT."""
         config = PromptConfig(cot=True, model_family="InternVL")
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         system_msg = builder.get_system_message()
 
         assert system_msg is not None
@@ -156,7 +156,7 @@ class TestPromptBuilder:
     def test_get_system_message_qwen_cot(self):
         """Test that Qwen CoT doesn't need system message."""
         config = PromptConfig(cot=True, model_family="Qwen")
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         system_msg = builder.get_system_message()
 
         assert system_msg is None
@@ -164,7 +164,7 @@ class TestPromptBuilder:
     def test_get_system_message_no_cot(self):
         """Test that system message is None when CoT is disabled."""
         config = PromptConfig(cot=False, model_family="InternVL")
-        builder = PromptBuilder(config)
+        builder = PromptBuilder(config, LABEL2IDX)
         system_msg = builder.get_system_message()
 
         assert system_msg is None
@@ -175,9 +175,9 @@ class TestJSONOutputParser:
 
     def test_parse_valid_json(self):
         """Test parsing valid JSON output."""
-        parser = JSONOutputParser()
+        parser = JSONOutputParser(LABEL2IDX)
         text = '{"label": "fall"}'
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "fall"
         assert result.reasoning is None
@@ -185,27 +185,27 @@ class TestJSONOutputParser:
 
     def test_parse_invalid_label(self):
         """Test parsing JSON with invalid label."""
-        parser = JSONOutputParser()
+        parser = JSONOutputParser(LABEL2IDX)
         text = '{"label": "invalid_label"}'
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should default to "other"
         assert result.label == "other"
 
     def test_parse_malformed_json(self):
         """Test parsing malformed JSON."""
-        parser = JSONOutputParser()
+        parser = JSONOutputParser(LABEL2IDX)
         text = "not valid json"
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should default to "other"
         assert result.label == "other"
 
     def test_parse_missing_label(self):
         """Test parsing JSON without label field."""
-        parser = JSONOutputParser()
+        parser = JSONOutputParser(LABEL2IDX)
         text = '{"prediction": "fall"}'
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should default to "other" when label is missing
         assert result.label == "other"
@@ -216,61 +216,61 @@ class TestKeywordOutputParser:
 
     def test_parse_simple_label(self):
         """Test parsing text with simple label."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "The person is walking."
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "walk"
         assert result.raw_text == text
 
     def test_parse_label_at_start(self):
         """Test parsing text with label at start."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "fall is what I observed"
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "fall"
 
     def test_parse_compound_label(self):
         """Test parsing text with compound label (sit_down)."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "The person sits down on the chair."
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should match "sit_down" when phrase uses "sit down" or "sits down"
         assert result.label == "sit_down"
 
     def test_parse_no_match(self):
         """Test parsing text with no valid label."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "I don't know what this is"
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should default to "other"
         assert result.label == "other"
 
     def test_parse_case_insensitive(self):
         """Test that parsing is case-insensitive."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "The person is WALKING."
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "walk"
 
     def test_parse_multiple_labels(self):
         """Test parsing text with multiple possible labels."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         text = "walk\nfall"
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should match the first label found ("walk")
         assert result.label == "walk"
 
     def test_parse_exact_match(self):
         """Test parsing various labels using parameterization."""
-        parser = KeywordOutputParser()
+        parser = KeywordOutputParser(LABEL2IDX)
         for label in LABEL2IDX:
-            result = parser.parse(label, LABEL2IDX)
+            result = parser.parse(label)
             assert result.label == label
 
 
@@ -279,8 +279,8 @@ class TestCoTOutputParser:
 
     def test_parse_with_think_tags(self):
         """Test parsing CoT output with think tags."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = """<think>
         The person appears to lose balance and falls rapidly.
@@ -289,7 +289,7 @@ class TestCoTOutputParser:
         {"label": "fall"}
         """
 
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "fall"
         assert "lose balance" in result.reasoning
@@ -297,11 +297,11 @@ class TestCoTOutputParser:
 
     def test_parse_without_tags(self):
         """Test parsing CoT output without tags (fallback)."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = '{"label": "walk"}'
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         # Should parse entire text as answer
         assert result.label == "walk"
@@ -309,13 +309,13 @@ class TestCoTOutputParser:
 
     def test_parse_only_end_tag(self):
         """Test parsing when tokenizer added start tag (Qwen behavior)."""
-        base_parser = KeywordOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         # Simulate Qwen output where <think> is added by tokenizer
         # Model only generates: "reasoning...</think>answer"
         text = "The person appears to be walking steadily forward.</think>walk"
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "walk"
         assert result.reasoning is not None
@@ -324,11 +324,11 @@ class TestCoTOutputParser:
 
     def test_parse_only_end_tag_with_json(self):
         """Test parsing only end tag with JSON output."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = 'The video shows a person falling down.</think>{"label": "fall"}'
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "fall"
         assert result.reasoning is not None
@@ -336,8 +336,8 @@ class TestCoTOutputParser:
 
     def test_parse_with_keyword_base_parser(self):
         """Test CoT parser wrapping keyword parser."""
-        base_parser = KeywordOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = """<think>
         The person is moving forward steadily.
@@ -345,15 +345,17 @@ class TestCoTOutputParser:
         walk
         """
 
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "walk"
         assert "moving forward" in result.reasoning
 
     def test_custom_tags(self):
         """Test CoT parser with custom tags."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser, start_tag="<reasoning>", end_tag="</reasoning>")
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(
+            LABEL2IDX, base_parser, start_tag="<reasoning>", end_tag="</reasoning>"
+        )
 
         text = """<reasoning>
         Analyzing the video.
@@ -361,15 +363,15 @@ class TestCoTOutputParser:
         {"label": "sitting"}
         """
 
-        result = parser.parse(text, LABEL2IDX)
+        result = parser.parse(text)
 
         assert result.label == "sitting"
         assert "Analyzing" in result.reasoning
 
     def test_extract_reasoning(self):
         """Test extract_reasoning method."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = "<think>reasoning here</think>content here"
         reasoning, content = parser.extract_reasoning(text)
@@ -379,8 +381,8 @@ class TestCoTOutputParser:
 
     def test_extract_reasoning_no_end_tag(self):
         """Test extract_reasoning when end tag is missing."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = "<think>reasoning here"
         reasoning, content = parser.extract_reasoning(text)
@@ -390,8 +392,8 @@ class TestCoTOutputParser:
 
     def test_extract_reasoning_no_start_tag(self):
         """Test extract_reasoning when start tag is missing."""
-        base_parser = JSONOutputParser()
-        parser = CoTOutputParser(base_parser)
+        base_parser = JSONOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
 
         text = "just content here"
         reasoning, content = parser.extract_reasoning(text)

@@ -28,12 +28,11 @@ class ParseResult:
 class OutputParser(Protocol):
     """Protocol for output parsers."""
 
-    def parse(self, text: str, label2idx: dict) -> ParseResult:
+    def parse(self, text: str) -> ParseResult:
         """Parse LLM output text to extract prediction.
 
         Args:
             text: Raw output text from LLM
-            label2idx: Dictionary mapping valid labels to indices
 
         Returns:
             ParseResult with extracted label and optional reasoning
@@ -44,12 +43,19 @@ class OutputParser(Protocol):
 class JSONOutputParser:
     """Parser for JSON-formatted outputs."""
 
-    def parse(self, text: str, label2idx: dict) -> ParseResult:
+    def __init__(self, label2idx: dict):
+        """Initialize JSON parser.
+
+        Args:
+            label2idx: Dictionary mapping valid labels to indices
+        """
+        self.label2idx = label2idx
+
+    def parse(self, text: str) -> ParseResult:
         """Parse JSON output to extract label.
 
         Args:
             text: Raw output text from LLM (expected to be JSON)
-            label2idx: Dictionary mapping valid labels to indices
 
         Returns:
             ParseResult with extracted label
@@ -59,7 +65,7 @@ class JSONOutputParser:
             predicted_label = json_obj.get("label", "other")
 
             # Validate that the label exists in label2idx
-            if predicted_label not in label2idx:
+            if predicted_label not in self.label2idx:
                 logger.warning(
                     f"Invalid label '{predicted_label}' not in label2idx. Defaulting to 'other'."
                 )
@@ -78,7 +84,15 @@ class JSONOutputParser:
 class KeywordOutputParser:
     """Parser for plain text outputs using keyword matching."""
 
-    def parse(self, text: str, label2idx: dict) -> ParseResult:
+    def __init__(self, label2idx: dict):
+        """Initialize keyword parser.
+
+        Args:
+            label2idx: Dictionary mapping valid labels to indices
+        """
+        self.label2idx = label2idx
+
+    def parse(self, text: str) -> ParseResult:
         """Parse plain text output by searching for valid labels.
 
         Searches the text for any of the valid labels from label2idx
@@ -86,7 +100,6 @@ class KeywordOutputParser:
 
         Args:
             text: Raw output text from LLM
-            label2idx: Dictionary mapping valid labels to indices
 
         Returns:
             ParseResult with extracted label (or "other" if no match)
@@ -94,7 +107,7 @@ class KeywordOutputParser:
         text_lower = text.lower()
 
         # Sort labels by length (longest first) to match "sit_down" before "sitting"
-        sorted_labels = sorted(label2idx.keys(), key=len, reverse=True)
+        sorted_labels = sorted(self.label2idx.keys(), key=len, reverse=True)
 
         for label in sorted_labels:
             # Create multiple patterns to try
@@ -150,15 +163,21 @@ class CoTOutputParser:
     """
 
     def __init__(
-        self, answer_parser: OutputParser, start_tag: str = "<think>", end_tag: str = "</think>"
+        self,
+        label2idx: dict,
+        answer_parser: OutputParser,
+        start_tag: str = "<think>",
+        end_tag: str = "</think>",
     ):
         """Initialize CoT parser.
 
         Args:
+            label2idx: Dictionary mapping valid labels to indices
             answer_parser: Parser to use for extracting label from final answer
             start_tag: Opening tag for reasoning content (e.g., "<think>")
             end_tag: Closing tag for reasoning content (e.g., "</think>")
         """
+        self.label2idx = label2idx
         self.answer_parser = answer_parser
         self.start_tag = start_tag
         self.end_tag = end_tag
@@ -208,12 +227,11 @@ class CoTOutputParser:
         reasoning, _, content = after_start.partition(self.end_tag)
         return reasoning.strip(), content.strip() if content else None
 
-    def parse(self, text: str, label2idx: dict) -> ParseResult:
+    def parse(self, text: str) -> ParseResult:
         """Parse CoT output by extracting reasoning and parsing content.
 
         Args:
             text: Raw output text from LLM (with reasoning + final answer)
-            label2idx: Dictionary mapping valid labels to indices
 
         Returns:
             ParseResult with extracted label and reasoning
@@ -222,11 +240,11 @@ class CoTOutputParser:
 
         # Parse the content portion for the label
         if content:
-            result = self.answer_parser.parse(content, label2idx)
+            result = self.answer_parser.parse(content)
         else:
             # Fallback: parse entire text as answer
             logger.warning("No content found after reasoning tags. Parsing entire text as answer.")
-            result = self.answer_parser.parse(text, label2idx)
+            result = self.answer_parser.parse(text)
 
         # Add reasoning to result
         result.reasoning = reasoning

@@ -18,13 +18,15 @@ from .parsers import CoTOutputParser, JSONOutputParser, KeywordOutputParser, Out
 class PromptBuilder:
     """Builds prompts from modular components based on configuration."""
 
-    def __init__(self, config: PromptConfig):
+    def __init__(self, config: PromptConfig, label2idx: dict):
         """Initialize the prompt builder.
 
         Args:
             config: Configuration specifying which prompt components to include
+            label2idx: Dictionary mapping valid labels to indices
         """
         self.config = config
+        self.label2idx = label2idx
 
     def build_prompt(self) -> str:
         """Assemble the full prompt from components.
@@ -139,13 +141,14 @@ class PromptBuilder:
         """
         # Select base parser based on output format
         if self.config.output_format == "json":
-            base_parser = JSONOutputParser()
+            base_parser = JSONOutputParser(self.label2idx)
         else:
-            base_parser = KeywordOutputParser()
+            base_parser = KeywordOutputParser(self.label2idx)
 
         # Wrap with CoT parser if chain-of-thought is enabled
         if self.config.cot:
             return CoTOutputParser(
+                self.label2idx,
                 base_parser,
                 start_tag=self.config.cot_start_tag,
                 end_tag=self.config.cot_end_tag,
