@@ -257,6 +257,22 @@ class TestKeywordOutputParser:
 
         assert result.label == "walk"
 
+    def test_parse_multiple_labels(self):
+        """Test parsing text with multiple possible labels."""
+        parser = KeywordOutputParser()
+        text = "walk\nfall"
+        result = parser.parse(text, LABEL2IDX)
+
+        # Should match the first label found ("walk")
+        assert result.label == "walk"
+
+    def test_parse_exact_match(self):
+        """Test parsing various labels using parameterization."""
+        parser = KeywordOutputParser()
+        for label in LABEL2IDX:
+            result = parser.parse(label, LABEL2IDX)
+            assert result.label == label
+
 
 class TestCoTOutputParser:
     """Tests for CoTOutputParser."""
@@ -290,6 +306,33 @@ class TestCoTOutputParser:
         # Should parse entire text as answer
         assert result.label == "walk"
         assert result.reasoning is None
+
+    def test_parse_only_end_tag(self):
+        """Test parsing when tokenizer added start tag (Qwen behavior)."""
+        base_parser = KeywordOutputParser()
+        parser = CoTOutputParser(base_parser)
+
+        # Simulate Qwen output where <think> is added by tokenizer
+        # Model only generates: "reasoning...</think>answer"
+        text = "The person appears to be walking steadily forward.</think>walk"
+        result = parser.parse(text, LABEL2IDX)
+
+        assert result.label == "walk"
+        assert result.reasoning is not None
+        assert "walking steadily" in result.reasoning
+        assert "<think>" not in result.reasoning  # Start tag not in reasoning
+
+    def test_parse_only_end_tag_with_json(self):
+        """Test parsing only end tag with JSON output."""
+        base_parser = JSONOutputParser()
+        parser = CoTOutputParser(base_parser)
+
+        text = 'The video shows a person falling down.</think>{"label": "fall"}'
+        result = parser.parse(text, LABEL2IDX)
+
+        assert result.label == "fall"
+        assert result.reasoning is not None
+        assert "falling down" in result.reasoning
 
     def test_parse_with_keyword_base_parser(self):
         """Test CoT parser wrapping keyword parser."""

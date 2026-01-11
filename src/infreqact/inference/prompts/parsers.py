@@ -169,20 +169,34 @@ class CoTOutputParser:
         Follows vLLM's reasoning parser interface. Returns (reasoning, content)
         where reasoning is the text within tags, and content is text after tags.
 
+        Handles 3 cases:
+        1. Only end tag present (tokenizer already added start tag via add_generation_prompt)
+        2. Both start and end tags present
+        3. No tags present
+
         Args:
             text: Raw output text from LLM
 
         Returns:
             tuple: (reasoning, content) - either may be None
         """
-        if self.start_tag not in text:
-            # No start tag - entire text is content
+        has_start = self.start_tag in text
+        has_end = self.end_tag in text
+
+        # Case 1: Only end tag (tokenizer added start tag via add_generation_prompt)
+        # This is common with Qwen models where <think> is added by tokenizer
+        if not has_start and has_end:
+            reasoning, _, content = text.partition(self.end_tag)
+            return reasoning.strip(), content.strip() if content else None
+
+        # Case 2: No tags at all - entire text is content
+        if not has_start:
             return None, text
 
-        # Remove start tag and get everything after it
+        # Case 3: Start tag present - use existing logic
         _, _, after_start = text.partition(self.start_tag)
 
-        if self.end_tag not in after_start:
+        if not has_end:
             # No end tag - treat everything after start as reasoning
             logger.warning(
                 f"CoT end tag '{self.end_tag}' not found after start tag. "
