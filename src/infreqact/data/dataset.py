@@ -104,7 +104,7 @@ class GenericVideoDataset(Dataset):
 
         if self.size is not None:
             # size is (height, width)
-            frames = F.resize(frames, self.size)
+            frames = F.resize(frames, self.size, interpolation=F.InterpolationMode.BILINEAR)
 
         return {"video": frames}
 

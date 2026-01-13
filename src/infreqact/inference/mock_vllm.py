@@ -4,6 +4,8 @@ Mock vLLM engine for debugging purposes.
 This module provides mock implementations of vLLM classes that return random
 predictions without requiring GPU resources or model loading. Useful for
 rapid development and debugging of inference pipelines.
+
+Supports both JSON and text output formats with optional chain-of-thought reasoning.
 """
 
 import json
@@ -36,7 +38,7 @@ class MockCompletionOutput:
         Initialize mock completion output.
 
         Args:
-            text: Generated text (JSON string with label and optional reason)
+            text: Generated text (JSON string or plain text with label and optional reason)
         """
         self.text = text
 
@@ -113,6 +115,7 @@ class MockLLM:
         model: str,
         seed: int = 0,
         cot: bool = False,
+        output_format: str = "json",
         **kwargs,
     ):
         """
@@ -122,11 +125,13 @@ class MockLLM:
             model: Model path (ignored in mock, kept for compatibility)
             seed: Random seed for reproducible predictions
             cot: Whether to include chain-of-thought reasoning in outputs
+            output_format: Output format - "json" or "text"
             **kwargs: Other vLLM parameters (accepted but ignored for compatibility)
         """
         self.model = model
         self.seed = seed
         self.cot = cot
+        self.output_format = output_format
         self.rng = random.Random(seed)
 
         # Log ignored parameters for transparency
@@ -134,7 +139,7 @@ class MockLLM:
         if ignored_params:
             logger.debug(f"MockLLM ignoring these vLLM parameters: {ignored_params}")
 
-        logger.info(f"MockLLM initialized (seed={seed}, cot={cot})")
+        logger.info(f"MockLLM initialized (seed={seed}, cot={cot}, output_format={output_format})")
         logger.info("Mock mode active - no GPU required, generating random predictions")
 
     def generate(
@@ -152,8 +157,9 @@ class MockLLM:
 
         Returns:
             List of MockRequestOutput objects matching vLLM's output structure.
-            Each output contains a JSON string with randomly selected label and
-            optional chain-of-thought reasoning.
+            Each output contains either:
+            - JSON format: JSON string with randomly selected label and optional reason
+            - Text format: Plain text with optional reasoning followed by label
         """
         # Use sampling_params seed if provided, otherwise use constructor seed
         if sampling_params and sampling_params.seed is not None:
@@ -165,16 +171,27 @@ class MockLLM:
             # Randomly select a valid label
             label = self.rng.choice(VALID_LABELS)
 
-            # Generate JSON output with optional chain-of-thought
-            if self.cot:
-                reason_template = self.rng.choice(REASON_TEMPLATES)
-                reason = reason_template.format(label=label)
-                json_output = {"reason": reason, "label": label}
-            else:
-                json_output = {"label": label}
+            # Generate output based on format
+            if self.output_format == "json":
+                # Generate JSON output with optional chain-of-thought
+                if self.cot:
+                    reason_template = self.rng.choice(REASON_TEMPLATES)
+                    reason = reason_template.format(label=label)
+                    json_output = {"reason": reason, "label": label}
+                else:
+                    json_output = {"label": label}
 
-            # Convert to JSON string
-            text = json.dumps(json_output)
+                # Convert to JSON string
+                text = json.dumps(json_output)
+
+            else:  # text format
+                # Generate text output with optional chain-of-thought
+                if self.cot:
+                    reason_template = self.rng.choice(REASON_TEMPLATES)
+                    reason = reason_template.format(label=label)
+                    text = f"{reason}\n{label}"
+                else:
+                    text = label
 
             # Wrap in mock output structures matching vLLM's interface
             completion_output = MockCompletionOutput(text=text)

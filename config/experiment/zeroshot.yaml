@@ -2,11 +2,10 @@
 
 defaults:
   - /dataset/omnifall/video@dataset: oops
+  - override /prompt: default
 
 # Full dataset evaluation
 num_samples: null  # Process all samples
-verbose: false
-cot: false  # No chain-of-thought for baseline
 
 # Model configuration
 model:

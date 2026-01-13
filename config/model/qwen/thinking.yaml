@@ -7,7 +7,7 @@ variant: "Thinking"
 params: "4B"
 
 # Computed paths
-name: "${model.family}${model.version}-${model.variant}"
+name: "${model.family}${model.version}-VL-${model.params}-${model.variant}"
 checkpoint_path: "${model.family}/${model.name}"
 
 needs_video_metadata: true

@@ -9,7 +9,7 @@ enforce_eager: false
 max_model_len: 32000 # use model default, or override based on VRAM constraints
 max_num_batched_tokens: null
 trust_remote_code: true
-async_scheduling: false
+async_scheduling: true
 skip_mm_profiling: false
 
 mm_processor_kwargs:

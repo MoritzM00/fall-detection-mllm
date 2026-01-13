@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+  - override /model: qwen/thinking
+  - override /sampling: qwen3_thinking
+  - override /prompt: cot
+
+# Full dataset evaluation
+num_samples: null  # Process all samples
+
+# W&B tracking
+wandb:
+  project: "fall-detection-zeroshot-cot"
+  name:
+  tags: ["zeroshot", "cot"]
+  mode: online
+
+# Output settings
+output_dir: "outputs/zeroshot-cot"

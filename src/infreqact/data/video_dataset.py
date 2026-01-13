@@ -26,7 +26,6 @@ label2idx = {
     "squatting": 13,
     "crawl": 14,
     "jump": 15,
-    "no_fall": -1,
 }
 
 idx2label = {v: k for k, v in label2idx.items()}

@@ -1,24 +1,27 @@
 defaults:
   # dataset specified by experiment config
   - vllm: default
-  - sampling: greedy
+  - sampling: qwen3_instruct
   - model: qwen/instruct
+  - prompt: default
   - _self_
   - experiment: debug
 
-input_size:
-  # 200 token for qwen-3-vl
-  height: 320
-  width: 576
+data:
+  # Global data parameters
+  seed: 0
+  split: cs
+  input_size:
+    height: 320
+    width: 576
 
 # Global video processing parameters
 model_fps: 8.0  # Target frame rate for video sampling
 num_frames: 16  # Number of frames to extract per video
 
 # Inference settings
-batch_size: 50
+batch_size: 32
 num_workers: 8
-cot: false  # Chain of thought reasoning
 
 # Output configuration
 output_dir: "outputs"

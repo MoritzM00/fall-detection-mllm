@@ -2,7 +2,6 @@ import logging
 import time
 import warnings
 
-import json_repair
 from qwen_vl_utils import process_vision_info
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
@@ -132,18 +131,25 @@ def inference(
     return (output_text[0], inputs) if return_inputs else output_text[0]
 
 
-def prepare_inputs_for_vllm(frames, message, processor, model_fps=8, needs_video_metadata=True):
+def prepare_inputs_for_vllm(frames, messages, processor, model_fps=8, needs_video_metadata=True):
     """
     Prepare inputs for vLLM.
 
     Args:
-        messages: List of messages in standard conversation format
+        frames: Video frames tensor
+        messages: List of message dicts (system + user) or single message dict
         processor: AutoProcessor instance
+        model_fps: Frame rate to use for video metadata
+        needs_video_metadata: Whether to include video metadata in the multi-modal data
 
     Returns:
         dict: Input format required by vLLM
     """
-    text = processor.apply_chat_template([message], tokenize=False, add_generation_prompt=True)
+    # Ensure messages is a list
+    if isinstance(messages, dict):
+        messages = [messages]
+
+    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     if needs_video_metadata:
         video_meta = dict(
@@ -158,49 +164,3 @@ def prepare_inputs_for_vllm(frames, message, processor, model_fps=8, needs_video
     video_kwargs = dict(do_sample_frames=False)
 
     return dict(prompt=text, multi_modal_data=mm_data, mm_processor_kwargs=video_kwargs)
-
-
-def parse_llm_outputs(outputs: list[dict], samples: list[dict], label2idx: dict):
-    """
-    Parse LLM outputs and extract predicted labels.
-
-    Args:
-        outputs: List of LLM output objects containing generated text
-        samples: List of ground truth samples with labels
-        label2idx: Dictionary mapping label strings to indices for validation
-
-    Returns:
-        tuple: (predictions dict, predicted_labels list, true_labels list)
-    """
-    predicted_labels = []
-    true_labels = []
-    predictions = {}
-
-    for i, (output, sample) in enumerate(zip(outputs, samples)):
-        generated_text = output.outputs[0].text
-        true_labels.append(sample["label_str"])
-
-        try:
-            json_obj = json_repair.loads(generated_text)
-            predicted_label = json_obj.get("label", "other")
-
-            # Validate that the label exists in label2idx
-            if predicted_label not in label2idx:
-                logger.warning(
-                    f"Sample {i}: Invalid label '{predicted_label}' not in label2idx. Defaulting to 'other'."
-                )
-                predicted_label = "other"
-
-            predicted_labels.append(predicted_label)
-
-            prediction = sample.copy()
-            prediction["predicted_label"] = predicted_labels[-1]
-            prediction["reason"] = json_obj.get("reason", "")
-            predictions[f"sample_{i}"] = prediction
-        except Exception as e:
-            logger.error(
-                f"Failed to parse JSON for sample {i}: {e}\nGenerated text: {generated_text}"
-            )
-            predicted_labels.append("other")
-
-    return predictions, predicted_labels, true_labels

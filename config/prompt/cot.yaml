@@ -1,0 +1,7 @@
+output_format: text
+include_role: true
+include_definitions: false
+cot: true
+cot_start_tag: "<think>"
+cot_end_tag: "</think>"
+model_family: ${model.family}

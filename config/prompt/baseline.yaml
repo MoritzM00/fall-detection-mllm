@@ -1,0 +1,5 @@
+output_format: text
+include_role: false
+include_definitions: false
+cot: false
+model_family: ${model.family}

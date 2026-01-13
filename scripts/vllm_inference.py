@@ -1,8 +1,11 @@
 import json
 import logging
 import os
+import random
 import sys
 import time
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 import hydra
@@ -27,11 +30,52 @@ import wandb
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.inference.base import parse_llm_outputs, prepare_inputs_for_vllm
-from infreqact.inference.zeroshot import get_system_prompt
+from infreqact.inference.base import prepare_inputs_for_vllm
+from infreqact.inference.prompts import PromptBuilder, PromptConfig
 from infreqact.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
+
+
+def save_predictions_jsonl(
+    output_path: Path,
+    model_name: str,
+    dataset_name: str,
+    prompt: str,
+    prompt_config: PromptConfig,
+    predictions: list[dict],
+    wandb_run_id: str | None = None,
+):
+    """Save predictions in JSONL format with metadata.
+
+    Args:
+        output_path: Path to output JSONL file
+        model_name: Model name
+        dataset_name: Dataset name
+        prompt: Prompt string used for inference
+        prompt_config: PromptConfig dataclass instance
+        predictions: List of prediction dicts
+        wandb_run_id: Optional W&B run ID for linking
+    """
+    with open(output_path, "w") as f:
+        # Write metadata line first
+        metadata = {
+            "type": "metadata",
+            "model": model_name,
+            "dataset": dataset_name,
+            "prompt": prompt,
+            "prompt_config": asdict(prompt_config),
+            "timestamp": datetime.now().isoformat(),
+            "wandb_run_id": wandb_run_id,
+        }
+        f.write(json.dumps(metadata) + "\n")
+
+        # Write each prediction
+        for idx, pred in enumerate(predictions):
+            pred_copy = pred.copy()
+            pred_copy["type"] = "prediction"
+            pred_copy["idx"] = idx
+            f.write(json.dumps(pred_copy) + "\n")
 
 
 def main(cfg: DictConfig):
@@ -40,13 +84,8 @@ def main(cfg: DictConfig):
 
     Args:
         cfg: Hydra configuration containing:
-            - model: Model configuration (checkpoint, vllm settings, sampling params)
-            - dataset: Dataset configuration (video paths, annotations, etc.)
-            - inference: Inference settings (batch_size, num_workers, cot)
-            - num_samples: Number of samples to process (None for full dataset)
-            - verbose: Verbosity level for output printing
     """
-
+    random.seed(cfg.data.seed)
     # Resolve all OmegaConf interpolations once at the beginning
     OmegaConf.resolve(cfg)
 
@@ -71,17 +110,13 @@ def main(cfg: DictConfig):
     run = initialize_run_from_config(cfg)
     reconfigure_logging_after_wandb(rich_handler, file_handler)
 
-    # Create config structure compatible with get_video_datasets
-    # Wrap dataset config as dataset_test for the factory
-    temp_cfg = OmegaConf.create({"dataset_test": cfg.dataset})
-
     multi_dataset = get_video_datasets(
-        cfg=temp_cfg,
+        cfg=cfg,
         mode=cfg.dataset.get("mode", "test"),
         run=run,
         return_individual=True,
-        split=cfg.dataset.get("split", "cs"),
-        size=(cfg.input_size.height, cfg.input_size.width),
+        split=cfg.data.split,
+        size=(cfg.data.input_size.height, cfg.data.input_size.width),
     )
     for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference
@@ -102,7 +137,6 @@ def main(cfg: DictConfig):
         f"Processing {len(dataset)} samples with batch_size={cfg.batch_size}, "
         f"num_workers={cfg.num_workers}"
     )
-    logger.info(f"Chain-of-thought: {cfg.cot}")
 
     checkpoint_path = cfg.model.checkpoint_path
     logger.info(f"Loading model and processor: {checkpoint_path}")
@@ -145,9 +179,10 @@ def main(cfg: DictConfig):
         async_scheduling=cfg.vllm.async_scheduling,
     )
 
-    # Add CoT flag for mock mode
+    # Add CoT flag and output format for mock mode
     if cfg.vllm.get("use_mock", False):
-        vllm_kwargs["cot"] = cfg.cot
+        vllm_kwargs["cot"] = cfg.prompt.cot
+        vllm_kwargs["output_format"] = cfg.prompt.get("output_format", "json")
 
     llm = LLM(**vllm_kwargs)
 
@@ -163,13 +198,21 @@ def main(cfg: DictConfig):
         stop_token_ids=cfg.sampling.stop_token_ids,
     )
 
+    # Build prompt from config
+    # Extract labels from label2idx (filter out special labels with negative indices)
+    labels = list(label2idx.keys())
+    prompt_config = PromptConfig(labels=labels, **cfg.prompt)
+    prompt_builder = PromptBuilder(prompt_config, label2idx)
+    prompt = prompt_builder.build_prompt()
+    parser = prompt_builder.get_parser()
+    system_message = prompt_builder.get_system_message()
+    logger.info(f"Prompt:\n{prompt}")
+
+    logger.info("Generating predictions...")
+
     # Process in batches
     all_outputs = []
     all_samples = []
-
-    prompt = get_system_prompt(cot=cfg.cot)
-
-    logger.info("Generating predictions...")
     start = time.perf_counter()
     for batch in tqdm(dataloader, desc="Processing batches"):
         batch_inputs = []
@@ -178,16 +221,25 @@ def main(cfg: DictConfig):
             frames = sample["video"]
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
-            message = {
+
+            # Construct user message
+            user_message = {
                 "role": "user",
                 "content": [
                     {"type": "video", "video": frames},
                     {"type": "text", "text": prompt},
                 ],
             }
+
+            # Build messages list (system + user, or just user)
+            if system_message:
+                messages = [system_message, user_message]
+            else:
+                messages = [user_message]
+
             inputs = prepare_inputs_for_vllm(
                 frames,
-                message,
+                messages,
                 processor,
                 model_fps=cfg.model_fps,
                 needs_video_metadata=cfg.model.needs_video_metadata,
@@ -203,9 +255,26 @@ def main(cfg: DictConfig):
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
 
-    predictions, predicted_labels, true_labels = parse_llm_outputs(
-        all_outputs, all_samples, label2idx
-    )
+    # Parse outputs using the configured parser
+    predictions = []
+    predicted_labels = []
+    true_labels = []
+
+    for i, (output, sample) in enumerate(zip(all_outputs, all_samples)):
+        generated_text = output.outputs[0].text
+        true_labels.append(sample["label_str"])
+
+        # Parse using the configured parser
+        result = parser.parse(generated_text)
+        predicted_labels.append(result.label)
+
+        # Build prediction dict
+        prediction = sample.copy()
+        prediction["predicted_label"] = result.label
+        prediction["reasoning"] = result.reasoning or ""
+        prediction["raw_output"] = result.raw_text
+        predictions.append(prediction)
+
     logger.info(f"Unique predicted labels: {set(predicted_labels)}")
     logger.info(f"Unique true labels: {set(true_labels)}")
 
@@ -215,13 +284,23 @@ def main(cfg: DictConfig):
         predictions_dir = Path(cfg.output_dir) / "predictions"
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
-        cot_suffix = "_cot" if cfg.cot else ""
-        predictions_file = (
-            predictions_dir / f"{cfg.model.name}_{dataset_name}_predictions{cot_suffix}.json"
+        # Add timestamp to filename to avoid overwriting previous runs
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        predictions_file = predictions_dir / f"{cfg.model.name}_{dataset_name}_{timestamp}.jsonl"
+
+        # Get wandb run ID if available
+        wandb_run_id = run.id if run else None
+
+        save_predictions_jsonl(
+            output_path=predictions_file,
+            model_name=cfg.model.name,
+            dataset_name=dataset_name,
+            prompt=prompt,
+            prompt_config=prompt_config,
+            predictions=predictions,
+            wandb_run_id=wandb_run_id,
         )
-        with open(predictions_file, "w") as f:
-            json.dump(predictions, f, indent=4)
-        logger.info(f"Saved predictions to {predictions_file}")
+        run.save(predictions_file.as_posix())
 
     evaluate_predictions(
         dataset=dataset,
@@ -234,6 +313,7 @@ def main(cfg: DictConfig):
         log_videos=cfg.get("log_videos", 0),
     )
 
+    logger.info(f"Saved predictions to {predictions_file}")
     logger.info(f"Logged results to W&B: {run.url}")
     wandb.finish()
 
