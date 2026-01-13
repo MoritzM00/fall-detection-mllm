@@ -179,9 +179,10 @@ def main(cfg: DictConfig):
         async_scheduling=cfg.vllm.async_scheduling,
     )
 
-    # Add CoT flag for mock mode
+    # Add CoT flag and output format for mock mode
     if cfg.vllm.get("use_mock", False):
-        vllm_kwargs["cot"] = cfg.cot
+        vllm_kwargs["cot"] = cfg.prompt.cot
+        vllm_kwargs["output_format"] = cfg.prompt.get("output_format", "json")
 
     llm = LLM(**vllm_kwargs)
 
