@@ -1,4 +1,10 @@
 repos:
+# nb-convert
+-   repo: https://github.com/kynan/nbstripout
+    rev: 0.8.2
+    hooks:
+    -   id: nbstripout
+
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -10,12 +16,12 @@ repos:
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.
-  rev: v0.14.7
+  rev: v0.14.11
   hooks:
     # Run the linter.
     - id: ruff-check
-      types_or: [ python, pyi ]
+      types_or: [ python, pyi, jupyter]
       args: [ --fix ]
     # Run the formatter.
     - id: ruff-format
-      types_or: [ python, pyi ]
+      types_or: [ python, pyi, jupyter ]
