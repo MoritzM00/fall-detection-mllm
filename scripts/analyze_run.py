@@ -41,7 +41,7 @@ def print_config(config: dict, indent: int = 0) -> None:
             print(f"{prefix}{key}: {value}")
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(
         description="Analyze predictions from a run in detail.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -75,8 +75,18 @@ def main():
         help="W&B project (defaults to WANDB_PROJECT env var)",
     )
 
-    args = parser.parse_args()
+    # Analysis options
+    parser.add_argument(
+        "--recompute-metrics",
+        action="store_true",
+        help="Recompute and display metrics from predictions",
+    )
 
+    args = parser.parse_args()
+    return args
+
+
+def main(args):
     # Load predictions
     if args.file:
         if not args.file.exists():
@@ -96,28 +106,21 @@ def main():
     # Extract labels
     ground_truths, predicted_labels = extract_labels_for_metrics(predictions)
 
-    # Display config if available
-    if config:
+    # Compute metrics (only if requested)
+    if args.recompute_metrics:
         print("=" * 70)
-        print("Run Configuration")
+        print("Computing Metrics")
         print("=" * 70)
-        print_config(config)
-        print()
+        metrics = compute_metrics(y_pred=predicted_labels, y_true=ground_truths)
 
-    # Compute metrics
-    print("=" * 70)
-    print("Computing Metrics")
-    print("=" * 70)
-    metrics = compute_metrics(y_pred=predicted_labels, y_true=ground_truths)
+        # Get dataset name from config or predictions
+        if config:
+            dataset_name = config.get("dataset", {}).get("name", "Unknown")
+        else:
+            dataset_name = "Unknown"
 
-    # Get dataset name from config or predictions
-    if config:
-        dataset_name = config.get("dataset", {}).get("name", "Unknown")
-    else:
-        dataset_name = "Unknown"
-
-    # Visualize results
-    visualize_evaluation_results(metrics, title=f"Results: {dataset_name}")
+        # Visualize results
+        visualize_evaluation_results(metrics, title=f"Results: {dataset_name}")
 
     # Error analysis
     print()
@@ -145,4 +148,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)
