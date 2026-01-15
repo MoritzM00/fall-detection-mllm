@@ -61,8 +61,7 @@ infrequent-action-recognition/
 
 **Config Groups**:
 - `dataset/`: Dataset configurations (omnifall, wanfall, combined)
-- `model/`: Model configuration (currently only Qwen) 
+- `model/`: Model configuration (currently only Qwen)
 - `sampling/`: Sampling strategies (greedy, nucleus, low_temp)
 - `vllm/`: vLLM engine settings (tensor parallelism, memory)
 - `experiment/`: Presets (debug for testing, zeroshot for full eval)
-
