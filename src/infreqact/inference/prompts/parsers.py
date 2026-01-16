@@ -181,6 +181,37 @@ class CoTOutputParser:
         self.start_tag = start_tag
         self.end_tag = end_tag
 
+    def extract_final_answer(self, content: str) -> str:
+        """Extract final answer from content if explicit answer markers are present.
+
+        Looks for patterns like "The best answer is: <label>" at the end of the content
+        and returns only the answer portion.
+
+        Args:
+            content: Text content after reasoning tags
+
+        Returns:
+            Extracted answer text, or original content if no marker found
+        """
+        # Patterns to match final answer markers (case-insensitive)
+        # Ordered by priority - "The best answer is:" is from the prompt instruction
+        patterns = [
+            r"(?i)the\s+best\s+answer\s+is\s*[:\-]?\s*(.+?)$",  # "The best answer is: label" (primary)
+            r"(?i)final\s+answer\s*[:\-]\s*(.+?)$",  # "Final Answer: label"
+            r"(?i)the\s+(?:final\s+)?answer\s+is\s*[:\-]?\s*(.+?)$",  # "The answer is label"
+        ]
+
+        content_stripped = content.strip()
+
+        for pattern in patterns:
+            match = re.search(pattern, content_stripped, re.MULTILINE | re.DOTALL)
+            if match:
+                answer = match.group(1).strip()
+                if answer:  # Only use if we actually captured something
+                    return answer
+
+        return content  # No marker found, return original
+
     def extract_reasoning(self, text: str) -> tuple[str | None, str | None]:
         """Extract reasoning and content from model output.
 
@@ -239,7 +270,9 @@ class CoTOutputParser:
 
         # Parse the content portion for the label
         if content:
-            result = self.answer_parser.parse(content)
+            # Try to extract explicit final answer first (e.g., "The best answer is: fall")
+            answer_text = self.extract_final_answer(content)
+            result = self.answer_parser.parse(answer_text)
         else:
             # Fallback: parse entire text as answer
             logger.warning("No content found after reasoning tags. Parsing entire text as answer.")

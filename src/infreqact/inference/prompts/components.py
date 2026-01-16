@@ -5,7 +5,7 @@ import textwrap
 # Role description (expert persona)
 ROLE_COMPONENT = textwrap.dedent("""
     Role:
-    You are an expert video analyst specialized in recognizing human actions from short video clips.
+    You are an expert Human Activity Recognition (HAR) specialist.
 """).strip()
 
 # Task instruction (always included)

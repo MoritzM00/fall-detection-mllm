@@ -398,3 +398,73 @@ class TestCoTOutputParser:
 
         assert reasoning is None
         assert content == "just content here"
+
+    def test_extract_final_answer_best_answer_pattern(self):
+        """Test extraction of 'The best answer is:' pattern (primary)."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        content = "Some analysis here mentioning standing and walking. The best answer is: fall"
+        answer = parser.extract_final_answer(content)
+
+        assert answer == "fall"
+
+    def test_extract_final_answer_final_answer_pattern(self):
+        """Test extraction of 'Final Answer:' pattern."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        content = "The person is not standing but falling. Final Answer: fall"
+        answer = parser.extract_final_answer(content)
+
+        assert answer == "fall"
+
+    def test_extract_final_answer_the_answer_is_pattern(self):
+        """Test extraction of 'The answer is' pattern."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        content = "Based on the analysis of standing posture, the answer is sitting"
+        answer = parser.extract_final_answer(content)
+
+        assert answer == "sitting"
+
+    def test_extract_final_answer_case_insensitive(self):
+        """Test that final answer extraction is case-insensitive."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        content = "Analysis complete. THE BEST ANSWER IS: walk"
+        answer = parser.extract_final_answer(content)
+
+        assert answer == "walk"
+
+    def test_extract_final_answer_no_marker(self):
+        """Test fallback when no answer marker is present."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        content = "The person is walking steadily"
+        answer = parser.extract_final_answer(content)
+
+        # Should return original content
+        assert answer == content
+
+    def test_parse_with_final_answer_marker(self):
+        """Test full parsing with final answer marker extracts correct label."""
+        base_parser = KeywordOutputParser(LABEL2IDX)
+        parser = CoTOutputParser(LABEL2IDX, base_parser)
+
+        # Simulates the problematic case: content mentions "standing" but final answer is "fall"
+        text = """Reasoning about the video.</think>
+
+To determine the primary action, we analyze:
+- The person is not actively moving or standing
+- They appear to have lost balance
+
+The best answer is: fall"""
+
+        result = parser.parse(text)
+
+        assert result.label == "fall"
+        assert "Reasoning about the video" in result.reasoning
