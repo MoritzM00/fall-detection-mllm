@@ -33,15 +33,20 @@ def resolve_model_name_from_config(model_config: Any) -> str:
     if variant:
         variant = variant.title()
 
-    if active_params:
-        # MoE model: Qwen3-VL-30B-A3B-Instruct
-        return f"{family}{version}-VL-{params}-{active_params}-{variant}"
-    elif family == "InternVL":
-        # InternVL: InternVL3_5-2B-HF
+    if family == "InternVL":
+        # InternVL models: InternVL3_5-2B-HF or InternVL3_5-20B-A4B-HF (MoE)
         if variant is not None:
             logger.warning("InternVL models do not use variants; ignoring variant field.")
 
-        return f"{family}{version}-{params}-HF"
+        if active_params:
+            # InternVL MoE: InternVL3_5-20B-A4B-HF
+            return f"{family}{version}-{params}-{active_params}-HF"
+        else:
+            # Standard InternVL: InternVL3_5-2B-HF
+            return f"{family}{version}-{params}-HF"
+    elif active_params:
+        # Qwen MoE model: Qwen3-VL-30B-A3B-Instruct
+        return f"{family}{version}-VL-{params}-{active_params}-{variant}"
     else:
         # Standard Qwen: Qwen3-VL-4B-Instruct
         return f"{family}{version}-VL-{params}-{variant}"

@@ -85,6 +85,30 @@ class TestResolveModelNameFromConfig:
         )
         assert resolve_model_name_from_config(config) == "InternVL3_5-8B-HF"
 
+    def test_internvl_moe_model(self):
+        """Test InternVL MoE model name resolution."""
+        config = OmegaConf.create(
+            {
+                "family": "InternVL",
+                "version": "3_5",
+                "params": "20B",
+                "active_params": "A4B",
+            }
+        )
+        assert resolve_model_name_from_config(config) == "InternVL3_5-20B-A4B-HF"
+
+    def test_internvl_larger_moe_model(self):
+        """Test larger InternVL MoE model name resolution."""
+        config = OmegaConf.create(
+            {
+                "family": "InternVL",
+                "version": "3_5",
+                "params": "241B",
+                "active_params": "A28B",
+            }
+        )
+        assert resolve_model_name_from_config(config) == "InternVL3_5-241B-A28B-HF"
+
     def test_dict_input_requires_omegaconf(self):
         """Test that plain dict input must be wrapped in OmegaConf."""
         config = {
@@ -182,6 +206,18 @@ class TestResolveModelPathFromConfig:
             }
         )
         assert resolve_model_path_from_config(config) == "OpenGVLab/InternVL3_5-2B-HF"
+
+    def test_internvl_moe_path(self):
+        """Test InternVL MoE model path resolution with OpenGVLab org."""
+        config = OmegaConf.create(
+            {
+                "family": "InternVL",
+                "version": "3_5",
+                "params": "30B",
+                "active_params": "A3B",
+            }
+        )
+        assert resolve_model_path_from_config(config) == "OpenGVLab/InternVL3_5-30B-A3B-HF"
 
     def test_unknown_family_uses_family_as_org(self):
         """Test that unknown family uses family name as organization."""
