@@ -6,8 +6,9 @@ import time
 import av
 import numpy as np
 import torch
-import torchvision.transforms.functional as F
+import torchvision.transforms.v2 as v2
 from torch.utils.data import Dataset
+from torchvision import tv_tensors
 
 
 class GenericVideoDataset(Dataset):
@@ -102,29 +103,23 @@ class GenericVideoDataset(Dataset):
     def transform_frames(self, frames):
         # frames is a list of ndarrays (H, W, C)
         # Stack and convert to tensor: (T, H, W, C) -> (T, C, H, W)
-        frames = torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2).float()
+        frames = torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2)
+        frames = tv_tensors.Video(frames)
 
         if self.size is not None:
-            if isinstance(self.size, int):
-                # size is shortest edge target - only downscale, skip if it would upscale
-                h, w = frames.shape[2], frames.shape[3]
-                original_shortest = min(h, w)
-
-                if self.size < original_shortest:
-                    frames = F.resize(
-                        frames,
-                        size=self.size,
+            transform = v2.Compose(
+                [
+                    v2.Resize(
+                        self.size,
                         max_size=self.max_size,
-                        interpolation=F.InterpolationMode.BILINEAR,
-                    )
-            else:
-                # size is explicit (height, width) tuple - always apply
-                frames = F.resize(
-                    frames,
-                    size=self.size,
-                    max_size=self.max_size,
-                    interpolation=F.InterpolationMode.BILINEAR,
-                )
+                        antialias=True,
+                        interpolation=v2.InterpolationMode.BILINEAR,
+                    ),
+                    v2.CenterCrop(self.size),
+                    v2.ToDtype(torch.float32),
+                ]
+            )
+            frames = transform(frames)
 
         return {"video": frames}
 

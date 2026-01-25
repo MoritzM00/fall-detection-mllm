@@ -1,7 +1,7 @@
 import logging
-import random
 from collections import OrderedDict
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -54,6 +54,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
         ext=".mp4",
         size=None,
         max_size=None,
+        seed=0,
         **kwargs,
     ):
         """
@@ -86,6 +87,8 @@ class OmnifallVideoDataset(GenericVideoDataset):
             size=size,
             max_size=max_size,
         )
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
         self.dataset_name = dataset_name
         self.split = split
         self.split_root = split_root
@@ -179,6 +182,8 @@ class OmnifallVideoDataset(GenericVideoDataset):
         """
         Get random offset for temporal segment sampling.
         Ensures we sample within the annotated segment boundaries.
+
+        Uses index-based seeding for reproducibility across DataLoader workers.
         """
         segment = self.video_segments[idx]
         segment_start_frame = int(segment["start"] * fps)
@@ -193,7 +198,13 @@ class OmnifallVideoDataset(GenericVideoDataset):
         else:
             # Random offset within the segment
             max_offset = segment_frames - required_frames
-            random_offset = random.randint(0, int(max_offset))
+            if self.seed is not None:
+                # Use index-based seeding: same idx always produces same offset
+                idx_rng = np.random.default_rng(self.seed + idx)
+                random_offset = idx_rng.integers(0, int(max_offset) + 1, dtype=int)
+            else:
+                # No seed: truly random offset each time (for training augmentation)
+                random_offset = np.random.randint(0, int(max_offset) + 1)
             return segment_start_frame + random_offset
 
     def load_item(self, idx):

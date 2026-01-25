@@ -24,6 +24,7 @@ def get_video_datasets(
     split="cs",
     size: tuple[int, int] | int | None = None,
     max_size: int | None = None,
+    seed: int | None = None,
 ) -> MultiVideoDataset | dict[str, Any]:
     """
     Create and return video datasets based on configuration.
@@ -143,6 +144,7 @@ def get_video_datasets(
             max_retries=10,
             size=size,
             max_size=max_size,
+            seed=seed,
         )
 
         if len(dataset) > 0:

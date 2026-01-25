@@ -15,11 +15,16 @@ skip_mm_profiling: false
 mm_processor_kwargs:
   do_resize: true
   do_sample_frames: false
+  # max_pixels: 230400  # 480*480
+  # size:
+  #   - 224
+  #   - 224
+    # when size is set like this and do_resize is true, the video is resized but it still fails because it expected 448x448 input (internvl)
 
 limit_mm_per_prompt:
   image: 0
   video: 1
 
-enable_expert_parallel: false  # Set to true for MoE models
+enable_expert_parallel: null  # by default auto-detect MoE models
 
 tensor_parallel_size: null # use all GPUs by default

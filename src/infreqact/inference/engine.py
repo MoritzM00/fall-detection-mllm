@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import torch
 from omegaconf import DictConfig, OmegaConf
 
-from infreqact.config import resolve_model_path_from_config
+from infreqact.config import is_moe_model, resolve_model_path_from_config
 
 if TYPE_CHECKING:
     from vllm import LLM, SamplingParams
@@ -55,6 +55,8 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
     mm_processor_kwargs |= cfg.model.get("mm_processor_kwargs", {})
     logger.info(f"Using mm_processor_kwargs={mm_processor_kwargs}")
 
+    enable_expert_parallel = cfg.vllm.enable_expert_parallel or is_moe_model(cfg.model)
+
     # Build vLLM kwargs
     vllm_kwargs = dict(
         model=checkpoint_path,
@@ -65,7 +67,7 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
         dtype=cfg.vllm.dtype,
         gpu_memory_utilization=cfg.vllm.gpu_memory_utilization,
         mm_processor_kwargs=mm_processor_kwargs,
-        enable_expert_parallel=cfg.vllm.enable_expert_parallel,
+        enable_expert_parallel=enable_expert_parallel,
         limit_mm_per_prompt=cfg.vllm.limit_mm_per_prompt,
         trust_remote_code=cfg.vllm.trust_remote_code,
         max_model_len=cfg.vllm.max_model_len,

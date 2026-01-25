@@ -12,8 +12,8 @@ data:
   seed: 0
   split: cs
   mode: test
-  size: 300 # corresponds to shorter edge
-  max_size: null # if longer edge exceeds this after resizing to shortest edge (input_size), resize again to make longer edge at most max_size
+  size: 448
+  max_size: null
 
 # Global video processing parameters
 model_fps: 8.0  # Target frame rate for video sampling
@@ -28,7 +28,7 @@ output_dir: "outputs"
 save_predictions: true
 save_metrics: true
 
-log_videos: 5
+log_videos: 1
 
 # Inference settings
 num_samples: null  # null = all samples

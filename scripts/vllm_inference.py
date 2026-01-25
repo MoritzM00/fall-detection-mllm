@@ -1,6 +1,5 @@
 import logging
 import os
-import random
 import sys
 import time
 from datetime import datetime
@@ -34,7 +33,6 @@ def main(cfg: DictConfig):
     Args:
         cfg: Hydra configuration containing:
     """
-    random.seed(cfg.data.seed)
     # Resolve all OmegaConf interpolations once at the beginning
     OmegaConf.resolve(cfg)
 
@@ -53,6 +51,7 @@ def main(cfg: DictConfig):
         split=cfg.data.split,
         size=cfg.data.size,
         max_size=cfg.data.max_size,
+        seed=cfg.data.get("seed"),
     )
     for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference

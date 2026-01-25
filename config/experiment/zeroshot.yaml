@@ -7,10 +7,6 @@ defaults:
 # Full dataset evaluation
 num_samples: null  # Process all samples
 
-# Model configuration
-model:
-  params: "4B"  # Use 4B model for zero-shot
-
 # W&B tracking
 wandb:
   project: "fall-detection-zeroshot-v2"

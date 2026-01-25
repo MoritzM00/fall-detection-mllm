@@ -1,4 +1,4 @@
-output_format: json
+output_format: text
 include_role: true
 include_definitions: false
 cot: false

@@ -8,6 +8,20 @@ from omegaconf import DictConfig
 logger = logging.getLogger(__name__)
 
 
+def is_moe_model(model_config: DictConfig) -> bool:
+    """
+    Determine if the model is a Mixture of Experts (MoE) model based on config.
+
+    Args:
+        model_config: Model configuration (DictConfig or dict-like object) with fields:
+            - active_params: Active params for MoE models (e.g., "A3B"), None for standard
+
+    Returns:
+        True if the model is an MoE model, False otherwise.
+    """
+    return model_config.get("active_params") is not None
+
+
 def resolve_model_name_from_config(model_config: Any) -> str:
     """
     Resolve the model name from a model config.
