@@ -1,4 +1,4 @@
-name: cuda-129
+name: cu129_vllm14
 channels:
   - nvidia
   - conda-forge
@@ -9,4 +9,6 @@ dependencies:
   - ffmpeg
   - av
   - uv
+  - psutil
+  - ninja
   - cuda-toolkit==12.9.1
