@@ -1,3 +1,4 @@
+# for keye-vl you need to remove do_resize argument from mm_processor_kwargs in vllm!
 org: Kwai-Keye
 family: Keye-VL
 version: "1_5"

@@ -3,8 +3,8 @@
 
 set -e
 
-SIZES=(448)
-MODELS=("qwenvl" "internvl")
+SIZES=(224 448 768)
+MODELS=("qwenvl")
 
 for model in "${MODELS[@]}"; do
     for size in "${SIZES[@]}"; do

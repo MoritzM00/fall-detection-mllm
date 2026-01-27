@@ -106,8 +106,8 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="qwen/instruct",
-        help="Model name for experiments (default: qwen/instruct)",
+        default="qwenvl",
+        help="Model name for experiments (default: qwenvl)",
     )
     parser.add_argument(
         "--params",
