@@ -1,9 +1,9 @@
 # InternVL models
-
-family: "InternVL"
-version: "3_5"  # or "3"
+org: OpenGVLab
+family: InternVL
+version: "3_5"
 variant: null
-params: "2B"
+params: 1B
 active_params: null
 
 needs_video_metadata: false

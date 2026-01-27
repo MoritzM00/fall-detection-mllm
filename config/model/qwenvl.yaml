@@ -1,10 +1,10 @@
 # Qwen VL models (unified configuration)
 # Override via CLI: model.variant=Thinking, model.params=8B, etc.
-
-family: "Qwen"
-version: "3"
-variant: "Instruct"  # Options: "Instruct", "Thinking"
-params: "4B"  # Total parameters (e.g., "4B", "8B", "30B")
+org: Qwen
+family: Qwen
+version: 3
+variant: Instruct  # Options: "Instruct", "Thinking"
+params: 4B  # Total parameters (e.g., "4B", "8B", "30B")
 
 # MoE-specific (set for MoE models, leave null for standard)
 active_params: null  # e.g., "A3B" for MoE - if set, model is treated as MoE

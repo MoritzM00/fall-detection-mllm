@@ -62,7 +62,7 @@ def resolve_model_name_from_config(model_config: Any) -> str:
         case "molmo":
             path = f"{family}{version}-{params_str}"
         case _:
-            raise ValueError(f"Unknown model family: {family}")
+            path = f"{family}-{version}-{params_str}"
     return path
 
 
@@ -81,11 +81,6 @@ def resolve_model_path_from_config(model_config: DictConfig) -> str:
     Returns:
         The full HuggingFace model path (e.g., "Qwen/Qwen3-VL-4B-Instruct")
     """
-    family = model_config.family
     name = resolve_model_name_from_config(model_config)
-
-    # Map family to HuggingFace organization
-    org_mapping = {"Qwen": "Qwen", "InternVL": "OpenGVLab", "Molmo": "allenai"}
-    org = org_mapping.get(family, family)
-
+    org = model_config.org
     return f"{org}/{name}"

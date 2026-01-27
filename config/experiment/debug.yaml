@@ -7,10 +7,6 @@ defaults:
 # Limit to small number of samples for fast testing
 num_samples: 10
 
-# Use smaller model for faster testing
-model:
-  params: "4B"
-
 batch_size: 10
 num_workers: 0
 

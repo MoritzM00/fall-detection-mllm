@@ -1,0 +1,10 @@
+org: Kwai-Keye
+family: Keye-VL
+version: "1_5"
+variant: null # not supported
+params: 8B # only 8B is supported
+
+# MoE-specific (set for MoE models, leave null for standard)
+active_params: null  # not supported
+
+needs_video_metadata: false
