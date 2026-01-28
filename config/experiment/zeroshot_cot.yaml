@@ -2,13 +2,10 @@
 
 defaults:
   - /dataset/omnifall/video@dataset: oops
-  - override /model: qwenvl
   - override /sampling: qwen3_thinking
   - override /prompt: cot
 
-
 model:
-  variant: thinking
   params: 8B
 
 # Full dataset evaluation
@@ -16,10 +13,10 @@ num_samples: null  # Process all samples
 
 # W&B tracking
 wandb:
-  project: "fall-detection-zeroshot-cot"
+  project: "fall-detection-zeroshot-v3"
   name:
   tags: ["zeroshot", "cot"]
   mode: online
 
 # Output settings
-output_dir: "outputs/zeroshot-cot"
+output_dir: "outputs/zeroshot-v3"
