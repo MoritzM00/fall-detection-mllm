@@ -20,6 +20,9 @@ Examples:
 
     # Run specific sizes only
     python scripts/run_oops_experiments.py --model internvl --sizes 2B 4B
+
+    # Run with chain of thought
+    python scripts/run_oops_experiments.py --model qwenvl --cot
 """
 
 from __future__ import annotations
@@ -50,7 +53,6 @@ QWEN_MOE: dict[str, str] = {
 
 # Fixed dataset
 DATASET = "oops"
-EXPERIMENT = "zeroshot"
 
 
 # =============================================================================
@@ -76,24 +78,31 @@ def get_active_params(model: str, params: str) -> str | None:
     return None
 
 
-def generate_command(model: str, params: str) -> str:
+def generate_command(model: str, params: str, cot: bool = False) -> str:
     """
     Generate the vllm_inference.py command.
 
     Args:
         model: Model family ('internvl' or 'qwenvl')
         params: Model parameter size (e.g., '8B', '30B')
+        cot: Whether to use chain of thought
 
     Returns:
         Complete command string
     """
+    experiment = "zeroshot_cot" if cot else "zeroshot"
+
     cmd_parts = [
         "python scripts/vllm_inference.py",
         f"model={model}",
         f"model.params={params}",
-        f"experiment={EXPERIMENT}",
+        f"experiment={experiment}",
         f"dataset/omnifall/video@dataset={DATASET}",
     ]
+
+    # Add CoT-specific parameters for qwen models
+    if cot and model == "qwenvl":
+        cmd_parts.append("model.variant=Thinking")
 
     # Add MoE-specific parameters
     active_params = get_active_params(model, params)
@@ -123,7 +132,8 @@ def execute_runs(
     models: list[str],
     sizes: list[str] | None = None,
     dry_run: bool = False,
-    cooldown: int = 5,
+    cooldown: int = 10,
+    cot: bool = False,
 ) -> None:
     """
     Execute all runs sequentially.
@@ -133,6 +143,7 @@ def execute_runs(
         sizes: Optional list of specific sizes to run
         dry_run: If True, only print commands without executing
         cooldown: Seconds to wait between runs
+        cot: If True, run chain of thought experiments
     """
     # Build list of (model, params) tuples
     runs: list[tuple[str, str]] = []
@@ -156,11 +167,14 @@ def execute_runs(
     failed = 0
 
     prefix = "[DRY RUN] " if dry_run else ""
-    logging.info(f"\n{prefix}Running {total_runs} experiments on {DATASET} dataset")
+    experiment_type = "chain of thought" if cot else "zeroshot"
+    logging.info(
+        f"\n{prefix}Running {total_runs} {experiment_type} experiments on {DATASET} dataset"
+    )
     logging.info("=" * 60)
 
     for idx, (model, params) in enumerate(runs, start=1):
-        command = generate_command(model, params)
+        command = generate_command(model, params, cot=cot)
 
         action = "Would run" if dry_run else "Running"
         moe_label = " (MoE)" if is_moe_model(model, params) else ""
@@ -247,8 +261,14 @@ Examples:
     parser.add_argument(
         "--cooldown",
         type=int,
-        default=5,
-        help="Seconds to wait between runs for vLLM cleanup (default: 5)",
+        default=10,
+        help="Seconds to wait between runs for vLLM cleanup (default: 10)",
+    )
+
+    parser.add_argument(
+        "--cot",
+        action="store_true",
+        help="Use chain of thought (sets experiment=zeroshot_cot, model.variant=Thinking for qwen)",
     )
 
     return parser.parse_args()
@@ -270,6 +290,7 @@ def main() -> None:
         sizes=args.sizes,
         dry_run=args.dry_run,
         cooldown=args.cooldown,
+        cot=args.cot,
     )
 
 
