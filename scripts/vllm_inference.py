@@ -80,6 +80,7 @@ def main(cfg: DictConfig):
         collate_fn=lambda batch: batch,
         shuffle=False,
         pin_memory=True,
+        prefetch_factor=cfg.prefetch_factor,
     )
 
     if cfg.model.family.lower() == "molmo":
