@@ -16,9 +16,11 @@ from infreqact.config import resolve_model_name_from_config, resolve_model_path_
 from infreqact.data.video_dataset import label2idx
 from infreqact.data.video_dataset_factory import get_video_datasets
 from infreqact.evaluation import evaluate_predictions
-from infreqact.inference import create_llm_engine, create_sampling_params
-from infreqact.inference.base import prepare_inputs_for_vllm
-from infreqact.inference.prompts import PromptBuilder, PromptConfig
+from infreqact.inference import (
+    create_conversation_builder,
+    create_llm_engine,
+    create_sampling_params,
+)
 from infreqact.utils.logging import reconfigure_logging_after_wandb, setup_logging
 from infreqact.utils.predictions import save_predictions_jsonl
 from infreqact.utils.wandb import initialize_run_from_config
@@ -94,15 +96,14 @@ def main(cfg: DictConfig):
     llm = create_llm_engine(cfg)
     sampling_params = create_sampling_params(cfg)
 
-    # Build prompt from config
-    # Extract labels from label2idx (filter out special labels with negative indices)
-    labels = list(label2idx.keys())
-    prompt_config = PromptConfig(labels=labels, **cfg.prompt)
-    prompt_builder = PromptBuilder(prompt_config, label2idx)
-    prompt = prompt_builder.build_prompt()
-    parser = prompt_builder.get_parser()
-    system_message = prompt_builder.get_system_message()
-    logger.info(f"Prompt:\n{prompt}")
+    # Build conversation builder (handles both zero-shot and few-shot)
+    conversation_builder = create_conversation_builder(cfg, label2idx)
+    parser = conversation_builder.parser
+
+    logger.info(
+        f"Mode: {cfg.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
+    )
+    logger.info(f"Prompt:\n{conversation_builder.user_prompt}")
 
     logger.info("Generating predictions...")
 
@@ -114,33 +115,11 @@ def main(cfg: DictConfig):
         batch_inputs = []
         batch_samples = []
         for sample in batch:
-            frames = sample["video"]
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
 
-            # Construct user message
-            user_message = {
-                "role": "user",
-                "content": [
-                    {"type": "video", "video": frames},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-
-            # Build messages list (system + user, or just user)
-            if system_message:
-                messages = [system_message, user_message]
-            else:
-                messages = [user_message]
-
-            inputs = prepare_inputs_for_vllm(
-                frames,
-                messages,
-                processor,
-                model_fps=cfg.model_fps,
-                needs_video_metadata=cfg.model.needs_video_metadata,
-            )
-
+            # Build vLLM inputs using conversation builder (handles zero/few-shot uniformly)
+            inputs = conversation_builder.build_vllm_inputs(sample["video"], processor)
             batch_inputs.append(inputs)
 
         batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)

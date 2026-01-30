@@ -22,6 +22,14 @@ MODEL_NAMES = {
     "7u9bjiur": "InternVL3.5-38B",
 }
 
+MODEL_NAMES_COT = {
+    "0fyrvcyv": "Qwen3-VL-2B",
+    "2yzuuwqm": "Qwen3-VL-4B",
+    "j5m9qihw": "Qwen3-VL-8B",
+    "opzspcfj": "Qwen3-VL-30B-A3B",
+    "ml3489zj": "Qwen3-VL-32B",
+}
+
 DATASET = "OOPS"
 SPLIT = "cs"
 

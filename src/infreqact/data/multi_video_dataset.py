@@ -22,10 +22,10 @@ class MultiVideoDataset(Dataset):
         """
         self.datasets = datasets
         self.dataset_sizes = [len(dataset) for dataset in datasets]
-        self.cumulative_sizes = np.cumsum(self.dataset_sizes)
+        self.cumulative_sizes = np.cumsum(self.dataset_sizes).tolist()
 
         # Log dataset information
-        total_segments = self.cumulative_sizes[-1] if self.cumulative_sizes.size > 0 else 0
+        total_segments = self.cumulative_sizes[-1] if self.cumulative_sizes else 0
         logging.info(
             f"MultiVideoDataset initialized with {len(datasets)} datasets, {total_segments} total segments"
         )
@@ -52,7 +52,7 @@ class MultiVideoDataset(Dataset):
 
     def __len__(self):
         """Total number of segments across all datasets."""
-        return self.cumulative_sizes[-1] if self.cumulative_sizes.size > 0 else 0
+        return self.cumulative_sizes[-1] if self.cumulative_sizes else 0
 
     def __getitem__(self, idx: int) -> dict[str, Any]:
         """
@@ -64,6 +64,9 @@ class MultiVideoDataset(Dataset):
         Returns:
             Dictionary with video data and metadata
         """
+        # Ensure idx is a plain Python int to avoid numpy type issues
+        idx = int(idx)
+
         # Find which dataset this index belongs to
         dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
 

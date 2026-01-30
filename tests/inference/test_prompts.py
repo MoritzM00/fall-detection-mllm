@@ -50,6 +50,31 @@ class TestPromptConfig:
         assert config.cot is True
         assert config.model_family == "InternVL"
 
+    def test_default_few_shot_fields(self):
+        """Test default values for few-shot fields."""
+        config = PromptConfig()
+        assert config.num_shots == 0
+        assert config.shot_selection == "balanced"
+        assert config.exemplar_seed == 42
+
+    def test_custom_few_shot_fields(self):
+        """Test custom values for few-shot fields."""
+        config = PromptConfig(
+            num_shots=4,
+            shot_selection="random",
+            exemplar_seed=123,
+        )
+        assert config.num_shots == 4
+        assert config.shot_selection == "random"
+        assert config.exemplar_seed == 123
+
+    def test_few_shot_fields_types(self):
+        """Test that few-shot fields have correct types."""
+        config = PromptConfig(num_shots=8, shot_selection="balanced", exemplar_seed=0)
+        assert isinstance(config.num_shots, int)
+        assert isinstance(config.shot_selection, str)
+        assert isinstance(config.exemplar_seed, int)
+
 
 class TestPromptBuilder:
     """Tests for PromptBuilder."""

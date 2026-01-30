@@ -1,0 +1,17 @@
+# @package _global_
+
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+  - override /prompt: fewshot
+
+# Full dataset evaluation
+num_samples: null
+
+# W&B tracking
+wandb:
+  project: "fall-detection-fewshot"
+  name:
+  tags: ["fewshot"]
+
+# Output settings
+output_dir: "outputs/fewshot"
