@@ -1,7 +1,6 @@
 """Configuration utilities for model path resolution."""
 
 import logging
-from typing import Any
 
 from omegaconf import DictConfig
 
@@ -22,7 +21,7 @@ def is_moe_model(model_config: DictConfig) -> bool:
     return model_config.get("active_params") is not None
 
 
-def resolve_model_name_from_config(model_config: Any) -> str:
+def resolve_model_name_from_config(model_config: DictConfig) -> str:
     """
     Resolve the model name from a model config.
 
