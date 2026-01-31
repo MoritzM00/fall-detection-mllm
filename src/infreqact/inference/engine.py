@@ -80,6 +80,7 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
         limit_mm_per_prompt=limit_mm_per_prompt,
         trust_remote_code=cfg.vllm.trust_remote_code,
         max_model_len=cfg.vllm.max_model_len,
+        max_num_batched_tokens=cfg.vllm.max_num_batched_tokens,
         enforce_eager=cfg.vllm.enforce_eager,
         skip_mm_profiling=cfg.vllm.skip_mm_profiling,
         async_scheduling=cfg.vllm.async_scheduling,

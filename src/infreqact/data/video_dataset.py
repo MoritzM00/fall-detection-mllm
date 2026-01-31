@@ -88,7 +88,6 @@ class OmnifallVideoDataset(GenericVideoDataset):
             max_size=max_size,
         )
         self.seed = seed
-        self.rng = np.random.default_rng(seed)
         self.dataset_name = dataset_name
         self.split = split
         self.split_root = split_root
@@ -178,6 +177,12 @@ class OmnifallVideoDataset(GenericVideoDataset):
         segment = self.video_segments[idx]
         return segment, segment["label"]
 
+    def format_path(self, rel_path):
+        """Format relative video path to full path."""
+        return self.path_format.format(
+            video_root=self.video_root, video_path=rel_path, ext=self.ext
+        )
+
     def get_random_offset(self, length, target_interval, idx, fps, start=0):
         """
         Get random offset for temporal segment sampling.
@@ -211,10 +216,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
         """Load video segment with temporal boundaries."""
         segment, label = self._id2label(idx)
 
-        # Construct video path
-        video_path = self.path_format.format(
-            video_root=self.video_root, video_path=segment["video_path"], ext=self.ext
-        )
+        video_path = self.format_path(segment["video_path"])
 
         # Load frames from the video
         frames = self.load_video(video_path, idx)
