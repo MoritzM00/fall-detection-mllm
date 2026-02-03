@@ -1,4 +1,4 @@
-name: cu129_vllm14
+name: cu129_vllm15
 channels:
   - nvidia
   - conda-forge
