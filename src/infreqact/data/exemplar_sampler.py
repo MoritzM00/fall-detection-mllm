@@ -83,18 +83,26 @@ class ExemplarSampler:
         """Sample roughly equal exemplars per class."""
         class_to_indices = self._build_class_index()
         classes = sorted(class_to_indices.keys())
-        per_class = max(1, self.num_shots // len(classes))
+        num_classes = len(classes)
+        if not classes:
+            return []
+
+        # Distribute shots as evenly as possible across classes
+        shots_per_class = {cls: self.num_shots // num_classes for cls in classes}
+        remainder = self.num_shots % num_classes
+        for cls in self.rng.choice(classes, remainder, replace=False):
+            shots_per_class[cls] += 1
 
         indices: list[int] = []
-        for cls in classes:
-            available = np.array(class_to_indices[cls])
-            n = min(per_class, len(available))
-            sampled = self.rng.choice(available, n, replace=False).tolist()
-            indices.extend(sampled)
+        for cls, num_to_sample in shots_per_class.items():
+            available = class_to_indices.get(cls, [])
+            n = min(num_to_sample, len(available))
+            if n > 0:
+                sampled = self.rng.choice(available, n, replace=False).tolist()
+                indices.extend(sampled)
 
-        indices_arr = np.array(indices)
-        self.rng.shuffle(indices_arr)
-        return indices_arr[: self.num_shots].tolist()
+        self.rng.shuffle(indices)
+        return indices
 
     def _sample_random_indices(self) -> list[int]:
         """Sample randomly from entire dataset."""
