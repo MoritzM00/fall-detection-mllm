@@ -57,3 +57,6 @@ TEXT_OUTPUT_FORMAT = textwrap.dedent("""
 R1_SYSTEM_PROMPT = textwrap.dedent("""
     You are a helpful assistant. Before providing your final answer, conduct a detailed analysis of the question. Enclose your entire thinking process within <think> and </think> tags. After your analysis, provide your final answer separately.
 """).strip()
+
+# Few-shot exemplar prompt (used for exemplar user turns)
+EXEMPLAR_USER_PROMPT = "Classify the action shown in this video."

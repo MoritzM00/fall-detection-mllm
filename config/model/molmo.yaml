@@ -7,4 +7,8 @@ params: 4B  # Total parameters (4 or 8B)
 # MoE-specific (set for MoE models, leave null for standard)
 active_params: null  #  not supported for Molmo
 
-needs_video_metadata: false
+needs_video_metadata: true
+
+mm_processor_kwargs:
+  do_resize: true
+  use_fast: true

@@ -3,3 +3,8 @@ include_role: false
 include_definitions: false
 cot: false
 model_family: ${model.family}
+
+# Few-shot settings (0 = zero-shot)
+num_shots: 0
+shot_selection: balanced
+exemplar_seed: 42

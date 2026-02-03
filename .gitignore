@@ -216,6 +216,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 .claude/.nfs*
+.opencode/
 
 fall-da
 outputs

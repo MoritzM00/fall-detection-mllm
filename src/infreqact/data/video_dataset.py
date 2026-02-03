@@ -1,4 +1,5 @@
 import logging
+import math
 from collections import OrderedDict
 
 import numpy as np
@@ -88,7 +89,6 @@ class OmnifallVideoDataset(GenericVideoDataset):
             max_size=max_size,
         )
         self.seed = seed
-        self.rng = np.random.default_rng(seed)
         self.dataset_name = dataset_name
         self.split = split
         self.split_root = split_root
@@ -178,6 +178,12 @@ class OmnifallVideoDataset(GenericVideoDataset):
         segment = self.video_segments[idx]
         return segment, segment["label"]
 
+    def format_path(self, rel_path):
+        """Format relative video path to full path."""
+        return self.path_format.format(
+            video_root=self.video_root, video_path=rel_path, ext=self.ext
+        )
+
     def get_random_offset(self, length, target_interval, idx, fps, start=0):
         """
         Get random offset for temporal segment sampling.
@@ -186,35 +192,59 @@ class OmnifallVideoDataset(GenericVideoDataset):
         Uses index-based seeding for reproducibility across DataLoader workers.
         """
         segment = self.video_segments[idx]
-        segment_start_frame = int(segment["start"] * fps)
-        segment_end_frame = int(segment["end"] * fps)
-        segment_frames = segment_end_frame - segment_start_frame
+        # IMPORTANT:
+        # `load_video_fast()` interprets this return value as a *begin_frame* in the
+        # original video FPS domain, then samples `vid_frame_count` timestamps spaced
+        # by 1/self.target_fps seconds:
+        #   ts_n = begin_frame/fps + n/self.target_fps
+        # Therefore, to guarantee we do NOT sample past the segment boundary, we must
+        # constrain begin_frame such that the last timestamp stays within [start, end).
+        segment_start_sec = float(segment["start"])
+        segment_end_sec = float(segment["end"])
 
-        required_frames = self.vid_frame_count * target_interval
+        # Convert start bound to a safe frame index (inclusive).
+        segment_start_frame = int(math.ceil(segment_start_sec * fps))
 
-        if segment_frames <= required_frames:
-            # Segment is too short, start from beginning of segment
+        # If we don't have the information to compute a safe offset, fall back to
+        # the segment start.
+        if self.vid_frame_count is None:
             return segment_start_frame
+        if self.target_fps is None or self.target_fps <= 0:
+            return segment_start_frame
+        if self.vid_frame_count <= 1:
+            return segment_start_frame
+
+        # Maximum allowed begin time so that the *last* sampled timestamp is still
+        # within the segment.
+        required_duration_sec = (self.vid_frame_count - 1) / float(self.target_fps)
+        max_begin_time_sec = segment_end_sec - required_duration_sec
+
+        # Segment too short: clamp to segment start and rely on padding (repeat last
+        # decoded frame) rather than sampling outside the segment.
+        if max_begin_time_sec <= segment_start_sec:
+            return segment_start_frame
+
+        max_begin_frame = int(math.floor(max_begin_time_sec * fps))
+        if max_begin_frame < segment_start_frame:
+            return segment_start_frame
+
+        max_offset = int(max_begin_frame - segment_start_frame)
+
+        if self.seed is not None:
+            # Use index-based seeding: same idx always produces same offset
+            idx_rng = np.random.default_rng(self.seed + idx)
+            random_offset = int(idx_rng.integers(0, max_offset + 1, dtype=int))
         else:
-            # Random offset within the segment
-            max_offset = segment_frames - required_frames
-            if self.seed is not None:
-                # Use index-based seeding: same idx always produces same offset
-                idx_rng = np.random.default_rng(self.seed + idx)
-                random_offset = idx_rng.integers(0, int(max_offset) + 1, dtype=int)
-            else:
-                # No seed: truly random offset each time (for training augmentation)
-                random_offset = np.random.randint(0, int(max_offset) + 1)
-            return segment_start_frame + random_offset
+            # No seed: truly random offset each time (for training augmentation)
+            random_offset = int(np.random.randint(0, max_offset + 1))
+
+        return segment_start_frame + random_offset
 
     def load_item(self, idx):
         """Load video segment with temporal boundaries."""
         segment, label = self._id2label(idx)
 
-        # Construct video path
-        video_path = self.path_format.format(
-            video_root=self.video_root, video_path=segment["video_path"], ext=self.ext
-        )
+        video_path = self.format_path(segment["video_path"])
 
         # Load frames from the video
         frames = self.load_video(video_path, idx)

@@ -50,7 +50,7 @@ baseline_model = "VMAE-K400"
 # -------------------------
 # Style configuration
 # -------------------------
-USE_HATCHING = True  # Set to True to enable hatching patterns
+USE_HATCHING = False  # Set to True to enable hatching patterns
 
 hatch_map = {
     "InternVL": "//" if USE_HATCHING else "",
@@ -58,8 +58,9 @@ hatch_map = {
 }
 
 color_map = {
-    "InternVL": "#4878A8",  # muted blue
-    "QwenVL": "#E07B54",  # muted coral
+    "QwenVL": "#1f78b4",  # dark blue
+    "InternVL": "#a6cee3",
+    # "QwenVL": "#33a02c",  # dark green
 }
 
 # -------------------------

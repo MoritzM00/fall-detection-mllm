@@ -18,6 +18,9 @@ class PromptConfig:
         cot_end_tag: Closing tag for reasoning content (default: "</think>")
         labels: Optional list of labels to include in prompt. If None, uses hardcoded defaults
         model_family: Model family name for model-specific adjustments (e.g., "qwen", "InternVL")
+        num_shots: Number of few-shot exemplars (0 = zero-shot)
+        shot_selection: Exemplar sampling strategy - "random" or "balanced"
+        exemplar_seed: Random seed for exemplar sampling reproducibility
     """
 
     output_format: Literal["json", "text"] = "json"
@@ -29,3 +32,8 @@ class PromptConfig:
     cot_end_tag: str = "</think>"
     labels: list[str] | None = None
     model_family: str = "qwen"
+
+    # Few-shot settings
+    num_shots: int = 0
+    shot_selection: Literal["random", "balanced"] = "balanced"
+    exemplar_seed: int = 42

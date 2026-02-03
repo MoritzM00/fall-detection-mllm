@@ -5,12 +5,12 @@ mm_processor_cache_gb: 0  # Cache for processed multimodal inputs (0 = disabled)
 seed: 0
 dtype: "bfloat16"
 gpu_memory_utilization: 0.9
-enforce_eager: false
+enforce_eager: true
 max_model_len: -1 # -1 auto-fits to GPU memory, null uses model default
 max_num_batched_tokens: null
 trust_remote_code: true
-async_scheduling: true
-skip_mm_profiling: false
+async_scheduling: false
+skip_mm_profiling: true
 
 enable_prefix_caching: true  # Enable automatic prefix caching for shared prompts
 
@@ -26,4 +26,4 @@ limit_mm_per_prompt:
 
 enable_expert_parallel: null  # by default auto-detect MoE models
 
-tensor_parallel_size: null # use all GPUs by default
+tensor_parallel_size: 1

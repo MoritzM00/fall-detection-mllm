@@ -57,6 +57,15 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
 
     enable_expert_parallel = cfg.vllm.enable_expert_parallel or is_moe_model(cfg.model)
 
+    # Compute dynamic video limit based on num_shots
+    num_shots = cfg.prompt.get("num_shots", 0)
+    video_limit = num_shots + 1
+    limit_mm_per_prompt = {"image": 0, "video": max(1, video_limit)}
+    if num_shots > 0:
+        logger.info(
+            f"Few-shot mode: {num_shots} exemplars, limit_mm_per_prompt={limit_mm_per_prompt}"
+        )
+
     # Build vLLM kwargs
     vllm_kwargs = dict(
         model=checkpoint_path,
@@ -68,12 +77,14 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
         gpu_memory_utilization=cfg.vllm.gpu_memory_utilization,
         mm_processor_kwargs=mm_processor_kwargs,
         enable_expert_parallel=enable_expert_parallel,
-        limit_mm_per_prompt=cfg.vllm.limit_mm_per_prompt,
+        limit_mm_per_prompt=limit_mm_per_prompt,
         trust_remote_code=cfg.vllm.trust_remote_code,
         max_model_len=cfg.vllm.max_model_len,
+        max_num_batched_tokens=cfg.vllm.max_num_batched_tokens,
         enforce_eager=cfg.vllm.enforce_eager,
         skip_mm_profiling=cfg.vllm.skip_mm_profiling,
         async_scheduling=cfg.vllm.async_scheduling,
+        enable_prefix_caching=cfg.vllm.get("enable_prefix_caching", True),
     )
 
     # Add CoT flag and output format for mock mode
