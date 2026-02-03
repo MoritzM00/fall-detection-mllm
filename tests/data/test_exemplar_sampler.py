@@ -29,7 +29,7 @@ class MockDataset:
     def __getitem__(self, idx: int) -> dict:
         """Return a mock sample."""
         return {
-            "video": torch.randn(16, 3, 224, 224),  # Mock video tensor
+            "video": torch.randn(16, 3, 8, 8),  # Mock video tensor
             "label_str": self.labels[idx],
             "label": idx % self.num_classes,
             "idx": idx,
