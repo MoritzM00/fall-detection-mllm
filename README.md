@@ -6,9 +6,9 @@
 This project provides code for the master thesis on evaluation of Multimodal Large Language Models (MLLMs) for Infrequent Action Recognition, specifically the detection of Human Falls and the subsequent state of being fallen. We also evaluate MLLMs jointly with general Human Activity classes like `walking` or `standing` to assess models on Human Activity Recognition (HAR).
 
 The main experiments we conduct are:
-- Zero-shot: No exemplars are given, just the task intruction
+- Zero-shot: No exemplars are given, just the task instruction
 - Few-shot: Few (usually 1-10) video exemplars with associated ground truth label are supplied for In-Context Learning (ICL)
-- Chain-of-Thought (CoT): Specifically, Zero-Shot CoT, i.e. no exemplars with reasoning trace are given. The model can come up with it's own reasoning trace.
+- Chain-of-Thought (CoT): Specifically, Zero-Shot CoT, i.e. no exemplars with reasoning trace are given. The model can come up with its own reasoning trace.
 
 ## Quick Start
 
@@ -53,7 +53,7 @@ Other settings include:
 
 
 #### Debugging options
-- `num_samples` (int): constraint the number of samples used for inference
+- `num_samples` (int): constrain the number of samples used for inference
 - `vllm.use_mock` (bool): if True, skip vLLM engine and produce random predictions for debugging purposes that do not depend on vLLM
 - `vllm=debug` for faster warm-up times
 
