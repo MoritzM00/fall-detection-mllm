@@ -3,10 +3,10 @@ import logging
 import random
 import time
 
-import av
 import numpy as np
 import torch
 import torchvision.transforms.v2 as v2
+from decord import VideoReader, cpu
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
 
@@ -123,128 +123,118 @@ class GenericVideoDataset(Dataset):
 
         return {"video": frames}
 
-    def get_random_offset(self, length, target_interval, idx, fps, start=0):
-        if self.vid_frame_count is None or length < self.vid_frame_count * target_interval:
+    def get_random_offset(self, length, target_interval, idx, fps, start=0, frame_count=None):
+        """Get random offset for frame sampling.
+
+        Args:
+            length: Total number of frames in video
+            target_interval: Target interval for sampling
+            idx: Sample index
+            fps: Video frame rate
+            start: Start offset (unused, kept for API compatibility)
+            frame_count: Number of frames to extract (defaults to self.vid_frame_count)
+        """
+        num_frames = frame_count if frame_count is not None else self.vid_frame_count
+        if num_frames is None or length < num_frames * target_interval:
             return 0
         else:
-            return random.randint(0, length - self.vid_frame_count * target_interval)
+            return random.randint(0, length - num_frames * target_interval)
 
-    def load_video_fast(self, path, idx):
+    def load_video_fast(self, path, idx, frame_count=None):
+        """Load video frames using decord with efficient random access.
+
+        Args:
+            path: Path to video file
+            idx: Sample index (for reproducible random offset)
+            frame_count: Number of frames to extract (defaults to self.vid_frame_count).
+                         For short segments, pass a smaller value to avoid frame repetition.
+        """
         try:
-            with av.open(path) as container:
-                vs = next(s for s in container.streams if s.type == "video")
+            # Use provided frame_count or fall back to default
+            num_frames = frame_count if frame_count is not None else self.vid_frame_count
 
-                # robust fps
-                rate = vs.average_rate or vs.base_rate
-                if not rate or rate.denominator == 0:
-                    raise ValueError("Cannot determine FPS")
-                fps = float(rate)
+            vr = VideoReader(path, ctx=cpu(0))
+            fps = vr.get_avg_fps()
+            total_frames = len(vr)
 
-                # stream time‑base
-                tb = vs.time_base
-                if not tb:
-                    raise ValueError("Missing time_base")
-                tb = float(tb)
+            if total_frames == 0:
+                raise ValueError(f"Video has no frames: {path}")
 
-                frame_cnt = None if vs.frames in (0, None) else int(vs.frames)
+            # Get random offset (begin_frame) from segment-aware method
+            begin_frame = self.get_random_offset(total_frames, 1, idx, fps, frame_count=num_frames)
 
-                # random start (in frames) for augmentation
-                begin_frame = self.get_random_offset(frame_cnt, 1, idx, fps) if frame_cnt else 0
+            # Calculate frame indices to sample at target_fps
+            # Frame spacing: fps / target_fps frames apart in source video
+            frame_indices = [
+                int(begin_frame + n * fps / self.target_fps) for n in range(num_frames)
+            ]
 
-                # Calculate desired timestamps
-                desired_timestamps = [
-                    (begin_frame / fps) + n / self.target_fps for n in range(self.vid_frame_count)
-                ]
-                desired_pts = [int(ts / tb) for ts in desired_timestamps]
+            # Clamp indices to valid range
+            valid_indices = [min(i, total_frames - 1) for i in frame_indices]
 
-                # Try seeking to just before first desired frame
-                if desired_pts:
-                    try:
-                        container.seek(desired_pts[0], any_frame=False, backward=True, stream=vs)
-                    except av.error.FFmpegError:
-                        # Fallback if no keyframe found
-                        container.seek(0, stream=vs)
+            # Efficient batch extraction - decord returns (N, H, W, C)
+            frames_batch = vr.get_batch(valid_indices).asnumpy()
 
-                frames, want_idx, prev = [], 0, None
-                for f in container.decode(vs):
-                    if f.pts is None:
-                        continue
+            # Convert to list of frames for compatibility with transform_frames
+            frames = [frames_batch[i] for i in range(len(frames_batch))]
 
-                    # Collect frames matching desired PTS values
-                    while want_idx < len(desired_pts) and f.pts >= desired_pts[want_idx]:
-                        if prev and abs(prev.pts - desired_pts[want_idx]) < abs(
-                            f.pts - desired_pts[want_idx]
-                        ):
-                            frames.append(prev.to_ndarray(format="rgb24"))
-                        else:
-                            frames.append(f.to_ndarray(format="rgb24"))
-                        want_idx += 1
-
-                    if want_idx == len(desired_pts):
-                        break
-                    prev = f
-
-                if not frames:
-                    logging.warning(f"{path}: fallback to slow loader")
-                    return self.load_video_slow(path, idx)
-
-                # Better frame padding strategy
-                if len(frames) < self.vid_frame_count:
-                    if len(frames) > 0:
-                        # Repeat last frame instead of cycling
-                        last_frame = frames[-1]
-                        while len(frames) < self.vid_frame_count:
-                            frames.append(last_frame)
-                    else:
-                        raise ValueError("No frames decoded")
-
-                return frames
+            return frames
 
         except Exception as e:
             logging.error(f"Error reading video {path}: {e}", exc_info=True)
             raise RuntimeError(f"Failed to process video {path}") from e
 
-    def load_video_slow(self, video_path, idx):
+    def load_video_slow(self, video_path, idx, frame_count=None):
+        """Load all frames from video at target_fps (used when vid_frame_count is None).
+
+        Args:
+            video_path: Path to video file
+            idx: Sample index (for reproducible random offset)
+            frame_count: Number of frames to extract (defaults to self.vid_frame_count)
+        """
         try:
-            with av.open(video_path) as container:
-                video_stream = next(s for s in container.streams if s.type == "video")
+            num_frames = frame_count if frame_count is not None else self.vid_frame_count
 
-                frame_rate = video_stream.average_rate  # Detect actual frame rate
+            vr = VideoReader(video_path, ctx=cpu(0))
+            fps = vr.get_avg_fps()
+            total_frames = len(vr)
 
-                fps = (
-                    float(frame_rate.numerator / frame_rate.denominator)
-                    if frame_rate
-                    else self.vid_fps
-                )
+            if total_frames == 0:
+                raise ValueError(f"Video has no frames: {video_path}")
 
-                target_interval = round(fps / self.target_fps)  # Calculate downsampling interval
+            # Calculate downsampling interval
+            target_interval = max(1, round(fps / self.target_fps))
 
-                frames = []
-                for i, frame in enumerate(container.decode(video_stream)):
-                    if i % target_interval == 0:  # Keep only frames at the target interval
-                        img = frame.to_ndarray(format="rgb24")
-                        frames.append(img)
+            # Sample frame indices at target interval
+            frame_indices = list(range(0, total_frames, target_interval))
+
+            if not frame_indices:
+                frame_indices = [0]
+
+            # Batch extract frames
+            frames_batch = vr.get_batch(frame_indices).asnumpy()
+            frames = [frames_batch[i] for i in range(len(frames_batch))]
 
         except Exception as e:
             logging.error(f"Error reading video {video_path}: {e}")
             raise RuntimeError("Failed to process video")
 
-        if self.vid_frame_count is None:
+        if num_frames is None:
             # Load full video, no cycling required
             return frames
 
-        if len(frames) < self.vid_frame_count:
+        if len(frames) < num_frames:
             # Handle short videos by cycling frames
             logging.debug(
                 f"Video {video_path} is too short. "
-                + f"Got {len(frames)} sampled at {self.target_fps} instead of {self.vid_frame_count}. "
-                + f"Cycling frames to match {self.vid_frame_count} frames."
+                + f"Got {len(frames)} sampled at {self.target_fps} instead of {num_frames}. "
+                + f"Cycling frames to match {num_frames} frames."
             )
-            frames = (frames * ((self.vid_frame_count // len(frames)) + 1))[: self.vid_frame_count]
+            frames = (frames * ((num_frames // len(frames)) + 1))[:num_frames]
         else:
             # Select a random consecutive sequence of frames
             start_index = self.get_random_offset(len(frames), self.target_fps, idx, fps)
-            frames = frames[start_index : start_index + self.vid_frame_count]
+            frames = frames[start_index : start_index + num_frames]
 
         return frames
 

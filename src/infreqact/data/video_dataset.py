@@ -184,17 +184,51 @@ class OmnifallVideoDataset(GenericVideoDataset):
             video_root=self.video_root, video_path=rel_path, ext=self.ext
         )
 
-    def get_random_offset(self, length, target_interval, idx, fps, start=0):
+    def compute_actual_frame_count(self, segment_duration_sec):
+        """
+        Compute actual frames to extract based on segment duration.
+        For short segments, returns fewer frames to avoid repetition.
+
+        Formula: available_frames = floor(segment_duration * target_fps) + 1
+        (The +1 accounts for the frame at t=0)
+
+        Args:
+            segment_duration_sec: Duration of the segment in seconds
+
+        Returns:
+            Number of frames to extract, or None to load all frames
+        """
+        if self.vid_frame_count is None:
+            return None  # Load all frames
+
+        # How many frames can fit in the actual segment at target_fps
+        available_frames = int(segment_duration_sec * self.target_fps) + 1
+
+        # Return the minimum of desired and available
+        return min(self.vid_frame_count, available_frames)
+
+    def get_random_offset(self, length, target_interval, idx, fps, start=0, frame_count=None):
         """
         Get random offset for temporal segment sampling.
         Ensures we sample within the annotated segment boundaries.
 
         Uses index-based seeding for reproducibility across DataLoader workers.
+
+        Args:
+            length: Total number of frames in video (unused, kept for API compatibility)
+            target_interval: Target interval (unused, kept for API compatibility)
+            idx: Sample index for segment lookup and random seeding
+            fps: Video frame rate
+            start: Start offset (unused, kept for API compatibility)
+            frame_count: Number of frames to extract (defaults to self.vid_frame_count)
         """
         segment = self.video_segments[idx]
+        # Use provided frame_count or fall back to default
+        num_frames = frame_count if frame_count is not None else self.vid_frame_count
+
         # IMPORTANT:
         # `load_video_fast()` interprets this return value as a *begin_frame* in the
-        # original video FPS domain, then samples `vid_frame_count` timestamps spaced
+        # original video FPS domain, then samples `num_frames` timestamps spaced
         # by 1/self.target_fps seconds:
         #   ts_n = begin_frame/fps + n/self.target_fps
         # Therefore, to guarantee we do NOT sample past the segment boundary, we must
@@ -207,16 +241,16 @@ class OmnifallVideoDataset(GenericVideoDataset):
 
         # If we don't have the information to compute a safe offset, fall back to
         # the segment start.
-        if self.vid_frame_count is None:
+        if num_frames is None:
             return segment_start_frame
         if self.target_fps is None or self.target_fps <= 0:
             return segment_start_frame
-        if self.vid_frame_count <= 1:
+        if num_frames <= 1:
             return segment_start_frame
 
         # Maximum allowed begin time so that the *last* sampled timestamp is still
         # within the segment.
-        required_duration_sec = (self.vid_frame_count - 1) / float(self.target_fps)
+        required_duration_sec = (num_frames - 1) / float(self.target_fps)
         max_begin_time_sec = segment_end_sec - required_duration_sec
 
         # Segment too short: clamp to segment start and rely on padding (repeat last
@@ -246,8 +280,12 @@ class OmnifallVideoDataset(GenericVideoDataset):
 
         video_path = self.format_path(segment["video_path"])
 
-        # Load frames from the video
-        frames = self.load_video(video_path, idx)
+        # Compute actual frame count based on segment duration
+        # For short segments, this returns fewer frames to avoid repetition
+        actual_frame_count = self.compute_actual_frame_count(segment["duration"])
+
+        # Load frames from the video with computed frame count
+        frames = self.load_video(video_path, idx, frame_count=actual_frame_count)
 
         # Transform frames
         inputs = self.transform_frames(frames)
@@ -261,6 +299,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
                 "start_time": segment["start"],
                 "end_time": segment["end"],
                 "segment_duration": segment["duration"],
+                "num_frames": len(frames),  # Actual number of frames extracted
                 "dataset": self.dataset_name,
             }
         )
