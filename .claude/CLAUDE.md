@@ -45,3 +45,35 @@ infrequent-action-recognition/
 ├── requirements.txt                 # Production dependencies
 └── requirements-dev.txt             # Development dependencies
 ```
+
+## Development Guidelines
+
+### 1. Simplicity First (Occam's Razor)
+
+- Prefer simple, readable code over clever or complex solutions
+- Choose the simplest approach that solves the problem correctly
+- If two solutions work equally well, pick the one that is easier to understand and maintain
+
+### 2. No Premature Optimization
+
+- Write correct, working code first
+- Add tests to verify correctness
+- Optimize only after profiling identifies actual bottlenecks
+- Iterate: correct → tested → optimized
+
+### 3. Test-Driven Development
+
+- Before implementing any feature, discuss with the user:
+  - What exactly needs to be tested
+  - How the tests will verify correct behavior
+  - Be specific about what the tests are checking
+- Get explicit confirmation that the test approach is correct before proceeding
+- use best practices for writing tests: fixtures, parametrize etc.
+
+### 4. Code Reuse Awareness
+
+- Before implementing new functionality, search the codebase for:
+  - Existing utilities that do similar things
+  - Patterns already established in the project
+  - Code that can be extended rather than duplicated
+- Avoid reinventing functionality that already exists

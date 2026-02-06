@@ -215,7 +215,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
         Uses index-based seeding for reproducibility across DataLoader workers.
 
         Args:
-            length: Total number of frames in video (unused, kept for API compatibility)
+            length: Total number of frames in video (used to constrain offset when annotations are inaccurate)
             target_interval: Target interval (unused, kept for API compatibility)
             idx: Sample index for segment lookup and random seeding
             fps: Video frame rate
@@ -259,6 +259,18 @@ class OmnifallVideoDataset(GenericVideoDataset):
             return segment_start_frame
 
         max_begin_frame = int(math.floor(max_begin_time_sec * fps))
+
+        # Constrain by actual video length to handle annotation inaccuracies
+        # With spacing fps/target_fps, last frame index = begin_frame + (num_frames-1) * spacing
+        # So max safe begin_frame where last index < length
+        if length is not None and length > 0:
+            spacing = fps / self.target_fps
+            required_span = (num_frames - 1) * spacing
+            max_safe_begin_frame = int(length - 1 - required_span)
+            # Only apply constraint if it doesn't conflict with segment boundaries
+            if max_safe_begin_frame >= segment_start_frame:
+                max_begin_frame = min(max_begin_frame, max_safe_begin_frame)
+
         if max_begin_frame < segment_start_frame:
             return segment_start_frame
 
