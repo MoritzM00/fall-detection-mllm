@@ -135,10 +135,13 @@ class GenericVideoDataset(Dataset):
             frame_count: Number of frames to extract (defaults to self.vid_frame_count)
         """
         num_frames = frame_count if frame_count is not None else self.vid_frame_count
-        if num_frames is None or length < num_frames * target_interval:
+        if num_frames is None or num_frames <= 0:
             return 0
-        else:
-            return random.randint(0, length - num_frames * target_interval)
+        required_span = (num_frames - 1) * target_interval
+        max_offset = int(length - 1 - required_span)
+        if max_offset <= 0:
+            return 0
+        return random.randint(0, max_offset)
 
     def load_video_fast(self, path, idx, frame_count=None):
         """Load video frames using decord with efficient random access.
@@ -161,7 +164,9 @@ class GenericVideoDataset(Dataset):
                 raise ValueError(f"Video has no frames: {path}")
 
             # Get random offset (begin_frame) from segment-aware method
-            begin_frame = self.get_random_offset(total_frames, 1, idx, fps, frame_count=num_frames)
+            begin_frame = self.get_random_offset(
+                total_frames, fps / self.target_fps, idx, fps, frame_count=num_frames
+            )
 
             # Calculate frame indices to sample at target_fps
             # Frame spacing: fps / target_fps frames apart in source video
@@ -171,6 +176,11 @@ class GenericVideoDataset(Dataset):
 
             # Clamp indices to valid range
             valid_indices = [min(i, total_frames - 1) for i in frame_indices]
+            if frame_indices != valid_indices:
+                logging.warning(
+                    f"Frame indices clamped for {path}: max_requested={max(frame_indices)}, "
+                    f"total_frames={total_frames}"
+                )
 
             # Efficient batch extraction - decord returns (N, H, W, C)
             frames_batch = vr.get_batch(valid_indices).asnumpy()
@@ -233,7 +243,7 @@ class GenericVideoDataset(Dataset):
             frames = (frames * ((num_frames // len(frames)) + 1))[:num_frames]
         else:
             # Select a random consecutive sequence of frames
-            start_index = self.get_random_offset(len(frames), self.target_fps, idx, fps)
+            start_index = self.get_random_offset(len(frames), 1, idx, fps, frame_count=num_frames)
             frames = frames[start_index : start_index + num_frames]
 
         return frames

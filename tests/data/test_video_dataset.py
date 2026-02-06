@@ -91,43 +91,34 @@ class TestComputeActualFrameCount:
         )
         return dataset
 
-    def test_long_segment_returns_vid_frame_count(self, mock_dataset):
-        """A 4-second segment at 8 fps can fit 33 frames, should return 16."""
-        result = mock_dataset.compute_actual_frame_count(4.0)
-        assert result == 16, f"Expected 16 frames for 4s segment, got {result}"
+    @pytest.mark.parametrize(
+        "duration,expected",
+        [
+            (4.0, 16),  # long segment
+            (2.0, 16),  # medium segment
+            (1.875, 16),  # exact boundary
+            (1.0, 9),  # short segment
+            (0.5, 5),  # very short segment
+            (0.1, 1),  # minimal segment
+        ],
+        ids=["long", "medium", "exact_boundary", "short", "very_short", "minimal"],
+    )
+    def test_compute_actual_frame_count(self, mock_dataset, duration, expected):
+        """Test compute_actual_frame_count with various durations."""
+        result = mock_dataset.compute_actual_frame_count(duration)
+        assert result == expected, (
+            f"Expected {expected} frames for {duration}s segment, got {result}"
+        )
 
-    def test_medium_segment_returns_vid_frame_count(self, mock_dataset):
-        """A 2-second segment at 8 fps can fit 17 frames, should return 16."""
-        result = mock_dataset.compute_actual_frame_count(2.0)
-        assert result == 16, f"Expected 16 frames for 2s segment, got {result}"
+    def test_negative_duration_returns_at_least_one(self, mock_dataset):
+        """Test that negative duration returns at least 1 frame."""
+        result = mock_dataset.compute_actual_frame_count(-1.0)
+        assert result == 1, f"Expected at least 1 frame for negative duration, got {result}"
 
-    def test_short_segment_returns_fewer_frames(self, mock_dataset):
-        """A 1-second segment at 8 fps can fit 9 frames, should return 9."""
-        result = mock_dataset.compute_actual_frame_count(1.0)
-        # available = floor(1.0 * 8) + 1 = 9
-        assert result == 9, f"Expected 9 frames for 1s segment, got {result}"
-
-    def test_very_short_segment(self, mock_dataset):
-        """A 0.5-second segment at 8 fps can fit 5 frames, should return 5."""
-        result = mock_dataset.compute_actual_frame_count(0.5)
-        # available = floor(0.5 * 8) + 1 = 5
-        assert result == 5, f"Expected 5 frames for 0.5s segment, got {result}"
-
-    def test_minimal_segment(self, mock_dataset):
-        """A very short segment should return at least 1 frame."""
-        result = mock_dataset.compute_actual_frame_count(0.1)
-        # available = floor(0.1 * 8) + 1 = 1
-        assert result == 1, f"Expected 1 frame for 0.1s segment, got {result}"
-
-    def test_exact_boundary(self, mock_dataset):
-        """Test segment duration that exactly fits vid_frame_count frames."""
-        # For 16 frames at 8 fps, need (16-1)/8 = 1.875 seconds
-        # But formula is: available = floor(duration * fps) + 1
-        # So we need floor(duration * 8) + 1 >= 16, meaning floor(duration * 8) >= 15
-        # duration >= 15/8 = 1.875
-        result = mock_dataset.compute_actual_frame_count(1.875)
-        # available = floor(1.875 * 8) + 1 = floor(15) + 1 = 16
-        assert result == 16, f"Expected 16 frames for 1.875s segment, got {result}"
+    def test_zero_duration(self, mock_dataset):
+        """Test that zero duration returns at least 1 frame."""
+        result = mock_dataset.compute_actual_frame_count(0.0)
+        assert result == 1, f"Expected 1 frame for zero duration, got {result}"
 
     def test_vid_frame_count_none_returns_none(self):
         """When vid_frame_count is None, should return None."""
@@ -154,17 +145,27 @@ class TestGetRandomOffsetWithFrameCount:
         dataset = test_omnifall_video_dataset
         fps = 30.0
 
-        # With default vid_frame_count=16
-        offset1 = dataset.get_random_offset(length=512, target_interval=1, idx=0, fps=fps)
+        # Collect multiple offsets to verify different ranges
+        offsets_default = [
+            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps)
+            for i in range(100)
+        ]
 
-        # With explicit frame_count=8 (shorter, more room for offset)
-        offset2 = dataset.get_random_offset(
-            length=512, target_interval=1, idx=0, fps=fps, frame_count=8
+        offsets_small = [
+            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps, frame_count=4)
+            for i in range(100)
+        ]
+
+        # With vid_frame_count=16: required_span=15, max_offset=512-1-15=496
+        # With frame_count=4: required_span=3, max_offset=512-1-3=508
+        max_default = max(offsets_default)
+        max_small = max(offsets_small)
+
+        # frame_count=4 should allow larger offsets
+        assert max_small > max_default, (
+            f"frame_count=4 (max={max_small}) should allow larger offsets than "
+            f"vid_frame_count=16 (max={max_default})"
         )
-
-        # Both should be valid (non-negative)
-        assert offset1 >= 0, "Offset should be non-negative"
-        assert offset2 >= 0, "Offset should be non-negative"
 
     def test_frame_count_none_uses_default(self, test_omnifall_video_dataset):
         """Test that frame_count=None uses vid_frame_count."""
@@ -190,62 +191,58 @@ class TestDecordVideoLoading:
     """Tests for the decord-based video loading implementation."""
 
     @pytest.fixture
-    def mock_video_reader(self):
-        """Create a mock VideoReader."""
-        mock_vr = MagicMock()
-        mock_vr.get_avg_fps.return_value = 30.0
-        mock_vr.__len__ = MagicMock(return_value=300)  # 10 seconds of video
+    def mock_dataset(self):
+        """Create a mock OmnifallVideoDataset for testing."""
+        dataset = MagicMock(spec=OmnifallVideoDataset)
+        dataset.target_fps = 8.0
+        dataset.vid_frame_count = 16
+        dataset.data_fps = 30.0
+        # Bind the actual method
+        dataset.load_video_fast = (
+            lambda path, idx, frame_count=None: OmnifallVideoDataset.load_video_fast(
+                dataset, path, idx, frame_count
+            )
+        )
+        # Use real get_random_offset
+        from infreqact.data.dataset import GenericVideoDataset
 
-        # Mock get_batch to return fake frames
-        def mock_get_batch(indices):
-            frames = np.random.randint(0, 255, size=(len(indices), 224, 224, 3), dtype=np.uint8)
-            mock_result = MagicMock()
-            mock_result.asnumpy.return_value = frames
-            return mock_result
+        dataset.get_random_offset = GenericVideoDataset.get_random_offset.__get__(dataset)
+        return dataset
 
-        mock_vr.get_batch = mock_get_batch
-        return mock_vr
-
-    def test_load_video_fast_returns_correct_frame_count(
-        self, test_omnifall_video_dataset, mock_video_reader
+    @pytest.mark.parametrize(
+        "frame_count,expected_len", [(16, 16), (8, 8)], ids=["default_count", "short_segment"]
+    )
+    def test_load_video_fast_frame_count(
+        self, mock_dataset, mock_video_reader_factory, frame_count, expected_len
     ):
         """Test that load_video_fast returns the expected number of frames."""
-        dataset = test_omnifall_video_dataset
+        # Use 224x224 frames to match expected shape
+        mock_vr = mock_video_reader_factory(fps=30.0, total_frames=300, height=224, width=224)
 
-        with patch("infreqact.data.dataset.VideoReader", return_value=mock_video_reader):
-            frames = dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=16)
+        with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
+            frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=frame_count)
 
-        assert len(frames) == 16, f"Expected 16 frames, got {len(frames)}"
-
-    def test_load_video_fast_short_segment(self, test_omnifall_video_dataset, mock_video_reader):
-        """Test that load_video_fast respects frame_count for short segments."""
-        dataset = test_omnifall_video_dataset
-
-        with patch("infreqact.data.dataset.VideoReader", return_value=mock_video_reader):
-            # Request only 8 frames (simulating a short segment)
-            frames = dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=8)
-
-        assert len(frames) == 8, f"Expected 8 frames for short segment, got {len(frames)}"
+        assert len(frames) == expected_len, f"Expected {expected_len} frames, got {len(frames)}"
 
     def test_load_video_fast_frame_count_none_uses_default(
-        self, test_omnifall_video_dataset, mock_video_reader
+        self, mock_dataset, mock_video_reader_factory
     ):
         """Test that frame_count=None uses vid_frame_count."""
-        dataset = test_omnifall_video_dataset
+        mock_vr = mock_video_reader_factory(fps=30.0, total_frames=300, height=224, width=224)
 
-        with patch("infreqact.data.dataset.VideoReader", return_value=mock_video_reader):
-            frames = dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=None)
+        with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
+            frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=None)
 
-        assert len(frames) == dataset.vid_frame_count, (
-            f"Expected {dataset.vid_frame_count} frames, got {len(frames)}"
+        assert len(frames) == mock_dataset.vid_frame_count, (
+            f"Expected {mock_dataset.vid_frame_count} frames, got {len(frames)}"
         )
 
-    def test_frames_are_numpy_arrays(self, test_omnifall_video_dataset, mock_video_reader):
+    def test_frames_are_numpy_arrays(self, mock_dataset, mock_video_reader_factory):
         """Test that returned frames are numpy arrays with correct shape."""
-        dataset = test_omnifall_video_dataset
+        mock_vr = mock_video_reader_factory(fps=30.0, total_frames=300, height=224, width=224)
 
-        with patch("infreqact.data.dataset.VideoReader", return_value=mock_video_reader):
-            frames = dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=4)
+        with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
+            frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=4)
 
         for i, frame in enumerate(frames):
             assert isinstance(frame, np.ndarray), f"Frame {i} should be numpy array"

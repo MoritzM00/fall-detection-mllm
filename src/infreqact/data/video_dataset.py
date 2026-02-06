@@ -202,7 +202,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
             return None  # Load all frames
 
         # How many frames can fit in the actual segment at target_fps
-        available_frames = int(segment_duration_sec * self.target_fps) + 1
+        available_frames = max(1, int(segment_duration_sec * self.target_fps) + 1)
 
         # Return the minimum of desired and available
         return min(self.vid_frame_count, available_frames)
