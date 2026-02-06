@@ -75,6 +75,7 @@ def main(cfg: DictConfig):
         f"num_workers={cfg.num_workers}"
     )
     # collate fn should be a no-op (just a list of dict as return), pytorch collates over keys by default
+    prefetch_factor = cfg.prefetch_factor if cfg.num_workers > 0 else None
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
@@ -82,7 +83,7 @@ def main(cfg: DictConfig):
         collate_fn=lambda batch: batch,
         shuffle=False,
         pin_memory=True,
-        prefetch_factor=cfg.prefetch_factor,
+        prefetch_factor=prefetch_factor,
     )
 
     if cfg.model.family.lower() == "molmo":
