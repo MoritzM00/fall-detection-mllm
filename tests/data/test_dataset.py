@@ -111,12 +111,11 @@ class TestDecordVideoLoaderFast:
         with patch("infreqact.data.dataset.VideoReader", return_value=mock_video_reader):
             frames = dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=frame_count)
 
-        assert isinstance(frames, list), "Should return a list"
-        assert len(frames) == expected_len, (
-            f"Should return {expected_len} frames, got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == expected_len, (
+            f"Should return {expected_len} frames, got {frames.shape[0]}"
         )
-        for frame in frames:
-            assert isinstance(frame, np.ndarray), "Each frame should be numpy array"
+        assert frames.ndim == 4, f"Should be (N, H, W, C), got ndim={frames.ndim}"
 
     def test_frame_indices_calculation(self, dataset, mock_video_reader, make_capture_get_batch):
         """Test that frame indices are calculated correctly."""
@@ -200,7 +199,10 @@ class TestDecordVideoLoaderSlow:
             frames = dataset.load_video_slow("/fake/path.mp4", idx=0, frame_count=frame_count)
 
         # For load_all: 300 frames / 4 interval = 75 frames
-        assert len(frames) == expected_len, f"Expected {expected_len} frames, got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == expected_len, (
+            f"Expected {expected_len} frames, got {frames.shape[0]}"
+        )
 
     def test_load_video_slow_cycling(self, dataset, mock_video_reader_factory):
         """Test that short videos cycle frames correctly."""
@@ -211,7 +213,8 @@ class TestDecordVideoLoaderSlow:
             frames = dataset.load_video_slow("/fake/path.mp4", idx=0, frame_count=16)
 
         # Should cycle the 10 sampled frames (40 / 4 interval = 10) to get 16 frames
-        assert len(frames) == 16, f"Expected 16 frames (with cycling), got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == 16, f"Expected 16 frames (with cycling), got {frames.shape[0]}"
 
     def test_load_video_slow_random_window(self, dataset, mock_video_reader_factory):
         """Test that random window selection works with fixed interval."""
@@ -227,4 +230,5 @@ class TestDecordVideoLoaderSlow:
             # 300 frames / 4 interval = 75 sampled frames, need 16, so 59 possible offsets
             frames = dataset.load_video_slow("/fake/path.mp4", idx=0, frame_count=16)
 
-        assert len(frames) == 16, f"Expected 16 frames, got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == 16, f"Expected 16 frames, got {frames.shape[0]}"

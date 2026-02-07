@@ -224,7 +224,10 @@ class TestDecordVideoLoading:
         with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
             frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=frame_count)
 
-        assert len(frames) == expected_len, f"Expected {expected_len} frames, got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == expected_len, (
+            f"Expected {expected_len} frames, got {frames.shape[0]}"
+        )
 
     def test_load_video_fast_frame_count_none_uses_default(
         self, mock_dataset, mock_video_reader_factory
@@ -235,8 +238,9 @@ class TestDecordVideoLoading:
         with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
             frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=None)
 
-        assert len(frames) == mock_dataset.vid_frame_count, (
-            f"Expected {mock_dataset.vid_frame_count} frames, got {len(frames)}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape[0] == mock_dataset.vid_frame_count, (
+            f"Expected {mock_dataset.vid_frame_count} frames, got {frames.shape[0]}"
         )
 
     def test_frames_are_numpy_arrays(self, mock_dataset, mock_video_reader_factory):
@@ -246,9 +250,8 @@ class TestDecordVideoLoading:
         with patch("infreqact.data.dataset.VideoReader", return_value=mock_vr):
             frames = mock_dataset.load_video_fast("/fake/path.mp4", idx=0, frame_count=4)
 
-        for i, frame in enumerate(frames):
-            assert isinstance(frame, np.ndarray), f"Frame {i} should be numpy array"
-            assert frame.shape == (224, 224, 3), f"Frame {i} has wrong shape: {frame.shape}"
+        assert isinstance(frames, np.ndarray), "Should return an ndarray"
+        assert frames.shape == (4, 224, 224, 3), f"Expected (4, 224, 224, 3), got {frames.shape}"
 
 
 # ============================================================================

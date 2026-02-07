@@ -101,9 +101,9 @@ class GenericVideoDataset(Dataset):
         raise RuntimeError(f"Failed to load a valid video after {self.max_retries} attempts ()")
 
     def transform_frames(self, frames):
-        # frames is a list of ndarrays (H, W, C)
-        # Stack and convert to tensor: (T, H, W, C) -> (T, C, H, W)
-        frames = torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2)
+        # frames is an ndarray (T, H, W, C)
+        # Convert to tensor: (T, H, W, C) -> (T, C, H, W)
+        frames = torch.from_numpy(frames).permute(0, 3, 1, 2)
         frames = tv_tensors.Video(frames)
 
         if self.size is not None:
@@ -189,10 +189,7 @@ class GenericVideoDataset(Dataset):
                 )
 
             # Efficient batch extraction - decord returns (N, H, W, C)
-            frames_batch = vr.get_batch(valid_indices).asnumpy()
-
-            # Convert to list of frames for compatibility with transform_frames
-            frames = [frames_batch[i] for i in range(len(frames_batch))]
+            frames = vr.get_batch(valid_indices).asnumpy()
 
             return frames
 
@@ -227,9 +224,8 @@ class GenericVideoDataset(Dataset):
             if not frame_indices:
                 frame_indices = [0]
 
-            # Batch extract frames
-            frames_batch = vr.get_batch(frame_indices).asnumpy()
-            frames = [frames_batch[i] for i in range(len(frames_batch))]
+            # Batch extract frames - returns (N, H, W, C) ndarray
+            frames = vr.get_batch(frame_indices).asnumpy()
 
         except Exception as e:
             logging.error(f"Error reading video {video_path}: {e}")
@@ -246,7 +242,8 @@ class GenericVideoDataset(Dataset):
                 + f"Got {len(frames)} sampled at {self.target_fps} instead of {num_frames}. "
                 + f"Cycling frames to match {num_frames} frames."
             )
-            frames = (frames * ((num_frames // len(frames)) + 1))[:num_frames]
+            repeats = (num_frames // len(frames)) + 1
+            frames = np.tile(frames, (repeats, 1, 1, 1))[:num_frames]
         else:
             # Select a random consecutive sequence of frames
             start_index, _ = self.get_random_offset(
