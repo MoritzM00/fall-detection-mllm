@@ -85,6 +85,7 @@ class TestComputeActualFrameCount:
         dataset = MagicMock(spec=OmnifallVideoDataset)
         dataset.target_fps = 8.0
         dataset.vid_frame_count = 16
+        dataset.data_fps = 30.0
         # Bind the actual method to our mock
         dataset.compute_actual_frame_count = (
             lambda duration: OmnifallVideoDataset.compute_actual_frame_count(dataset, duration)
@@ -94,11 +95,11 @@ class TestComputeActualFrameCount:
     @pytest.mark.parametrize(
         "duration,expected",
         [
-            (4.0, 16),  # long segment
-            (2.0, 16),  # medium segment
-            (1.875, 16),  # exact boundary
-            (1.0, 9),  # short segment
-            (0.5, 5),  # very short segment
+            (4.0, 16),  # long segment, capped to vid_frame_count
+            (2.0, 16),  # medium segment, capped to vid_frame_count
+            (1.875, 15),  # exact boundary, minus margin for start-frame rounding
+            (1.0, 8),  # short segment, minus margin for start-frame rounding
+            (0.5, 4),  # very short segment, minus margin for start-frame rounding
             (0.1, 1),  # minimal segment
         ],
         ids=["long", "medium", "exact_boundary", "short", "very_short", "minimal"],

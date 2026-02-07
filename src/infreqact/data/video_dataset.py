@@ -189,8 +189,12 @@ class OmnifallVideoDataset(GenericVideoDataset):
         Compute actual frames to extract based on segment duration.
         For short segments, returns fewer frames to avoid repetition.
 
-        Formula: available_frames = floor(segment_duration * target_fps) + 1
+        Formula: available_frames = floor(effective_duration * target_fps) + 1
         (The +1 accounts for the frame at t=0)
+
+        The effective duration subtracts 1/video_fps to account for worst-case
+        start-frame rounding in get_random_offset (ceil(start * fps) can shift
+        the effective start forward by up to 1/video_fps seconds).
 
         Args:
             segment_duration_sec: Duration of the segment in seconds
@@ -201,8 +205,13 @@ class OmnifallVideoDataset(GenericVideoDataset):
         if self.vid_frame_count is None:
             return None  # Load all frames
 
-        # How many frames can fit in the actual segment at target_fps
-        available_frames = max(1, int(segment_duration_sec * self.target_fps) + 1)
+        # Subtract margin for start-frame alignment: ceil(start * video_fps)
+        # can shift the effective start forward by up to 1/video_fps seconds.
+        video_fps = self.data_fps if self.data_fps and self.data_fps > 0 else 24.0
+        effective_duration = max(0.0, segment_duration_sec - 1.0 / video_fps)
+
+        # How many frames can fit in the effective segment at target_fps
+        available_frames = max(1, int(effective_duration * self.target_fps) + 1)
 
         # Return the minimum of desired and available
         return min(self.vid_frame_count, available_frames)

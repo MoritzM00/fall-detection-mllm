@@ -183,7 +183,7 @@ class GenericVideoDataset(Dataset):
             # Only warn if clamping happens unexpectedly (not due to short video)
             if frame_indices != valid_indices and not video_too_short:
                 logging.warning(
-                    f"Frame indices clamped unexpectedly for {path}: "
+                    f"Frame indices clamped unexpectedly for idx: {idx}, {path}: "
                     f"max_requested={max(frame_indices)}, total_frames={total_frames}, "
                     f"begin_frame={begin_frame}, fps={fps:.2f}, target_fps={self.target_fps}"
                 )
@@ -208,7 +208,7 @@ class GenericVideoDataset(Dataset):
         try:
             num_frames = frame_count if frame_count is not None else self.vid_frame_count
 
-            vr = VideoReader(video_path, ctx=cpu(0))
+            vr = VideoReader(video_path)
             fps = vr.get_avg_fps()
             total_frames = len(vr)
 
@@ -228,8 +228,8 @@ class GenericVideoDataset(Dataset):
             frames = vr.get_batch(frame_indices).asnumpy()
 
         except Exception as e:
-            logging.error(f"Error reading video {video_path}: {e}")
-            raise RuntimeError("Failed to process video")
+            logging.error(f"Error reading video {idx=}, {video_path=}: {e}", exc_info=True)
+            raise RuntimeError("Failed to process video") from e
 
         if num_frames is None:
             # Load full video, no cycling required
