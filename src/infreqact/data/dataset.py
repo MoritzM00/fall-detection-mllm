@@ -96,7 +96,6 @@ class GenericVideoDataset(Dataset):
                     )
                     logging.error(f"Error loading video {video_path} at index {idx}: {str(e)}")
                     raise e
-                idx = random.randint(0, len(self.paths) - 1)
 
         raise RuntimeError(f"Failed to load a valid video after {self.max_retries} attempts ()")
 
@@ -122,6 +121,22 @@ class GenericVideoDataset(Dataset):
             frames = transform(frames)
 
         return {"video": frames}
+
+    def get_segment_frame_range(self, idx, fps, total_frames):
+        """Get the valid frame range for sampling.
+
+        For non-segmented datasets, returns the full video range.
+        Subclasses with temporal segments should override this.
+
+        Args:
+            idx: Sample index
+            fps: Video frame rate
+            total_frames: Total frames in the video file
+
+        Returns:
+            tuple: (start_frame, end_frame) - the valid range for this sample
+        """
+        return 0, total_frames
 
     def get_random_offset(self, length, target_interval, idx, fps, start=0, frame_count=None):
         """Get random offset for frame sampling.
@@ -162,14 +177,18 @@ class GenericVideoDataset(Dataset):
 
             vr = VideoReader(path, ctx=cpu(0))
             fps = vr.get_avg_fps()
-            total_frames = len(vr)
+            video_total_frames = len(vr)
 
-            if total_frames == 0:
+            if video_total_frames == 0:
                 raise ValueError(f"Video has no frames: {path}")
+
+            # Get the effective frame range for this sample (segment-aware)
+            segment_start, segment_end = self.get_segment_frame_range(idx, fps, video_total_frames)
+            total_frames = segment_end - segment_start
 
             # Get random offset (begin_frame) from segment-aware method
             begin_frame, video_too_short = self.get_random_offset(
-                total_frames, fps / self.target_fps, idx, fps, frame_count=num_frames
+                video_total_frames, fps / self.target_fps, idx, fps, frame_count=num_frames
             )
 
             # Calculate frame indices to sample at target_fps
@@ -178,13 +197,14 @@ class GenericVideoDataset(Dataset):
                 int(begin_frame + n * fps / self.target_fps) for n in range(num_frames)
             ]
 
-            # Clamp indices to valid range
-            valid_indices = [min(i, total_frames - 1) for i in frame_indices]
-            # Only warn if clamping happens unexpectedly (not due to short video)
+            # Clamp indices to valid range (within segment bounds)
+            valid_indices = [min(max(i, segment_start), segment_end - 1) for i in frame_indices]
+            # Only warn if clamping happens unexpectedly (not due to short video/segment)
             if frame_indices != valid_indices and not video_too_short:
                 logging.warning(
                     f"Frame indices clamped unexpectedly for idx: {idx}, {path}: "
-                    f"max_requested={max(frame_indices)}, total_frames={total_frames}, "
+                    f"max_requested={max(frame_indices)}, segment_frames={total_frames}, "
+                    f"segment_range=({segment_start}, {segment_end}), "
                     f"begin_frame={begin_frame}, fps={fps:.2f}, target_fps={self.target_fps}"
                 )
 

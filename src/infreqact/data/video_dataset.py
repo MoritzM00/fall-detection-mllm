@@ -184,6 +184,22 @@ class OmnifallVideoDataset(GenericVideoDataset):
             video_root=self.video_root, video_path=rel_path, ext=self.ext
         )
 
+    def get_segment_frame_range(self, idx, fps, total_frames):
+        """Get the valid frame range for the segment at idx.
+
+        Args:
+            idx: Segment index
+            fps: Video frame rate
+            total_frames: Total frames in the video file
+
+        Returns:
+            tuple: (start_frame, end_frame) for this segment
+        """
+        segment = self.video_segments[idx]
+        segment_start_frame = int(math.ceil(segment["start"] * fps))
+        segment_end_frame = min(int(segment["end"] * fps), total_frames)
+        return segment_start_frame, segment_end_frame
+
     def compute_actual_frame_count(self, segment_duration_sec):
         """
         Compute actual frames to extract based on segment duration.

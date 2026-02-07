@@ -359,3 +359,17 @@ class TestVideoLoadingIntegration:
             assert any(d > 0 for d in differences), (
                 "All consecutive frames are identical, suggesting unwanted repetition"
             )
+
+    def test_load_video_304(self, test_omnifall_video_dataset):
+        """Test loading a specific video segment (index 304) to check for issues."""
+        dataset = test_omnifall_video_dataset
+
+        # Load the item at index 304
+        try:
+            item = dataset[304]
+            video = item["video"]
+            assert video.shape[0] == item["num_frames"], (
+                f"Video frames ({video.shape[0]}) should match num_frames ({item['num_frames']})"
+            )
+        except Exception as e:
+            pytest.fail(f"Failed to load video at index 304: {str(e)}")

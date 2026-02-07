@@ -174,6 +174,22 @@ class WanfallVideoDataset(GenericVideoDataset):
         segment = self.video_segments[idx]
         return segment, segment["label"]
 
+    def get_segment_frame_range(self, idx, fps, total_frames):
+        """Get the valid frame range for the segment at idx.
+
+        Args:
+            idx: Segment index
+            fps: Video frame rate
+            total_frames: Total frames in the video file
+
+        Returns:
+            tuple: (start_frame, end_frame) for this segment
+        """
+        segment = self.video_segments[idx]
+        segment_start_frame = int(segment["start"] * fps)
+        segment_end_frame = min(int(segment["end"] * fps), total_frames)
+        return segment_start_frame, segment_end_frame
+
     def get_random_offset(self, length, target_interval, idx, fps, start=0):
         """
         Get random offset for temporal segment sampling.
