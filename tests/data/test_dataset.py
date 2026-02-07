@@ -22,13 +22,13 @@ class TestGenericVideoDatasetGetRandomOffset:
 
     def test_default_uses_vid_frame_count(self, dataset):
         """Test that default behavior uses vid_frame_count."""
-        offset = dataset.get_random_offset(length=100, target_interval=1, idx=0, fps=30.0)
+        offset, _ = dataset.get_random_offset(length=100, target_interval=1, idx=0, fps=30.0)
         # With 100 frames and vid_frame_count=16, required_span=(16-1)*1=15, max_offset=100-1-15=84
         assert 0 <= offset <= 84, f"Offset {offset} out of expected range [0, 84]"
 
     def test_frame_count_parameter(self, dataset):
         """Test that frame_count parameter is used when provided."""
-        offset = dataset.get_random_offset(
+        offset, _ = dataset.get_random_offset(
             length=100, target_interval=1, idx=0, fps=30.0, frame_count=8
         )
         # With 100 frames and frame_count=8, required_span=(8-1)*1=7, max_offset=100-1-7=92
@@ -36,14 +36,17 @@ class TestGenericVideoDatasetGetRandomOffset:
 
     def test_returns_zero_when_too_short(self, dataset):
         """Test that offset is 0 when video is too short."""
-        offset = dataset.get_random_offset(length=10, target_interval=1, idx=0, fps=30.0)
+        offset, is_too_short = dataset.get_random_offset(
+            length=10, target_interval=1, idx=0, fps=30.0
+        )
         # With only 10 frames and needing 16, required_span=15, max_offset=10-1-15=-6, should return 0
         assert offset == 0, f"Expected 0 for short video, got {offset}"
+        assert is_too_short is True, "Should indicate video is too short"
 
     def test_frame_count_none_uses_default(self, dataset):
         """Test that frame_count=None behaves like not passing it."""
-        offset1 = dataset.get_random_offset(length=100, target_interval=1, idx=0, fps=30.0)
-        offset2 = dataset.get_random_offset(
+        offset1, _ = dataset.get_random_offset(length=100, target_interval=1, idx=0, fps=30.0)
+        offset2, _ = dataset.get_random_offset(
             length=100, target_interval=1, idx=0, fps=30.0, frame_count=None
         )
         # Both should work (they may differ due to randomness, but both should be valid)
@@ -53,7 +56,7 @@ class TestGenericVideoDatasetGetRandomOffset:
     def test_fractional_target_interval(self, dataset):
         """Test with fractional target_interval (e.g., fps/target_fps)."""
         # fps=30, target_fps=8 → interval = 3.75
-        offset = dataset.get_random_offset(
+        offset, _ = dataset.get_random_offset(
             length=200, target_interval=3.75, idx=0, fps=30.0, frame_count=16
         )
         # required_span = (16-1) * 3.75 = 56.25
@@ -64,7 +67,7 @@ class TestGenericVideoDatasetGetRandomOffset:
         """Test that fractional intervals don't produce out-of-bounds indices."""
         # Run 100 iterations to catch any edge cases
         for i in range(100):
-            offset = dataset.get_random_offset(
+            offset, _ = dataset.get_random_offset(
                 length=200, target_interval=3.75, idx=i, fps=30.0, frame_count=16
             )
             # Last frame index: offset + (16-1) * 3.75
@@ -75,14 +78,14 @@ class TestGenericVideoDatasetGetRandomOffset:
 
     def test_frame_count_zero(self, dataset):
         """Test that frame_count=0 returns offset 0."""
-        offset = dataset.get_random_offset(
+        offset, _ = dataset.get_random_offset(
             length=100, target_interval=1, idx=0, fps=30.0, frame_count=0
         )
         assert offset == 0, f"Expected 0 for frame_count=0, got {offset}"
 
     def test_frame_count_one(self, dataset):
         """Test that frame_count=1 allows any offset in valid range."""
-        offset = dataset.get_random_offset(
+        offset, _ = dataset.get_random_offset(
             length=100, target_interval=1, idx=0, fps=30.0, frame_count=1
         )
         # required_span = (1-1) * 1 = 0, max_offset = 100 - 1 - 0 = 99
@@ -96,7 +99,7 @@ class TestDecordVideoLoaderFast:
     def dataset(self, generic_dataset):
         """Use generic_dataset fixture and add get_random_offset mock."""
         generic_dataset.get_random_offset = (
-            lambda length, interval, idx, fps, start=0, frame_count=None: 0
+            lambda length, interval, idx, fps, start=0, frame_count=None: (0, False)
         )
         return generic_dataset
 
@@ -166,7 +169,7 @@ class TestDecordVideoLoaderSlow:
     def dataset(self, generic_dataset):
         """Use generic_dataset fixture and add get_random_offset mock."""
         generic_dataset.get_random_offset = (
-            lambda length, interval, idx, fps, start=0, frame_count=None: 0
+            lambda length, interval, idx, fps, start=0, frame_count=None: (0, False)
         )
         return generic_dataset
 

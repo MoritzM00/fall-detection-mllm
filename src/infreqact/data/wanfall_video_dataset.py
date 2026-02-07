@@ -178,6 +178,10 @@ class WanfallVideoDataset(GenericVideoDataset):
         """
         Get random offset for temporal segment sampling.
         Ensures we sample within the annotated segment boundaries.
+
+        Returns:
+            tuple: (begin_frame, is_video_too_short) where is_video_too_short indicates
+                   whether the segment is too short to fit all frames without repetition
         """
         segment = self.video_segments[idx]
         segment_start_frame = int(segment["start"] * fps)
@@ -188,12 +192,12 @@ class WanfallVideoDataset(GenericVideoDataset):
 
         if segment_frames <= required_frames:
             # Segment is too short, start from beginning of segment
-            return segment_start_frame
+            return segment_start_frame, True
         else:
             # Random offset within the segment
             max_offset = segment_frames - required_frames
             random_offset = random.randint(0, max_offset)
-            return segment_start_frame + random_offset
+            return segment_start_frame + random_offset, False
 
     def load_item(self, idx):
         """Load video segment with temporal boundaries."""

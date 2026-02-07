@@ -48,14 +48,14 @@ def test_random_offset_seed(test_omnifall_video_dataset):
     offsets1 = [
         dataset.get_random_offset(
             length=frame_count, target_interval=target_interval, idx=i, fps=fps
-        )
+        )[0]  # Extract offset from (offset, is_too_short) tuple
         for i in range(n_offsets)
     ]
 
     offsets2 = [
         dataset.get_random_offset(
             length=frame_count, target_interval=target_interval, idx=i, fps=fps
-        )
+        )[0]  # Extract offset from (offset, is_too_short) tuple
         for i in range(n_offsets)
     ]
     assert offsets1 == offsets2, "Random offsets differ between runs with the same seed."
@@ -64,7 +64,7 @@ def test_random_offset_seed(test_omnifall_video_dataset):
     offsets3 = [
         dataset.get_random_offset(
             length=frame_count, target_interval=target_interval, idx=i, fps=fps
-        )
+        )[0]  # Extract offset from (offset, is_too_short) tuple
         for i in range(n_offsets)
     ]
     assert offsets1 != offsets3, "Random offsets are the same for different seeds."
@@ -147,12 +147,14 @@ class TestGetRandomOffsetWithFrameCount:
 
         # Collect multiple offsets to verify different ranges
         offsets_default = [
-            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps)
+            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps)[0]
             for i in range(100)
         ]
 
         offsets_small = [
-            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps, frame_count=4)
+            dataset.get_random_offset(length=512, target_interval=1, idx=i, fps=fps, frame_count=4)[
+                0
+            ]
             for i in range(100)
         ]
 
@@ -172,9 +174,9 @@ class TestGetRandomOffsetWithFrameCount:
         dataset = test_omnifall_video_dataset
         fps = 30.0
 
-        offset1 = dataset.get_random_offset(length=512, target_interval=1, idx=0, fps=fps)
+        offset1, _ = dataset.get_random_offset(length=512, target_interval=1, idx=0, fps=fps)
 
-        offset2 = dataset.get_random_offset(
+        offset2, _ = dataset.get_random_offset(
             length=512, target_interval=1, idx=0, fps=fps, frame_count=None
         )
 

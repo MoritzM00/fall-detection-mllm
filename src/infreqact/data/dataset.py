@@ -133,15 +133,19 @@ class GenericVideoDataset(Dataset):
             fps: Video frame rate
             start: Start offset (unused, kept for API compatibility)
             frame_count: Number of frames to extract (defaults to self.vid_frame_count)
+
+        Returns:
+            tuple: (begin_frame, is_video_too_short) where is_video_too_short indicates
+                   whether the video is too short to fit all frames without repetition
         """
         num_frames = frame_count if frame_count is not None else self.vid_frame_count
         if num_frames is None or num_frames <= 0:
-            return 0
+            return 0, False
         required_span = (num_frames - 1) * target_interval
         max_offset = int(length - 1 - required_span)
         if max_offset <= 0:
-            return 0
-        return random.randint(0, max_offset)
+            return 0, True  # Video too short, clamping expected
+        return random.randint(0, max_offset), False
 
     def load_video_fast(self, path, idx, frame_count=None):
         """Load video frames using decord with efficient random access.
@@ -164,7 +168,7 @@ class GenericVideoDataset(Dataset):
                 raise ValueError(f"Video has no frames: {path}")
 
             # Get random offset (begin_frame) from segment-aware method
-            begin_frame = self.get_random_offset(
+            begin_frame, video_too_short = self.get_random_offset(
                 total_frames, fps / self.target_fps, idx, fps, frame_count=num_frames
             )
 
@@ -176,10 +180,12 @@ class GenericVideoDataset(Dataset):
 
             # Clamp indices to valid range
             valid_indices = [min(i, total_frames - 1) for i in frame_indices]
-            if frame_indices != valid_indices:
+            # Only warn if clamping happens unexpectedly (not due to short video)
+            if frame_indices != valid_indices and not video_too_short:
                 logging.warning(
-                    f"Frame indices clamped for {path}: max_requested={max(frame_indices)}, "
-                    f"total_frames={total_frames}"
+                    f"Frame indices clamped unexpectedly for {path}: "
+                    f"max_requested={max(frame_indices)}, total_frames={total_frames}, "
+                    f"begin_frame={begin_frame}, fps={fps:.2f}, target_fps={self.target_fps}"
                 )
 
             # Efficient batch extraction - decord returns (N, H, W, C)
@@ -243,7 +249,9 @@ class GenericVideoDataset(Dataset):
             frames = (frames * ((num_frames // len(frames)) + 1))[:num_frames]
         else:
             # Select a random consecutive sequence of frames
-            start_index = self.get_random_offset(len(frames), 1, idx, fps, frame_count=num_frames)
+            start_index, _ = self.get_random_offset(
+                len(frames), 1, idx, fps, frame_count=num_frames
+            )
             frames = frames[start_index : start_index + num_frames]
 
         return frames

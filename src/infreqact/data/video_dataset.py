@@ -221,6 +221,10 @@ class OmnifallVideoDataset(GenericVideoDataset):
             fps: Video frame rate
             start: Start offset (unused, kept for API compatibility)
             frame_count: Number of frames to extract (defaults to self.vid_frame_count)
+
+        Returns:
+            tuple: (begin_frame, is_video_too_short) where is_video_too_short indicates
+                   whether the segment/video is too short to fit all frames without repetition
         """
         segment = self.video_segments[idx]
         # Use provided frame_count or fall back to default
@@ -242,11 +246,11 @@ class OmnifallVideoDataset(GenericVideoDataset):
         # If we don't have the information to compute a safe offset, fall back to
         # the segment start.
         if num_frames is None:
-            return segment_start_frame
+            return segment_start_frame, False
         if self.target_fps is None or self.target_fps <= 0:
-            return segment_start_frame
+            return segment_start_frame, False
         if num_frames <= 1:
-            return segment_start_frame
+            return segment_start_frame, False
 
         # Maximum allowed begin time so that the *last* sampled timestamp is still
         # within the segment.
@@ -256,13 +260,14 @@ class OmnifallVideoDataset(GenericVideoDataset):
         # Segment too short: clamp to segment start and rely on padding (repeat last
         # decoded frame) rather than sampling outside the segment.
         if max_begin_time_sec <= segment_start_sec:
-            return segment_start_frame
+            return segment_start_frame, True  # Video/segment too short
 
         max_begin_frame = int(math.floor(max_begin_time_sec * fps))
 
         # Constrain by actual video length to handle annotation inaccuracies
         # With spacing fps/target_fps, last frame index = begin_frame + (num_frames-1) * spacing
         # So max safe begin_frame where last index < length
+        video_too_short = False
         if length is not None and length > 0:
             spacing = fps / self.target_fps
             required_span = (num_frames - 1) * spacing
@@ -270,9 +275,12 @@ class OmnifallVideoDataset(GenericVideoDataset):
             # Only apply constraint if it doesn't conflict with segment boundaries
             if max_safe_begin_frame >= segment_start_frame:
                 max_begin_frame = min(max_begin_frame, max_safe_begin_frame)
+            elif max_safe_begin_frame < segment_start_frame:
+                # Video shorter than required, clamping expected
+                video_too_short = True
 
         if max_begin_frame < segment_start_frame:
-            return segment_start_frame
+            return segment_start_frame, True  # Video/segment too short
 
         max_offset = int(max_begin_frame - segment_start_frame)
 
@@ -284,7 +292,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
             # No seed: truly random offset each time (for training augmentation)
             random_offset = int(np.random.randint(0, max_offset + 1))
 
-        return segment_start_frame + random_offset
+        return segment_start_frame + random_offset, video_too_short
 
     def load_item(self, idx):
         """Load video segment with temporal boundaries."""
