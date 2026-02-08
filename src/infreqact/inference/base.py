@@ -21,7 +21,7 @@ def load_video_clip(
     width: int = -1,
     height: int = -1,
     num_threads: int = 0,
-) -> np.ndarray:
+) -> tuple[np.ndarray, dict]:
     """Extract a clip from a video with temporal down-sampling and random access.
 
     Parameters
@@ -55,8 +55,12 @@ def load_video_clip(
 
     Returns
     -------
-    np.ndarray
-        Array of shape ``(N, H, W, 3)`` with ``N <= max_frames``.
+    tuple[np.ndarray, dict]
+        A tuple of (frames, metadata) where frames is an array of shape
+        ``(N, H, W, 3)`` with ``N <= max_frames``, and metadata is a dict
+        containing keys like ``requested_frames``, ``frame_indices``,
+        ``timestamps``, ``available_sec``, ``clip_start_sec``,
+        ``clip_end_sec``, ``shift_sec``, and ``actual_frames``.
     """
     # ------------------------------------------------------------------
     # 1. Open video & read metadata
@@ -90,6 +94,7 @@ def load_video_clip(
     # Offset only applies when the segment is long enough to fully provide
     # max_frames.  If the segment is too short (n_frames < max_frames), we
     # use every available frame starting from the segment start — no slack.
+    shift_sec = 0.0
     if n_frames < max_frames:
         clip_start_sec = start_sec
     else:
@@ -120,11 +125,11 @@ def load_video_clip(
             seen.add(idx)
             indices.append(idx)
 
-    # log key parameters for verification
-    logger.debug(
-        f"start_sec={start_sec:.3f}, end_sec={end_sec:.3f}, {offset=} "
-        f"=> clip_start_sec={clip_start_sec:.3f}, timestamps={[f'{ts:.3f}' for ts in timestamps]}"
-    )
+    if len(indices) < n_frames:
+        logger.warning(
+            f"Frame deduplication reduced count from {n_frames} to {len(indices)} "
+            f"(target_fps={target_fps}, native_fps={native_fps:.1f})"
+        )
 
     if not indices:
         raise RuntimeError("Could not compute any valid frame indices.")
@@ -137,12 +142,13 @@ def load_video_clip(
     # key metadata for logging/debugging
     metadata = dict(
         requested_frames=n_frames,
+        actual_frames=len(indices),
         frame_indices=indices,
         timestamps=timestamps,
         available_sec=segment_duration,
         clip_start_sec=clip_start_sec,
         clip_end_sec=timestamps[-1],
-        shift_sec=shift_sec if n_frames >= max_frames else 0.0,
+        shift_sec=shift_sec,
     )
 
     return frames, metadata
