@@ -3,6 +3,12 @@
 from dataclasses import dataclass
 from typing import Literal
 
+# Type aliases for variant selection
+RoleVariant = Literal["standard", "specialized", "video_specialized"]
+TaskVariant = Literal["standard", "extended"]
+LabelsVariant = Literal["bulleted", "comma", "grouped", "numbered"]
+DefinitionsVariant = Literal["standard", "extended"]
+
 
 @dataclass
 class PromptConfig:
@@ -10,9 +16,6 @@ class PromptConfig:
 
     Attributes:
         output_format: Expected output format - "json" or "text"
-        include_role: Whether to include role description in prompt
-        include_definitions: Whether to include label definitions and constraints
-        include_adherence: Whether to include adherence instruction
         cot: Whether to enable chain-of-thought reasoning
         cot_start_tag: Opening tag for reasoning content (default: "<think>")
         cot_end_tag: Closing tag for reasoning content (default: "</think>")
@@ -21,12 +24,13 @@ class PromptConfig:
         num_shots: Number of few-shot exemplars (0 = zero-shot)
         shot_selection: Exemplar sampling strategy - "random" or "balanced"
         exemplar_seed: Random seed for exemplar sampling reproducibility
+        role_variant: Which role component variant to use (None = omit role section)
+        task_variant: Which task instruction variant to use
+        labels_variant: Which label formatting variant to use
+        definitions_variant: Which definitions component variant to use (None = omit definitions)
     """
 
     output_format: Literal["json", "text"] = "json"
-    include_role: bool = True
-    include_definitions: bool = True
-    include_adherence: bool = True
     cot: bool = False
     cot_start_tag: str = "<think>"
     cot_end_tag: str = "</think>"
@@ -37,3 +41,9 @@ class PromptConfig:
     num_shots: int = 0
     shot_selection: Literal["random", "balanced"] = "balanced"
     exemplar_seed: int = 42
+
+    # Variant selectors
+    role_variant: RoleVariant | None = "standard"
+    task_variant: TaskVariant = "standard"
+    labels_variant: LabelsVariant = "bulleted"
+    definitions_variant: DefinitionsVariant | None = None

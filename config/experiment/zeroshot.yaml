@@ -7,6 +7,9 @@ defaults:
 # Full dataset evaluation
 num_samples: null  # Process all samples
 
+model:
+  params: 8B
+
 # W&B tracking
 wandb:
   project: "fall-detection-zeroshot-v3"

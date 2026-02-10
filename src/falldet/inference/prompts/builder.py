@@ -2,13 +2,13 @@
 
 from .components import (
     COT_INSTRUCTION,
-    DEFINITIONS_COMPONENT,
-    JSON_OUTPUT_FORMAT,
+    DEFINITIONS_VARIANTS,
+    LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
+    OUTPUT_FORMAT_VARIANTS,
     R1_SYSTEM_PROMPT,
-    ROLE_COMPONENT,
-    TASK_INSTRUCTION,
-    TEXT_OUTPUT_FORMAT,
+    ROLE_VARIANTS,
+    TASK_VARIANTS,
 )
 from .config import PromptConfig
 from .parsers import CoTOutputParser, JSONOutputParser, KeywordOutputParser, OutputParser
@@ -35,26 +35,26 @@ class PromptBuilder:
         """
         sections = []
 
-        # 1. Role section (optional)
-        if self.config.include_role:
-            sections.append(ROLE_COMPONENT)
+        # 1. Role section (optional, controlled by variant)
+        if self.config.role_variant:
+            sections.append(ROLE_VARIANTS[self.config.role_variant])
 
         # 2. Task instruction (always included)
-        sections.append(TASK_INSTRUCTION)
+        sections.append(TASK_VARIANTS[self.config.task_variant])
 
         # 3. Labels section (always included)
         sections.append(self._build_labels_section())
 
-        # 4. Definitions & Constraints (optional)
-        if self.config.include_definitions:
-            sections.append(DEFINITIONS_COMPONENT)
+        # 4. Definitions & Constraints (optional, controlled by variant)
+        if self.config.definitions_variant:
+            sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
 
         # 5. Chain-of-thought instruction (optional)
         if self.config.cot:
             sections.append(COT_INSTRUCTION)
 
         # 6. Output format instruction
-        sections.append(self._build_output_format())
+        sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
 
         return "\n\n".join(sections)
 
@@ -66,27 +66,18 @@ class PromptBuilder:
         """
         return self.config.cot and self.config.model_family.lower() == "internvl"
 
-    def _build_output_format(self) -> str:
-        """Generate output format instructions based on config.
-
-        Returns:
-            Output format instruction string
-        """
-        if self.config.output_format == "json":
-            return JSON_OUTPUT_FORMAT
-        return TEXT_OUTPUT_FORMAT
-
     def _build_labels_section(self) -> str:
         """Build labels section from config or use default.
 
         Returns:
             Labels section string
         """
+        # If custom labels are provided, use the configured variant formatter
         if self.config.labels:
-            lines = ["Allowed Labels:"]
-            for label in self.config.labels:
-                lines.append(f"- {label}")
-            return "\n".join(lines)
+            formatter = LABEL_FORMAT_VARIANTS[self.config.labels_variant]
+            return formatter(self.config.labels)
+
+        # Otherwise, use the default hardcoded labels component
         return LABELS_COMPONENT
 
     def get_parser(self) -> OutputParser:

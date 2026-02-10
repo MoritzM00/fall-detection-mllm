@@ -1,10 +1,14 @@
 output_format: text
-include_role: true
-include_definitions: false
 cot: false
 cot_start_tag: "<think>"
 cot_end_tag: "</think>"
 model_family: ${model.family}
+
+# Variant selectors
+role_variant: standard
+task_variant: standard
+labels_variant: bulleted
+definitions_variant: null
 
 # Few-shot settings
 num_shots: 5

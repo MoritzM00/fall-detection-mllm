@@ -30,8 +30,6 @@ class TestPromptConfig:
         """Test default configuration values."""
         config = PromptConfig()
         assert config.output_format == "json"
-        assert config.include_role is True
-        assert config.include_definitions is True
         assert config.cot is False
         assert config.cot_start_tag == "<think>"
         assert config.cot_end_tag == "</think>"
@@ -41,12 +39,10 @@ class TestPromptConfig:
         """Test custom configuration values."""
         config = PromptConfig(
             output_format="text",
-            include_role=False,
             cot=True,
             model_family="InternVL",
         )
         assert config.output_format == "text"
-        assert config.include_role is False
         assert config.cot is True
         assert config.model_family == "InternVL"
 
@@ -75,36 +71,66 @@ class TestPromptConfig:
         assert isinstance(config.shot_selection, str)
         assert isinstance(config.exemplar_seed, int)
 
+    def test_default_variant_fields(self):
+        """Test default values for variant selector fields."""
+        config = PromptConfig()
+        assert config.role_variant == "standard"
+        assert config.task_variant == "standard"
+        assert config.labels_variant == "bulleted"
+        assert config.definitions_variant is None
+
+    def test_custom_variant_fields(self):
+        """Test custom values for variant selector fields."""
+        config = PromptConfig(
+            role_variant="specialized",
+            task_variant="extended",
+            labels_variant="comma",
+            definitions_variant="extended",
+        )
+        assert config.role_variant == "specialized"
+        assert config.task_variant == "extended"
+        assert config.labels_variant == "comma"
+        assert config.definitions_variant == "extended"
+
+    def test_variant_fields_none_values(self):
+        """Test that variant fields can be set to None."""
+        config = PromptConfig(
+            role_variant=None,
+            definitions_variant=None,
+        )
+        assert config.role_variant is None
+        assert config.definitions_variant is None
+
 
 class TestPromptBuilder:
     """Tests for PromptBuilder."""
 
     def test_default_prompt(self):
-        """Test building default prompt with all components."""
+        """Test building default prompt with standard components."""
         config = PromptConfig()
         builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
-        # Check that all expected components are present
+        # Check that expected components are present (role yes, definitions no by default)
         assert "Role:" in prompt
         assert "Allowed Labels:" in prompt
-        assert "Definitions & Constraints:" in prompt
         assert "Output Format:" in prompt
         assert '"label": "<class_label>"' in prompt
+        # Definitions not included by default
+        assert "Definitions:" not in prompt
 
     def test_baseline_prompt(self):
         """Test building baseline prompt without role and definitions."""
         config = PromptConfig(
-            include_role=False,
-            include_definitions=False,
+            role_variant=None,
+            definitions_variant=None,
         )
         builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
         # Check that role and definitions are excluded
         assert "Role:" not in prompt
-        assert "Definitions & Constraints:" not in prompt
-        assert "Sequence Rules:" not in prompt
+        assert "Definitions:" not in prompt
 
         # But labels and output format should still be present
         assert "Allowed Labels:" in prompt
@@ -191,6 +217,125 @@ class TestPromptBuilder:
         system_msg = builder.get_system_message()
 
         assert system_msg is None
+
+    # ========================================================================
+    # Variant Selection Tests
+    # ========================================================================
+
+    def test_role_variant_standard(self):
+        """Test standard role variant."""
+        config = PromptConfig(role_variant="standard")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "You are an expert Human Activity Recognition (HAR) specialist." in prompt
+
+    def test_role_variant_specialized(self):
+        """Test specialized role variant."""
+        config = PromptConfig(role_variant="specialized")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "fall detection and post-fall assessment" in prompt
+
+    def test_role_variant_video_specialized(self):
+        """Test video_specialized role variant."""
+        config = PromptConfig(role_variant="video_specialized")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "video analyst specializing in" in prompt
+
+    def test_role_variant_none(self):
+        """Test that role_variant=None omits role section."""
+        config = PromptConfig(role_variant=None)
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Role:" not in prompt
+
+    def test_task_variant_standard(self):
+        """Test standard task variant."""
+        config = PromptConfig(task_variant="standard")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Analyze the video clip and classify the primary action" in prompt
+
+    def test_task_variant_extended(self):
+        """Test extended task variant."""
+        config = PromptConfig(task_variant="extended")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Carefully consider the context, body posture" in prompt
+
+    def test_definitions_variant_standard(self):
+        """Test standard definitions variant."""
+        config = PromptConfig(definitions_variant="standard")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Definitions:" in prompt
+        assert "Fall vs. Lie/Sit:" in prompt
+
+    def test_definitions_variant_extended(self):
+        """Test extended definitions variant."""
+        config = PromptConfig(definitions_variant="extended")
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Definitions & Decision Rules:" in prompt
+        assert "FALL DETECTION (highest priority" in prompt
+
+    def test_definitions_variant_none(self):
+        """Test that definitions_variant=None omits definitions section."""
+        config = PromptConfig(definitions_variant=None)
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Definitions:" not in prompt
+        assert "Definitions & Decision Rules:" not in prompt
+
+    def test_labels_variant_bulleted(self):
+        """Test bulleted labels variant."""
+        config = PromptConfig(labels_variant="bulleted", labels=["walk", "fall", "sit"])
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "Allowed Labels:" in prompt
+        assert "- walk" in prompt
+        assert "- fall" in prompt
+        assert "- sit" in prompt
+
+    def test_labels_variant_comma(self):
+        """Test comma-separated labels variant."""
+        config = PromptConfig(labels_variant="comma", labels=["walk", "fall", "sit"])
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "walk, fall, sit" in prompt
+
+    def test_labels_variant_numbered(self):
+        """Test numbered labels variant."""
+        config = PromptConfig(labels_variant="numbered", labels=["walk", "fall", "sit"])
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "1. walk" in prompt
+        assert "2. fall" in prompt
+        assert "3. sit" in prompt
+
+    def test_labels_variant_grouped(self):
+        """Test grouped labels variant."""
+        config = PromptConfig(
+            labels_variant="grouped", labels=["walk", "fall", "sit_down", "kneel_down", "crawl"]
+        )
+        builder = PromptBuilder(config, LABEL2IDX)
+        prompt = builder.build_prompt()
+
+        assert "* Core:" in prompt
+        assert "* Extended (Rare):" in prompt
 
 
 class TestJSONOutputParser:
