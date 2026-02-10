@@ -87,6 +87,15 @@ def main(cfg: DictConfig):
         prefetch_factor=prefetch_factor,
     )
 
+    # Build conversation builder (handles both zero-shot and few-shot)
+    conversation_builder = create_conversation_builder(cfg, label2idx)
+    parser = conversation_builder.parser
+
+    logger.info(
+        f"Mode: {cfg.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
+    )
+    logger.info(f"Prompt:\n{conversation_builder.user_prompt}")
+
     if cfg.model.family.lower() == "molmo":
         raise NotImplementedError("vLLM inference is not yet supported for Molmo models.")
     checkpoint_path = resolve_model_path_from_config(cfg.model)
@@ -97,15 +106,6 @@ def main(cfg: DictConfig):
     # Initialize vLLM engine and sampling params
     llm = create_llm_engine(cfg)
     sampling_params = create_sampling_params(cfg)
-
-    # Build conversation builder (handles both zero-shot and few-shot)
-    conversation_builder = create_conversation_builder(cfg, label2idx)
-    parser = conversation_builder.parser
-
-    logger.info(
-        f"Mode: {cfg.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
-    )
-    logger.info(f"Prompt:\n{conversation_builder.user_prompt}")
 
     logger.info("Generating predictions...")
 
