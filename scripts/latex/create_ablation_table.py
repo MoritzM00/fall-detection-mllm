@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 # CONFIGURATION
 # ==========================================
 ENTITY = "moritzm00"
-PROJECT = "fall-detection-zeroshot-v2"
+PROJECT = "prompt-ablations"
 
 DATASET = "OOPS"
 SPLIT = "cs"
@@ -61,7 +61,6 @@ def fetch_ablation_runs(api, model_tag):
                 {"tags": ABLATION_TAG},
                 {"tags": "prompt"},
                 {"tags": model_tag},
-                {"config.data.mode": "test"},
             ]
         },
         "order": "-created_at",  # newest first
@@ -78,8 +77,16 @@ def fetch_ablation_runs(api, model_tag):
         prompt_config = config.get("prompt", {})
 
         output_format = prompt_config.get("output_format", "text")
-        include_role = prompt_config.get("include_role", False)
-        include_definitions = prompt_config.get("include_definitions", False)
+        include_role = prompt_config.get("role_variant")
+        include_definitions = prompt_config.get("definitions_variant")
+        if include_role is None:
+            include_role = False
+        else:
+            include_role = True
+        if include_definitions is None:
+            include_definitions = False
+        else:
+            include_definitions = True
 
         key = (output_format, include_role, include_definitions)
 

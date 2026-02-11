@@ -96,8 +96,6 @@ def main(cfg: DictConfig):
     )
     logger.info(f"Prompt:\n{conversation_builder.user_prompt}")
 
-    if cfg.model.family.lower() == "molmo":
-        raise NotImplementedError("vLLM inference is not yet supported for Molmo models.")
     checkpoint_path = resolve_model_path_from_config(cfg.model)
     logger.info(f"Loading model and processor: {checkpoint_path}")
     processor = AutoProcessor.from_pretrained(

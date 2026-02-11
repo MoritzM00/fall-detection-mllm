@@ -9,22 +9,22 @@ PROJECT = "fall-detection-zeroshot-v3"
 # Mapping run IDs to pretty display names (sorted by model size)
 MODEL_NAMES = {
     # 2B models
-    "nyprnq0t": "InternVL3.5-2B",
-    "u171fyxj": "Qwen3-VL-2B",
+    "zenfjvo0": "InternVL3.5-2B",
+    "ygm0hz9l": "Qwen3-VL-2B",
     # 4B models
-    "le9q8a04": "InternVL3.5-4B",
-    "wm6hsn7j": "Qwen3-VL-4B",
+    "wxi2br23": "InternVL3.5-4B",
+    "zf5k1ff1": "Qwen3-VL-4B",
     # 8B models
-    "dofkkc62": "InternVL3.5-8B",
-    "baqlft89": "Qwen3-VL-8B",
-    "oujp2za8": "Keye-VL-1.5-8B",
+    "gwuwabdq": "InternVL3.5-8B",
+    "6vn8a27q": "Qwen3-VL-8B",
+    "gbwdogto": "Keye-VL-1.5-8B",
     # 14B model
-    "rprpexpt": "InternVL3.5-14B",
+    "f6cm7jwy": "InternVL3.5-14B",
     # 30B / 32B / 38B models
-    "d9z0x4zi": "InternVL3.5-30B-A3B",
-    "sd7o4rli": "Qwen3-VL-30B-A3B",
-    "6kone1tn": "Qwen3-VL-32B",
-    "wycr9tin": "InternVL3.5-38B",
+    "b706gv8u": "InternVL3.5-30B-A3B",
+    "bqhknra3": "Qwen3-VL-30B-A3B",
+    "s4a6e1u2": "InternVL3.5-38B",
+    "y72n8y63": "Qwen3-VL-32B",
 }
 
 MODEL_NAMES_COT = {
@@ -88,26 +88,23 @@ def format_value(val, col_index, stats):
     if val is None:
         return "--"
 
-    # Round to 1 decimal place first to ensure strict equality works with display values
-    # (e.g., 96.28 becomes 96.3)
     val_rounded = round(val, 1)
     formatted_str = f"{val_rounded:.1f}"
 
     max_val = stats[col_index]["max"]
     second_val = stats[col_index]["second"]
 
-    # Apply bold/underline formatting
-    if val_rounded == max_val:
+    # Compare at full precision to break ties between values that display the same
+    if val == max_val:
         formatted_str = f"\\textbf{{{formatted_str}}}"
-    elif val_rounded == second_val:
+    elif val == second_val:
         formatted_str = f"\\underline{{{formatted_str}}}"
 
     # Apply heatmap coloring for specific columns
     if col_index in HEATMAP_COLUMNS:
         min_val = stats[col_index]["min"]
-        # Compute level 0-100 based on position in range
         if max_val != min_val:
-            level = int(round((val_rounded - min_val) / (max_val - min_val) * 100))
+            level = int(round((val - min_val) / (max_val - min_val) * 100))
         else:
             level = 100
         formatted_str = f"\\gc{{{level}}}{{{formatted_str}}}"
@@ -144,10 +141,7 @@ def generate_latex():
         # Extract all valid values for this column from all models
         values = [row["metrics"][i] for row in all_rows if row["metrics"][i] is not None]
 
-        # Round them to 1 decimal place to match display logic
-        values = [round(v, 1) for v in values]
-
-        # Get unique values sorted descending
+        # Get unique values sorted descending (full precision for accurate ranking)
         unique_vals = sorted(list(set(values)), reverse=True)
 
         stats = {

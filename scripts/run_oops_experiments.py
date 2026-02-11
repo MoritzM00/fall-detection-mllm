@@ -40,6 +40,8 @@ import time
 # Standard models (non-MoE)
 INTERNVL_STANDARD = ["2B", "4B", "8B", "14B", "38B"]
 QWEN_STANDARD = ["2B", "4B", "8B", "32B"]
+MOLMO_STANDARD = ["2B", "4B"]
+KEYEVL_STANDARD = ["8B"]  # remove do_resize from vllm config before running keyevl experiments
 
 # MoE models: {total_params: active_params}
 INTERNVL_MOE: dict[str, str] = {
@@ -119,6 +121,10 @@ def get_params_for_model(model: str) -> list[str]:
         return INTERNVL_STANDARD + list(INTERNVL_MOE.keys())
     elif model == "qwenvl":
         return QWEN_STANDARD + list(QWEN_MOE.keys())
+    elif model == "molmo":
+        return MOLMO_STANDARD
+    elif model == "keyevl":
+        return KEYEVL_STANDARD
     else:
         raise ValueError(f"Unknown model: {model}")
 
@@ -241,7 +247,7 @@ Examples:
     parser.add_argument(
         "--model",
         nargs="+",
-        choices=["internvl", "qwenvl"],
+        choices=["internvl", "qwenvl", "molmo", "keyevl"],
         required=True,
         help="Model families to run",
     )
