@@ -94,11 +94,7 @@ class GenericVideoDataset(Dataset):
             except Exception as e:
                 retries += 1
                 if retries >= self.max_retries:
-                    video_path = self.path_format.format(
-                        video_root=self.video_root, filename=self.paths[idx]
-                    )
-                    logging.error(f"Error loading video {video_path} at index {idx}: {str(e)}")
-                    raise e
+                    logging.error(f"Error loading video at index {idx}: {str(e)}")
 
         raise RuntimeError(f"Failed to load a valid video after {self.max_retries} attempts")
 
