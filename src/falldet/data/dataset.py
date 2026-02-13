@@ -152,11 +152,16 @@ class GenericVideoDataset(Dataset):
 
                 # random start (in frames) for augmentation
                 begin_frame = self.get_random_offset(frame_cnt, 1, idx, fps) if frame_cnt else 0
+                logger.debug(f"start decoding at frame {begin_frame}")
 
                 # Calculate desired timestamps
                 desired_timestamps = [
                     (begin_frame / fps) + n / self.target_fps for n in range(self.vid_frame_count)
                 ]
+                logger.debug(
+                    f"start timestamp: {desired_timestamps[0]:.3f}s, end timestamp: {desired_timestamps[-1]:.3f}s"
+                )
+
                 desired_pts = [int(ts / tb) for ts in desired_timestamps]
 
                 # Try seeking to just before first desired frame
@@ -165,6 +170,7 @@ class GenericVideoDataset(Dataset):
                         container.seek(desired_pts[0], any_frame=False, backward=True, stream=vs)
                     except av.error.FFmpegError:
                         # Fallback if no keyframe found
+                        logger.debug(f"{idx}: seeking failed, falling back to start")
                         container.seek(0, stream=vs)
 
                 frames, want_idx, prev = [], 0, None

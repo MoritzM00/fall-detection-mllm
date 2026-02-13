@@ -1,4 +1,5 @@
 import logging
+import math
 from collections import OrderedDict
 
 import numpy as np
@@ -7,6 +8,8 @@ import torch
 
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.hf_utils import resolve_annotations_file, resolve_split_file
+
+logger = logging.getLogger(__name__)
 
 label2idx = {
     "walk": 0,
@@ -191,12 +194,20 @@ class OmnifallVideoDataset(GenericVideoDataset):
         Uses index-based seeding for reproducibility across DataLoader workers.
         """
         segment = self.video_segments[idx]
-        segment_start_frame = int(segment["start"] * fps)
+        # Use ceil for start to ensure we don't start before segment boundary
+        segment_start_frame = math.ceil(segment["start"] * fps)
         segment_end_frame = int(segment["end"] * fps)
         segment_frames = segment_end_frame - segment_start_frame
 
-        required_frames = self.vid_frame_count * target_interval
-
+        # Compute temporal span of the clip in native frames
+        # (vid_frame_count - 1) / target_fps gives the clip duration in seconds
+        # Multiply by native fps to get the span in native frames
+        clip_duration_sec = (self.vid_frame_count - 1) / self.target_fps
+        required_frames = int(clip_duration_sec * fps) + 1  # +1 for fence-post
+        logger.debug(
+            f"Segment {idx}: requesting {required_frames} out of {segment_end_frame - segment_start_frame} frames"
+        )
+        logger.debug(f"Segment starts at {segment['start']} and ends at {segment['end']} ")
         if segment_frames <= required_frames:
             # Segment is too short, start from beginning of segment
             return segment_start_frame
@@ -210,6 +221,9 @@ class OmnifallVideoDataset(GenericVideoDataset):
             else:
                 # No seed: truly random offset each time (for training augmentation)
                 random_offset = np.random.randint(0, int(max_offset) + 1)
+
+            logger.debug(f"Segment {idx}: max_offset={max_offset}, random_offset={random_offset}")
+
             return segment_start_frame + random_offset
 
     def load_item(self, idx):
