@@ -3,19 +3,13 @@
 # Debug experiment - quick testing with small sample size
 defaults:
   - /dataset/omnifall/video@dataset: oops
+  - override /vllm: debug
 
 # Limit to small number of samples for fast testing
 num_samples: 10
 
 batch_size: 10
 num_workers: 0
-
-vllm:
-  use_mock: false  # Enable mock mode for debugging without GPU
-  tensor_parallel_size: 1
-  # faster warm up times for debugging
-  skip_mm_profiling: true
-  enforce_eager: true
 
 log_videos: 0
 wandb:

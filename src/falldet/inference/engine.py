@@ -57,6 +57,16 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
 
     enable_expert_parallel = cfg.vllm.enable_expert_parallel or is_moe_model(cfg.model)
 
+    # for few-shot prompting, increase mm_processor_cache_gb and enable prefix_caching
+    if cfg.prompt.num_shots > 0:
+        enable_prefix_caching = True
+        mm_processor_cache_gb = max(
+            4, cfg.vllm.mm_processor_cache_gb
+        )  # ensure at least 4GB cache for fewshot
+    else:
+        enable_prefix_caching = cfg.vllm.enable_prefix_caching
+        mm_processor_cache_gb = cfg.vllm.mm_processor_cache_gb
+
     # Compute dynamic video limit based on num_shots
     num_shots = cfg.prompt.get("num_shots", 0)
     video_limit = num_shots + 1
@@ -71,7 +81,7 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
         model=checkpoint_path,
         tensor_parallel_size=tensor_parallel_size,
         mm_encoder_tp_mode=cfg.vllm.mm_encoder_tp_mode,
-        mm_processor_cache_gb=cfg.vllm.mm_processor_cache_gb,
+        mm_processor_cache_gb=mm_processor_cache_gb,
         seed=cfg.vllm.seed,
         dtype=cfg.vllm.dtype,
         gpu_memory_utilization=cfg.vllm.gpu_memory_utilization,
@@ -84,7 +94,7 @@ def create_llm_engine(cfg: DictConfig) -> "LLM":
         enforce_eager=cfg.vllm.enforce_eager,
         skip_mm_profiling=cfg.vllm.skip_mm_profiling,
         async_scheduling=cfg.vllm.async_scheduling,
-        enable_prefix_caching=cfg.vllm.get("enable_prefix_caching", True),
+        enable_prefix_caching=enable_prefix_caching,
     )
 
     # Add CoT flag and output format for mock mode

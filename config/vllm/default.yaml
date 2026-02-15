@@ -1,7 +1,7 @@
 use_mock: false  # Set to true to use mock vLLM for faster debugging
 
 mm_encoder_tp_mode: "data"
-mm_processor_cache_gb: 0  # Cache for processed multimodal inputs (0 = disabled)
+mm_processor_cache_gb: 0  # only useful in fewshot setting
 seed: 0
 dtype: "bfloat16"
 gpu_memory_utilization: 0.9
@@ -12,7 +12,7 @@ trust_remote_code: true
 async_scheduling: true
 skip_mm_profiling: false
 
-enable_prefix_caching: true  # Enable automatic prefix caching for shared prompts
+enable_prefix_caching: false  # only enable this for fewshot
 
 mm_processor_kwargs:
   do_sample_frames: false
