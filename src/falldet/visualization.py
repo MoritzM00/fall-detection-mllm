@@ -1,6 +1,10 @@
+import logging
+
 import torch
 import torchvision.utils as vutils
 from matplotlib import pyplot as plt
+
+logger = logging.getLogger(__name__)
 
 
 def video_to_image_grid(
@@ -52,7 +56,9 @@ def visualize_video(
         assert dataset is not None and idx is not None, (
             "Must provide either video tensor or dataset and index"
         )
-        video = dataset[idx]["video"]  # shape (T, C, H, W)
+        segment = dataset[idx]
+        logger.info(f"Label: {segment['label_str']}")
+        video = segment["video"]  # shape (T, C, H, W)
     else:
         assert isinstance(video, torch.Tensor) and video.ndim == 4, (
             "Video must be a tensor of shape (T, C, H, W)"
