@@ -66,16 +66,12 @@ We use the [vLLM](https://docs.vllm.ai/en/latest/) inference engine, optimized f
 1. Install Conda
 2. Run
 ```shell
-conda env create -f environment.yml
+make env
 conda activate cu129_vllm15
 ```
-3. Install additional dependencies using uv (installed inside colab environment)
+3. Install additional dependencies using uv (installed inside conda environment)
 ```shell
-uv pip install vllm==0.15.1 --torch-backend=cu129
-MAX_JOBS=4 uv pip install flash-attn==2.8.3 --no-build-isolation
-uv pip install -r requirements.txt
-uv pip install -r requirements-dev.txt
-uv pip install -e .
+make install
 ```
 
 At the time of writing, vLLM is compiled for cu129 by default. If you need a different version of

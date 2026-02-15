@@ -42,6 +42,13 @@ install:
 	uv pip install -e .
 	@echo "Installation complete!"
 
+install_new:
+	uv pip install vllm --torch-backend=cu129
+	MAX_JOBS=$(MAX_JOBS) uv pip install flash-attn --no-build-isolation
+	uv pip install accelerate json-repair jupyter matplotlib seaborn pandas scikit-learn rich plotext hydra-core "wandb[media]" pydantic torchcodec==0.9.0 decord torch-c-dlpack-ext numpy
+	uv pip install -r requirements-dev.txt
+	uv pip install -e .
+
 # Run tests
 test:
 	@echo "Running pytest..."
