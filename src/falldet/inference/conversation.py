@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from typing import Any, cast
 
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -276,7 +277,7 @@ def create_conversation_builder(
     from falldet.data.exemplar_sampler import ExemplarSampler
     from falldet.data.video_dataset_factory import get_video_datasets
 
-    prompt_dict = OmegaConf.to_container(cfg.prompt, resolve=True)
+    prompt_dict = cast(dict[str, Any], OmegaConf.to_container(cfg.prompt, resolve=True))
     prompt_config = PromptConfig(labels=list(label2idx.keys()), **prompt_dict)
 
     # Sample exemplars if few-shot mode
@@ -291,6 +292,7 @@ def create_conversation_builder(
             seed=cfg.data.get("seed"),
             return_individual=True,
         )
+        train_datasets = cast(dict[str, Any], train_datasets)
         train_dataset = list(train_datasets["individual"].values())[0]
 
         sampler = ExemplarSampler(

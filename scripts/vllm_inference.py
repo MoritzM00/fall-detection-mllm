@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -25,7 +26,18 @@ from falldet.utils.logging import reconfigure_logging_after_wandb, setup_logging
 from falldet.utils.predictions import save_predictions_jsonl
 from falldet.utils.wandb import initialize_run_from_config
 
+if TYPE_CHECKING:
+    from logging import FileHandler
+
+    from rich.console import Console
+    from rich.logging import RichHandler
+
 logger = logging.getLogger(__name__)
+
+# Module-level globals set in hydra_main, used in main
+console: "Console | None" = None
+rich_handler: "RichHandler | None" = None
+file_handler: "FileHandler | None" = None
 
 
 def main(cfg: DictConfig):
@@ -43,6 +55,7 @@ def main(cfg: DictConfig):
 
     # Initialize Weights & Biases
     run = initialize_run_from_config(cfg)
+    assert rich_handler is not None and file_handler is not None
     reconfigure_logging_after_wandb(rich_handler, file_handler)
 
     multi_dataset = get_video_datasets(
@@ -55,6 +68,8 @@ def main(cfg: DictConfig):
         max_size=cfg.data.max_size,
         seed=cfg.data.seed,
     )
+    assert isinstance(multi_dataset, dict)
+    multi_dataset = cast(dict[str, Any], multi_dataset)
     for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference
         # we probably need to loop over datasets and aggregate predictions for metrics computation
@@ -166,12 +181,14 @@ def main(cfg: DictConfig):
         # Get wandb run ID if available
         wandb_run_id = run.id if run else None
 
+        config = OmegaConf.to_container(cfg, resolve=True)
+        assert isinstance(config, dict)
         save_predictions_jsonl(
             output_path=predictions_file,
             model_name=model_name,
             dataset_name=dataset_name,
             predictions=predictions,
-            config=OmegaConf.to_container(cfg, resolve=True),
+            config=config,
             wandb_run_id=wandb_run_id,
         )
         run.save(predictions_file.as_posix())

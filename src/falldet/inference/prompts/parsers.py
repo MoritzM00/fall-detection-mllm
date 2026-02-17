@@ -43,7 +43,7 @@ class OutputParser(Protocol):
 class JSONOutputParser:
     """Parser for JSON-formatted outputs."""
 
-    def __init__(self, label2idx: dict):
+    def __init__(self, label2idx: dict[str, int]):
         """Initialize JSON parser.
 
         Args:
@@ -62,6 +62,9 @@ class JSONOutputParser:
         """
         try:
             json_obj = json_repair.loads(text)
+            if not isinstance(json_obj, dict):
+                logger.error(f"Expected dict from JSON, got {type(json_obj).__name__}: {text}")
+                return ParseResult(label="other", reasoning=None, raw_text=text)
             predicted_label = json_obj.get("label", "other")
 
             # Validate that the label exists in label2idx
@@ -84,7 +87,7 @@ class JSONOutputParser:
 class KeywordOutputParser:
     """Parser for plain text outputs using keyword matching."""
 
-    def __init__(self, label2idx: dict):
+    def __init__(self, label2idx: dict[str, int]):
         """Initialize keyword parser.
 
         Args:
@@ -107,7 +110,7 @@ class KeywordOutputParser:
         text_lower = text.lower()
 
         # Sort labels by length (longest first) to match "sit_down" before "sitting"
-        sorted_labels = sorted(self.label2idx.keys(), key=len, reverse=True)
+        sorted_labels: list[str] = sorted(self.label2idx.keys(), key=lambda s: len(s), reverse=True)
 
         for label in sorted_labels:
             # Create multiple patterns to try
@@ -163,7 +166,7 @@ class CoTOutputParser:
 
     def __init__(
         self,
-        label2idx: dict,
+        label2idx: dict[str, int],
         answer_parser: OutputParser,
         start_tag: str = "<think>",
         end_tag: str = "</think>",
