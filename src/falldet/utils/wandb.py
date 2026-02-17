@@ -6,25 +6,25 @@ from typing import Any
 
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
 
 import wandb
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
+from falldet.schemas import InferenceConfig
 
 logger = logging.getLogger(__name__)
 
 
-def initialize_run_from_config(cfg: DictConfig):
-    wandb_mode = cfg.get("wandb", {}).get("mode", "online")
+def initialize_run_from_config(config: InferenceConfig):
+    wandb_mode = config.wandb.mode
     logger.info(f"Initializing W&B in {wandb_mode} mode")
-    name, tags = create_name_and_tags_from_config(cfg)
+    name, tags = create_name_and_tags_from_config(config)
     run = wandb.init(
-        project=cfg.wandb.project,
+        project=config.wandb.project,
         name=name,
         tags=tags,
-        config=OmegaConf.to_container(cfg, resolve=True),
+        config=config.model_dump(),
         mode=wandb_mode,
     )
     logger.info(f"W&B run initialized with name: {run.name}, id: {run.id}")
@@ -32,24 +32,24 @@ def initialize_run_from_config(cfg: DictConfig):
     return run
 
 
-def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
+def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list[str]]:
     """Create a W&B run name and tags based on the configuration.
 
     Args:
-        cfg (DictConfig): Configuration dictionary.
+        config: Validated inference configuration.
 
     Returns:
         tuple: (name, tags) where name is a string or None, and tags is a list of strings.
     """  # Create a descriptive run name
-    if cfg.wandb.get("name", None):
+    if config.wandb.name:
         # Use name from config if available
-        base_name = cfg.wandb.name
+        base_name = config.wandb.name
     else:
         # Create name from config parameters
-        model_info = resolve_model_name_from_config(cfg.model)
+        model_info = resolve_model_name_from_config(config.model)
 
-        frame_count = cfg.get("num_frames", None)
-        model_fps = cfg.get("model_fps", None)
+        frame_count = config.num_frames
+        model_fps = config.model_fps
 
         dataset_info = f"F{frame_count}@{model_fps}"
         base_name = f"{model_info}-{dataset_info}"
@@ -58,21 +58,17 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
     run_name = f"{base_name} {wandb.util.generate_id()}"
 
     # tags contain info about the experiment, dataset and model (highlevel)
-    tags = cfg.wandb.get("tags", [])
-    if tags is None:
-        tags = []
+    tags = config.wandb.tags if config.wandb.tags else []
 
-    # name is inside cfg.dataset.video_dataset[i].name
-    for dataset_cfg in cfg.dataset.get("video_datasets", []):
-        dataset_name = dataset_cfg.get("name", None)
-        if dataset_name is not None:
-            tags.append(dataset_name)
+    # name is inside config.dataset.video_datasets[i].name
+    for dataset_item in config.dataset.video_datasets:
+        tags.append(dataset_item.name)
 
     # Use model family from config
-    model_family = cfg.model.get("family", resolve_model_name_from_config(cfg.model).split("-")[0])
+    model_family = config.model.family
     tags.append(model_family)
 
-    if cfg.get("cot", False):
+    if config.prompt.cot:
         tags.append("cot")
 
     tags = [tag.lower() for tag in tags]

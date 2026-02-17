@@ -2,31 +2,31 @@
 
 import logging
 
-from omegaconf import DictConfig
+from falldet.schemas import ModelConfig
 
 logger = logging.getLogger(__name__)
 
 
-def is_moe_model(model_config: DictConfig) -> bool:
+def is_moe_model(model_config: ModelConfig) -> bool:
     """
     Determine if the model is a Mixture of Experts (MoE) model based on config.
 
     Args:
-        model_config: Model configuration (DictConfig or dict-like object) with fields:
+        model_config: Model configuration with fields:
             - active_params: Active params for MoE models (e.g., "A3B"), None for standard
 
     Returns:
         True if the model is an MoE model, False otherwise.
     """
-    return model_config.get("active_params") is not None
+    return model_config.active_params is not None
 
 
-def resolve_model_name_from_config(model_config: DictConfig) -> str:
+def resolve_model_name_from_config(model_config: ModelConfig) -> str:
     """
     Resolve the model name from a model config.
 
     Args:
-        model_config: Model configuration (DictConfig or dict-like object) with fields:
+        model_config: Model configuration with fields:
             - family: Model family (e.g., "Qwen", "InternVL")
             - version: Model version (e.g., "3", "3_5")
             - variant: Model variant (e.g., "Instruct", "Thinking") or None
@@ -38,9 +38,9 @@ def resolve_model_name_from_config(model_config: DictConfig) -> str:
     """
     family = model_config.family
     version = model_config.version
-    variant = model_config.get("variant")
+    variant = model_config.variant
     params = model_config.params
-    active_params = model_config.get("active_params")
+    active_params = model_config.active_params
 
     # Normalize variant to title case (e.g., "instruct" -> "Instruct")
     if variant:
@@ -65,12 +65,12 @@ def resolve_model_name_from_config(model_config: DictConfig) -> str:
     return path
 
 
-def resolve_model_path_from_config(model_config: DictConfig) -> str:
+def resolve_model_path_from_config(model_config: ModelConfig) -> str:
     """
     Resolve the HuggingFace model checkpoint path from a model config.
 
     Args:
-        model_config: Model configuration (DictConfig or dict-like object) with fields:
+        model_config: Model configuration with fields:
             - family: Model family (e.g., "Qwen", "InternVL")
             - version: Model version (e.g., "3", "3_5")
             - variant: Model variant (e.g., "Instruct", "Thinking") or None
