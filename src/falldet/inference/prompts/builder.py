@@ -1,5 +1,7 @@
 """Prompt builder for assembling video action recognition prompts."""
 
+from falldet.schemas import PromptConfig
+
 from .components import (
     COT_INSTRUCTION,
     DEFINITIONS_VARIANTS,
@@ -10,7 +12,6 @@ from .components import (
     ROLE_VARIANTS,
     TASK_VARIANTS,
 )
-from .config import PromptConfig
 from .parsers import CoTOutputParser, JSONOutputParser, KeywordOutputParser, OutputParser
 
 

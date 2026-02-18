@@ -7,8 +7,8 @@ from falldet.inference.conversation import (
     ConversationData,
     VideoWithMetadata,
 )
-from falldet.inference.prompts import PromptConfig
 from falldet.inference.prompts.parsers import JSONOutputParser, KeywordOutputParser
+from falldet.schemas import PromptConfig
 
 # Test data
 LABEL2IDX = {

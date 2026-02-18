@@ -8,8 +8,8 @@ from falldet.inference.prompts import (
     JSONOutputParser,
     KeywordOutputParser,
     PromptBuilder,
-    PromptConfig,
 )
+from falldet.schemas import PromptConfig
 
 # Test data
 LABEL2IDX = {

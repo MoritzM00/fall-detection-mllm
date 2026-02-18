@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import torch
 
-from falldet.schemas import InferenceConfig
+from falldet.schemas import InferenceConfig, PromptConfig
 
-from .prompts import PromptBuilder, PromptConfig
+from .prompts import PromptBuilder
 from .prompts.components import EXEMPLAR_USER_PROMPT
 
 logger = logging.getLogger(__name__)
