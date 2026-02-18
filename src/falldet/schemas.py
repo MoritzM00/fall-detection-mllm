@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseConfig(BaseModel):
@@ -137,17 +137,59 @@ class ModelConfig(BaseConfig):
 
 
 class SamplingConfig(BaseConfig):
-    """Sampling / decoding configuration."""
+    """Sampling / decoding configuration for vLLM text generation."""
 
-    temperature: float = 0.0
-    max_tokens: int = 512
-    top_k: int = -1
-    top_p: float = 1.0
-    presence_penalty: float = 0.0
-    frequency_penalty: float = 0.0
-    repetition_penalty: float = 1.0
-    seed: int | None = None
-    stop_token_ids: list[int] | None = None
+    temperature: float = Field(
+        0.0,
+        ge=0.0,
+        description="Controls randomness. 0 = greedy/deterministic, higher = more random.",
+    )
+    max_tokens: int = Field(
+        512,
+        gt=0,
+        description="Maximum number of tokens to generate.",
+    )
+    top_k: int = Field(
+        0,
+        ge=-1,
+        description="Top-k filtering: only sample from the k most likely tokens. "
+        "-1 and 0 disables top-k filtering (consider all tokens).",
+    )
+    top_p: float = Field(
+        1.0,
+        gt=0.0,
+        le=1.0,
+        description="Nucleus sampling: sample from smallest set of tokens with "
+        "cumulative probability >= top_p. 1.0 disables nucleus sampling.",
+    )
+    presence_penalty: float = Field(
+        0.0,
+        le=2.0,
+        ge=-2.0,
+        description="Additive penalty for tokens that have already appeared. "
+        "Positive values discourage repetition. Typically in range [-2, 2].",
+    )
+    frequency_penalty: float = Field(
+        0.0,
+        le=2.0,
+        ge=-2.0,
+        description="Additive penalty proportional to token frequency. "
+        "Positive values discourage frequent tokens. Typically in range [-2, 2].",
+    )
+    repetition_penalty: float = Field(
+        1.0,
+        ge=1.0,
+        description="Multiplicative penalty for repeated tokens. "
+        "1.0 = no penalty, >1.0 = penalize repetition.",
+    )
+    seed: int | None = Field(
+        None,
+        description="Random seed for reproducibility. None = random seed each run.",
+    )
+    stop_token_ids: list[int] | None = Field(
+        None,
+        description="Token IDs that trigger generation stop.",
+    )
 
 
 class DataConfig(BaseConfig):
