@@ -1,9 +1,9 @@
 """Tests for configuration utility functions."""
 
 import pytest
-from omegaconf import OmegaConf
 
 from falldet.config import resolve_model_name_from_config, resolve_model_path_from_config
+from falldet.schemas import ModelConfig
 
 # --- Fixtures ---
 
@@ -23,15 +23,13 @@ def make_model_config():
         # Auto-resolve org from family if not provided
         if org is None:
             org = {"Qwen": "Qwen", "InternVL": "OpenGVLab", "Molmo": "allenai"}.get(family, family)
-        return OmegaConf.create(
-            {
-                "org": org,
-                "family": family,
-                "version": version,
-                "variant": variant,
-                "params": params,
-                "active_params": active_params,
-            }
+        return ModelConfig(
+            org=org,
+            family=family,
+            version=version,
+            variant=variant,
+            params=params,
+            active_params=active_params,
         )
 
     return _make_config
@@ -106,24 +104,6 @@ class TestResolveModelNameFromConfig:
             family="InternVL", version="3_5", variant=None, params="241B", active_params="A28B"
         )
         assert resolve_model_name_from_config(config) == "InternVL3_5-241B-A28B-HF"
-
-    def test_dict_input_requires_omegaconf(self, make_model_config):
-        """Test that plain dict input must be wrapped in OmegaConf."""
-        config = {
-            "org": "Qwen",
-            "family": "Qwen",
-            "version": "3",
-            "variant": "Instruct",
-            "params": "4B",
-            "active_params": None,
-        }
-        # Plain dicts don't work - must use OmegaConf.create()
-        with pytest.raises(AttributeError):
-            resolve_model_name_from_config(config)
-
-        # Wrapped dict works
-        wrapped = OmegaConf.create(config)
-        assert resolve_model_name_from_config(wrapped) == "Qwen3-VL-4B-Instruct"
 
     def test_variant_lowercase_normalized(self, make_model_config):
         """Test that lowercase variant is normalized to title case."""

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
@@ -22,6 +22,7 @@ from falldet.inference import (
     create_llm_engine,
     create_sampling_params,
 )
+from falldet.schemas import from_dictconfig
 from falldet.utils.logging import reconfigure_logging_after_wandb, setup_logging
 from falldet.utils.predictions import save_predictions_jsonl
 from falldet.utils.wandb import initialize_run_from_config
@@ -47,26 +48,22 @@ def main(cfg: DictConfig):
     Args:
         cfg: Hydra configuration containing:
     """
-    # Resolve all OmegaConf interpolations once at the beginning
-    OmegaConf.resolve(cfg)
+    config = from_dictconfig(cfg)
+    logger.info(config.model_dump_json(indent=2))
 
-    logger.info("Configuration:")
-    logger.info(f"\n{OmegaConf.to_yaml(cfg)}")
-
-    # Initialize Weights & Biases
-    run = initialize_run_from_config(cfg)
+    run = initialize_run_from_config(config)
     assert rich_handler is not None and file_handler is not None
     reconfigure_logging_after_wandb(rich_handler, file_handler)
 
     multi_dataset = get_video_datasets(
-        cfg=cfg,
-        mode=cfg.data.mode,
+        config=config,
+        mode=config.data.mode,
         run=run,
         return_individual=True,
-        split=cfg.data.split,
-        size=cfg.data.size,
-        max_size=cfg.data.max_size,
-        seed=cfg.data.seed,
+        split=config.data.split,
+        size=config.data.size,
+        max_size=config.data.max_size,
+        seed=config.data.seed,
     )
     assert isinstance(multi_dataset, dict)
     multi_dataset = cast(dict[str, Any], multi_dataset)
@@ -82,19 +79,19 @@ def main(cfg: DictConfig):
         break
 
     # Limit dataset size if specified
-    if cfg.get("num_samples") is not None:
-        dataset = Subset(dataset, range(min(cfg.num_samples, len(dataset))))
+    if config.num_samples is not None:
+        dataset = Subset(dataset, range(min(config.num_samples, len(dataset))))
 
     logger.info(
-        f"Processing {len(dataset)} samples with batch_size={cfg.batch_size}, "
-        f"num_workers={cfg.num_workers}"
+        f"Processing {len(dataset)} samples with batch_size={config.batch_size}, "
+        f"num_workers={config.num_workers}"
     )
     # collate fn should be a no-op (just a list of dict as return), pytorch collates over keys by default
-    prefetch_factor = cfg.prefetch_factor if cfg.num_workers > 0 else None
+    prefetch_factor = config.prefetch_factor if config.num_workers > 0 else None
     dataloader = DataLoader(
         dataset,
-        batch_size=cfg.batch_size,
-        num_workers=cfg.num_workers,
+        batch_size=config.batch_size,
+        num_workers=config.num_workers,
         collate_fn=lambda batch: batch,
         shuffle=False,
         pin_memory=True,
@@ -102,22 +99,22 @@ def main(cfg: DictConfig):
     )
 
     # Build conversation builder (handles both zero-shot and few-shot)
-    conversation_builder = create_conversation_builder(cfg, label2idx)
+    conversation_builder = create_conversation_builder(config, label2idx)
     parser = conversation_builder.parser
 
     logger.info(
-        f"Mode: {cfg.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
+        f"Mode: {config.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
     )
     logger.info(f"Prompt:\n{conversation_builder.user_prompt}")
 
-    checkpoint_path = resolve_model_path_from_config(cfg.model)
+    checkpoint_path = resolve_model_path_from_config(config.model)
     logger.info(f"Loading model and processor: {checkpoint_path}")
     processor = AutoProcessor.from_pretrained(
-        checkpoint_path, trust_remote_code=cfg.vllm.trust_remote_code
+        checkpoint_path, trust_remote_code=config.vllm.trust_remote_code
     )
     # Initialize vLLM engine and sampling params
-    llm = create_llm_engine(cfg)
-    sampling_params = create_sampling_params(cfg)
+    llm = create_llm_engine(config)
+    sampling_params = create_sampling_params(config)
 
     logger.info("Generating predictions...")
 
@@ -169,26 +166,24 @@ def main(cfg: DictConfig):
 
     # Save predictions if enabled
     predictions_file = None
-    if cfg.get("save_predictions", True):
-        predictions_dir = Path(cfg.output_dir) / "predictions"
+    if config.save_predictions:
+        predictions_dir = Path(config.output_dir) / "predictions"
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
         # Add timestamp to filename to avoid overwriting previous runs
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        model_name = resolve_model_name_from_config(cfg.model)
+        model_name = resolve_model_name_from_config(config.model)
         predictions_file = predictions_dir / f"{model_name}_{dataset_name}_{timestamp}.jsonl"
 
         # Get wandb run ID if available
         wandb_run_id = run.id if run else None
 
-        config = OmegaConf.to_container(cfg, resolve=True)
-        assert isinstance(config, dict)
         save_predictions_jsonl(
             output_path=predictions_file,
             model_name=model_name,
             dataset_name=dataset_name,
             predictions=predictions,
-            config=config,
+            config=config.model_dump(),
             wandb_run_id=wandb_run_id,
         )
         run.save(predictions_file.as_posix())
@@ -198,10 +193,10 @@ def main(cfg: DictConfig):
         predictions=predicted_labels,
         references=true_labels,
         dataset_name=dataset_name,
-        output_dir=cfg.output_dir,
-        save_results=cfg.get("save_metrics", True),
+        output_dir=config.output_dir,
+        save_results=config.save_metrics,
         run=run,
-        log_videos=cfg.get("log_videos", 0),
+        log_videos=config.log_videos,
     )
 
     logger.info(f"Saved predictions to {predictions_file}")

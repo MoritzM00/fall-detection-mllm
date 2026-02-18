@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import torch
-from omegaconf import DictConfig, OmegaConf
 
-from .prompts import PromptBuilder, PromptConfig
+from falldet.schemas import InferenceConfig, PromptConfig
+
+from .prompts import PromptBuilder
 from .prompts.components import EXEMPLAR_USER_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -259,7 +260,7 @@ class ConversationBuilder:
 
 
 def create_conversation_builder(
-    cfg: DictConfig,
+    config: InferenceConfig,
     label2idx: dict,
 ) -> ConversationBuilder:
     """Factory function to create and initialize a ConversationBuilder.
@@ -268,7 +269,7 @@ def create_conversation_builder(
     outside the main inference script.
 
     Args:
-        cfg: Hydra configuration with prompt, data, and model settings
+        config: Validated inference configuration
         label2idx: Label to index mapping
 
     Returns:
@@ -277,19 +278,18 @@ def create_conversation_builder(
     from falldet.data.exemplar_sampler import ExemplarSampler
     from falldet.data.video_dataset_factory import get_video_datasets
 
-    prompt_dict = cast(dict[str, Any], OmegaConf.to_container(cfg.prompt, resolve=True))
-    prompt_config = PromptConfig(labels=list(label2idx.keys()), **prompt_dict)
+    prompt_config = config.prompt.model_copy(update={"labels": list(label2idx.keys())})
 
     # Sample exemplars if few-shot mode
     exemplars = []
-    if cfg.prompt.num_shots > 0:
-        logger.info(f"Setting up {cfg.prompt.num_shots}-shot prompting...")
+    if config.prompt.num_shots > 0:
+        logger.info(f"Setting up {config.prompt.num_shots}-shot prompting...")
         train_datasets = get_video_datasets(
-            cfg=cfg,
+            config=config,
             mode="train",
-            split=cfg.data.split,
-            size=cfg.data.size,
-            seed=cfg.data.get("seed"),
+            split=config.data.split,
+            size=config.data.size,
+            seed=config.data.seed,
             return_individual=True,
         )
         train_datasets = cast(dict[str, Any], train_datasets)
@@ -297,9 +297,9 @@ def create_conversation_builder(
 
         sampler = ExemplarSampler(
             dataset=train_dataset,
-            num_shots=cfg.prompt.num_shots,
-            strategy=cfg.prompt.shot_selection,
-            seed=cfg.prompt.exemplar_seed,
+            num_shots=config.prompt.num_shots,
+            strategy=config.prompt.shot_selection,
+            seed=config.prompt.exemplar_seed,
         )
         exemplars = sampler.sample()
 
@@ -307,6 +307,6 @@ def create_conversation_builder(
         config=prompt_config,
         label2idx=label2idx,
         exemplars=exemplars,
-        model_fps=cfg.model_fps,
-        needs_video_metadata=cfg.model.needs_video_metadata,
+        model_fps=config.model_fps,
+        needs_video_metadata=config.model.needs_video_metadata,
     )
