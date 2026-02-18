@@ -21,8 +21,8 @@ def load_video_clip(
     seed: int | None = None,
     size=None,
     num_threads: int = 0,
-    return_torch_tensor: bool = True,
-    repeat_last=True,
+    return_torch_tensor: bool = False,
+    repeat_last=False,
 ) -> tuple[np.ndarray, dict]:
     """Extract a clip from a video with temporal down-sampling and random access.
 

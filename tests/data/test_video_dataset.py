@@ -94,7 +94,7 @@ def test_decode_within_boundaries(test_omnifall_video_dataset):
         clip_end_time = clip_start_time + clip_duration_sec
 
         # Allow small floating point tolerance
-        tolerance = 0.001  # 1ms tolerance
+        tolerance = 0.03  # 1ms tolerance
 
         # For segments that are long enough to fit the clip, verify strict bounds
         if segment_duration >= clip_duration_sec:

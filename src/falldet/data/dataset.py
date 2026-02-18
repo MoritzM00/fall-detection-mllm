@@ -151,7 +151,6 @@ class GenericVideoDataset(Dataset):
 
                 # random start (in frames) for augmentation
                 begin_frame = self.get_random_offset(frame_cnt, 1, idx, fps) if frame_cnt else 0
-                # logger.debug(f"Requesting first frame at {begin_frame} (time={begin_frame/fps:.3f}s)")
 
                 # Calculate desired timestamps
                 desired_timestamps = [
@@ -166,7 +165,6 @@ class GenericVideoDataset(Dataset):
                         container.seek(desired_pts[0], any_frame=False, backward=True, stream=vs)
                     except av.error.FFmpegError:
                         # Fallback if no keyframe found
-                        logger.debug(f"{idx}: seeking failed, falling back to start")
                         container.seek(0, stream=vs)
 
                 frames, want_idx, prev = [], 0, None
@@ -194,7 +192,6 @@ class GenericVideoDataset(Dataset):
 
                 # Better frame padding strategy
                 if len(frames) < self.vid_frame_count:
-                    # logger.debug(f"Padding frames from {len(frames)} to {self.vid_frame_count}")
                     if len(frames) > 0:
                         # Repeat last frame instead of cycling
                         last_frame = frames[-1]

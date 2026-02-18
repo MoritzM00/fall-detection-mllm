@@ -1,5 +1,4 @@
 import logging
-import math
 from collections import OrderedDict
 
 import numpy as np
@@ -195,19 +194,8 @@ class OmnifallVideoDataset(GenericVideoDataset):
         """
         segment = self.video_segments[idx]
         # Use ceil for start to ensure we don't start before segment boundary
-        segment_start_frame = math.ceil(segment["start"] * fps)
+        segment_start_frame = int(segment["start"] * fps)
         segment_end_frame = int(segment["end"] * fps)
-
-        # Handle very short segments where rounding can cause issues
-        if segment_end_frame < segment_start_frame:
-            # Segment is < 1 frame: use a single frame at segment midpoint
-            midpoint = (segment["start"] + segment["end"]) / 2
-            segment_start_frame = int(midpoint * fps)
-            segment_end_frame = segment_start_frame + 1
-        elif segment_end_frame == segment_start_frame:
-            # Segment is exactly at frame boundary: ensure at least 1 frame
-            segment_end_frame = segment_start_frame + 1
-
         segment_frames = segment_end_frame - segment_start_frame
 
         # Compute temporal span of the clip in native frames
@@ -215,12 +203,9 @@ class OmnifallVideoDataset(GenericVideoDataset):
         # Multiply by native fps to get the span in native frames
         clip_duration_sec = (self.vid_frame_count - 1) / self.target_fps
         required_frames = int(clip_duration_sec * fps) + 1  # +1 for fence-post
-        logger.debug(
-            f"Segment {idx}: requesting {required_frames} out of {segment_end_frame - segment_start_frame} frames"
-        )
+
         if segment_frames <= required_frames:
             # Segment is too short, start from beginning of segment
-            # logger.warning("Segment too short. This clip may overlap into the next segment.")
             return segment_start_frame
         else:
             # Random offset within the segment
