@@ -3,6 +3,8 @@
 import textwrap
 from collections.abc import Callable
 
+from falldet.schemas import DefinitionsVariant, LabelsVariant, RoleVariant, TaskVariant
+
 # Role description (expert persona)
 ROLE_COMPONENT = textwrap.dedent("""
     Role:
@@ -180,19 +182,19 @@ def _format_labels_numbered(labels: list[str]) -> str:
 # ============================================================================
 
 ROLE_VARIANTS: dict[str, str] = {
-    "standard": ROLE_COMPONENT,
-    "specialized": ROLE_COMPONENT_SPECIALIZED,
-    "video_specialized": ROLE_COMPONENT_VIDEO_SPECIALIZED,
+    RoleVariant.STANDARD: ROLE_COMPONENT,
+    RoleVariant.SPECIALIZED: ROLE_COMPONENT_SPECIALIZED,
+    RoleVariant.VIDEO_SPECIALIZED: ROLE_COMPONENT_VIDEO_SPECIALIZED,
 }
 
 TASK_VARIANTS: dict[str, str] = {
-    "standard": TASK_INSTRUCTION,
-    "extended": TASK_INSTRUCTION_EXTENDED,
+    TaskVariant.STANDARD: TASK_INSTRUCTION,
+    TaskVariant.EXTENDED: TASK_INSTRUCTION_EXTENDED,
 }
 
 DEFINITIONS_VARIANTS: dict[str, str] = {
-    "standard": DEFINITIONS_COMPONENT,
-    "extended": DEFINITIONS_COMPONENT_EXTENDED,
+    DefinitionsVariant.STANDARD: DEFINITIONS_COMPONENT,
+    DefinitionsVariant.EXTENDED: DEFINITIONS_COMPONENT_EXTENDED,
 }
 
 OUTPUT_FORMAT_VARIANTS: dict[str, str] = {
@@ -200,9 +202,9 @@ OUTPUT_FORMAT_VARIANTS: dict[str, str] = {
     "text": TEXT_OUTPUT_FORMAT,
 }
 
-LABEL_FORMAT_VARIANTS: dict[str, Callable[[list[str]], str]] = {
-    "bulleted": _format_labels_bulleted,
-    "comma": _format_labels_comma,
-    "grouped": _format_labels_grouped,
-    "numbered": _format_labels_numbered,
+LABEL_FORMAT_VARIANTS: dict[LabelsVariant, Callable[[list[str]], str]] = {
+    LabelsVariant.BULLETED: _format_labels_bulleted,
+    LabelsVariant.COMMA: _format_labels_comma,
+    LabelsVariant.GROUPED: _format_labels_grouped,
+    LabelsVariant.NUMBERED: _format_labels_numbered,
 }
