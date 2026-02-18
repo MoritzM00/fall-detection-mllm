@@ -279,5 +279,6 @@ def from_dictconfig(cfg: DictConfig) -> InferenceConfig:
         Validated InferenceConfig instance.
     """
     raw = OmegaConf.to_container(cfg, resolve=True)
+    assert isinstance(raw, dict)
     raw.pop("hydra", None)
-    return InferenceConfig(**raw)
+    return InferenceConfig.model_validate(raw)
