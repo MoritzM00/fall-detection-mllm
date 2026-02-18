@@ -54,8 +54,12 @@ def create_name_and_tags_from_config(cfg: DictConfig) -> tuple[str, list[str]]:
         dataset_info = f"F{frame_count}@{model_fps}"
         base_name = f"{model_info}-{dataset_info}"
 
-    # Add unique ID to prevent collisions
-    run_name = f"{base_name} {wandb.util.generate_id()}"
+    if wandb.run is not None:
+        id = wandb.run.id
+    else:
+        id = wandb.util.generate_id()
+
+    run_name = f"{base_name}_{id}"
 
     # tags contain info about the experiment, dataset and model (highlevel)
     tags = cfg.wandb.get("tags", [])
