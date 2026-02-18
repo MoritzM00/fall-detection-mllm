@@ -22,7 +22,9 @@ ROLE_COMPONENT_VIDEO_SPECIALIZED = textwrap.dedent("""
 
 TASK_INSTRUCTION = textwrap.dedent("""
     Task:
-    Analyze the video clip and classify the primary action being performed. Assign exactly one label from the allowed list below.
+    Analyze the video clip and classify the primary action being performed. Note that the clip may contain more than one action. If this is the case,
+    focus on classifying the action in the first part of the clip, not the entire clip.
+    Assign exactly one label from the allowed list below.
 """).strip()
 
 TASK_INSTRUCTION_EXTENDED = textwrap.dedent("""
