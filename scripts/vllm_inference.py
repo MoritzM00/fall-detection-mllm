@@ -46,7 +46,6 @@ def main(cfg: DictConfig):
     logger.info(config.model_dump_json(indent=2))
 
     run = initialize_run_from_config(config)
-    assert rich_handler is not None and file_handler is not None
     reconfigure_logging_after_wandb(rich_handler, file_handler)
 
     multi_dataset = get_video_datasets(
