@@ -8,10 +8,15 @@ rapid development and debugging of inference pipelines.
 Supports both JSON and text output formats with optional chain-of-thought reasoning.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import random
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from vllm import SamplingParams
 
 from falldet.data.video_dataset import label2idx
 
@@ -54,51 +59,6 @@ class MockRequestOutput:
             outputs: List of completion outputs (typically contains one)
         """
         self.outputs = outputs
-
-
-class MockSamplingParams:
-    """Mock version of vLLM's SamplingParams class."""
-
-    def __init__(
-        self,
-        temperature: float = 0.0,
-        max_tokens: int = 512,
-        top_k: int = -1,
-        top_p: float = 1.0,
-        presence_penalty: float = 0.0,
-        frequency_penalty: float = 0.0,
-        repetition_penalty: float = 1.0,
-        seed: int | None = None,
-        stop_token_ids: list[int] | None = None,
-        **kwargs,
-    ):
-        """
-        Initialize mock sampling parameters.
-
-        Accepts all vLLM SamplingParams arguments for compatibility, but only
-        uses the seed parameter. All other parameters are stored but ignored.
-
-        Args:
-            temperature: Sampling temperature (ignored in mock)
-            max_tokens: Maximum tokens to generate (ignored in mock)
-            top_k: Top-k sampling parameter (ignored in mock)
-            top_p: Top-p sampling parameter (ignored in mock)
-            presence_penalty: Presence penalty (ignored in mock)
-            frequency_penalty: Frequency penalty (ignored in mock)
-            repetition_penalty: Repetition penalty (ignored in mock)
-            seed: Random seed for reproducibility (used by mock)
-            stop_token_ids: Stop token IDs (ignored in mock)
-            **kwargs: Additional parameters (ignored in mock)
-        """
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.top_k = top_k
-        self.top_p = top_p
-        self.presence_penalty = presence_penalty
-        self.frequency_penalty = frequency_penalty
-        self.repetition_penalty = repetition_penalty
-        self.seed = seed
-        self.stop_token_ids = stop_token_ids
 
 
 class MockLLM:
@@ -145,7 +105,7 @@ class MockLLM:
     def generate(
         self,
         inputs: list[dict[str, Any]],
-        sampling_params: MockSamplingParams | None = None,
+        sampling_params: SamplingParams | None = None,
     ) -> list[MockRequestOutput]:
         """
         Generate mock predictions for a batch of inputs.

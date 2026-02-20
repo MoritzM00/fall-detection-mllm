@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from typing import Any, cast
 
 import torch
 
@@ -291,6 +292,7 @@ def create_conversation_builder(
             seed=config.data.seed,
             return_individual=True,
         )
+        train_datasets = cast(dict[str, Any], train_datasets)
         train_dataset = list(train_datasets["individual"].values())[0]
 
         sampler = ExemplarSampler(

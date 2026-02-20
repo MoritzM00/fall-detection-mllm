@@ -57,6 +57,10 @@ format:
 	@echo "Running ruff formatter..."
 	ruff format
 
+typecheck:
+	@echo "Running ty type checker..."
+	ty check
+
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."

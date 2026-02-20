@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import hydra
 from omegaconf import DictConfig
@@ -36,6 +37,11 @@ def main(cfg: DictConfig):
     Args:
         cfg: Hydra configuration containing:
     """
+    console, rich_handler, file_handler = setup_logging(
+        log_file="logs/local_logs.log",
+        console_level=logging.INFO,
+        file_level=logging.DEBUG,
+    )
     config = from_dictconfig(cfg)
     logger.info(config.model_dump_json(indent=2))
 
@@ -52,6 +58,8 @@ def main(cfg: DictConfig):
         max_size=config.data.max_size,
         seed=config.data.seed,
     )
+    assert isinstance(multi_dataset, dict)
+    multi_dataset = cast(dict[str, Any], multi_dataset)
     for dataset_name, dataset in multi_dataset["individual"].items():
         # TODO: support multiple datasets in vLLM inference
         # we probably need to loop over datasets and aggregate predictions for metrics computation
@@ -192,12 +200,6 @@ def main(cfg: DictConfig):
 @hydra.main(version_base=None, config_path="../config", config_name="inference_config")
 def hydra_main(cfg: DictConfig):
     """Hydra entry point for the inference script."""
-    global console, rich_handler, file_handler
-    console, rich_handler, file_handler = setup_logging(
-        log_file="logs/local_logs.log",
-        console_level=logging.INFO,
-        file_level=logging.DEBUG,
-    )
     try:
         main(cfg)
     except Exception as e:

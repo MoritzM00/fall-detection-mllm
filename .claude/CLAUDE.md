@@ -1,6 +1,12 @@
-# Infrequent Action Recognition
+# Repo Guidelines
 
 See `README.md` for project overview, important commands and quickstart guide.
+
+## Dont's
+
+- Do not use typing.Any if possible
+- Do not go over 500 lines per file (not a hard guardrail), refactor if this happens
+
 
 ## Project Structure
 

@@ -1,7 +1,7 @@
 import logging
 import random
 import warnings
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -23,7 +23,7 @@ def load_video_clip(
     num_threads: int = 0,
     return_torch_tensor: bool = False,
     repeat_last=False,
-) -> tuple[np.ndarray, dict]:
+) -> tuple["np.ndarray[Any, Any] | torch.Tensor", "dict[str, Any]"]:
     """Extract a clip from a video with temporal down-sampling and random access.
 
     Parameters

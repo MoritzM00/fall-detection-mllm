@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "falldet"
 version = "0.0.1"
-description = "Infrequent Action Recognition using MLLMs"
+description = "Fall detection using multimodal large language models (MLLMs)"
 authors = [
     { name = "Moritz Mistol", email = "moritz.mistol@gmail.com" },
 ]
@@ -56,3 +56,34 @@ convention = "google"
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.ty]
+# Incremental type checking - start with core inference code only
+
+[tool.ty.src]
+include = [
+    "src",
+    "scripts/vllm_inference.py",
+]
+
+exclude = [
+    "src/falldet/data/**",
+    "src/falldet/evaluation/**",
+    "src/falldet/metrics/**",
+    "src/falldet/**/*wanfall*",
+    "src/falldet/**/*subgroup*",
+    "src/falldet/utils/logging.py",
+    "src/falldet/utils/wandb.py",
+]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.analysis]
+# Allow unresolved imports for third-party packages during initial setup
+respect-type-ignore-comments = true
+
+[tool.ty.terminal]
+# Don't fail on warnings initially - let developers see and fix gradually
+error-on-warning = false
+output-format = "full"

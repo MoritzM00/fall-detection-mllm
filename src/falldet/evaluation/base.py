@@ -11,9 +11,9 @@ import time
 from typing import Any
 
 import numpy as np
+from torch.utils.data import Dataset
 
 import wandb
-from falldet.data.dataset import GenericVideoDataset
 from falldet.evaluation.subgroup import perform_subgroup_evaluation
 from falldet.evaluation.visual import visualize_evaluation_results
 from falldet.metrics.base import compute_metrics
@@ -27,14 +27,14 @@ logger = logging.getLogger(__name__)
 
 # adapted from fall-da/evaluation_utils::evaluate_individual_dataset
 def evaluate_predictions(
-    dataset: GenericVideoDataset,
+    dataset: Dataset,
     predictions: list[str] | list[int] | np.ndarray,
     references: list[str] | list[int] | np.ndarray,
     dataset_name: str,
     output_dir: str = "outputs",
     save_results: bool = True,
     run: wandb.Run | None = None,
-    log_videos: bool = True,
+    log_videos: int = 1,
 ) -> dict[str, Any]:
     """
     Evaluate predictions against ground truth labels.

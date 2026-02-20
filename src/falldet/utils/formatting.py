@@ -9,7 +9,8 @@ import math
 from typing import Any
 
 from rich.table import Table
-from utils.logging_utils import console
+
+from falldet.utils.logging import console
 
 
 def format_metric_value(value: Any) -> str:
