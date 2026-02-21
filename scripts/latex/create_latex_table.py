@@ -4,25 +4,25 @@ import wandb
 # CONFIGURATION
 # ==========================================
 ENTITY = "moritzm00"
-PROJECT = "fall-detection-zeroshot-v3"
+PROJECT = "fall-detection-zeroshot-v4"
 
 # Mapping run IDs to pretty display names (sorted by model size)
-MODEL_NAMES = {
-    "apwzbguu": "InternVL3.5-2B",
-    "ymkbpqpv": "Qwen3-VL-2B",
-    "d2r9y9uc": "InternVL3.5-4B",
-    "nn63y7fh": "Qwen3-VL-4B",
-    "zwdx66eo": "InternVL3.5-8B",
-    "qtflsj4b": "Qwen3-VL-8B",
-    "gk3eupps": "Keye-VL-1.5-8B",
-    "fxuyhb0v": "InternVL3.5-14B",
-    "b6990krf": "InternVL3.5-30B-A3B",
-    "6qsunxp4": "Qwen3-VL-30B-A3B",
-    "yzmnu4jo": "Qwen3-VL-32B",
-    "7u9bjiur": "InternVL3.5-38B",
+MODEL_NAMES: dict[str, str] = {
+    "pau6imuk": "InternVL3.5-2B",
+    "d4e8gwu0": "Qwen3-VL-2B",
+    "cn28qd5a": "InternVL3.5-4B",
+    "fdb89xu4": "Qwen3-VL-4B",
+    "mx12190v": "InternVL3.5-8B",
+    "p1r3exbe": "Qwen3-VL-8B",
+    "w7jl4ly0": "Keye-VL-1.5-8B",
+    "hektv801": "InternVL3.5-14B",
+    "3ugpfhso": "InternVL3.5-30B-A3B",
+    "f4imsgcv": "Qwen3-VL-30B-A3B",
+    "toe74d9a": "Qwen3-VL-32B",
+    "pkjbh92w": "InternVL3.5-38B",
 }
 
-MODEL_NAMES_COT = {
+MODEL_NAMES_COT: dict[str, str] = {
     "0fyrvcyv": "Qwen3-VL-2B",
     "2yzuuwqm": "Qwen3-VL-4B",
     "j5m9qihw": "Qwen3-VL-8B",
@@ -35,7 +35,7 @@ SPLIT = "cs"
 # We define the specialized model data as a raw list of floats here
 # so it can be included in the calculation for bold/underline
 SPECIALIZED_MODEL_NAME = "VMAE-K400"
-SPECIALIZED_MODEL_METRICS = [21.4, 47.6, 21.9, 72.9, 85.4, 65.6, 33.1, 96.3, 41.0]
+SPECIALIZED_MODEL_METRICS: list[float] = [21.4, 47.6, 21.9, 72.9, 85.4, 65.6, 33.1, 96.3, 41.0]
 
 # Columns to apply heatmap coloring (indices: 0=BAcc, 2=F1)
 HEATMAP_COLUMNS = [0, 2, 5, 8]

@@ -12,27 +12,21 @@ import wandb
 # CONFIGURATION
 # ==========================================
 ENTITY = "moritzm00"
-PROJECT = "fall-detection-zeroshot-v3"
+PROJECT = "fall-detection-zeroshot-v4"
 DATASET = "OOPS"
 SPLIT = "cs"
 
-MODEL_SIZES = ["2B", "4B", "8B", "32B"]
+MODEL_SIZES = ["8B", "32B"]
 
 INSTRUCT_RUN_IDS = {
-    "2B": "ymkbpqpv",
-    "4B": "nn63y7fh",
-    "8B": "qtflsj4b",
-    "32B": "yzmnu4jo",
-    # "30B-A3B": "sd7o4rli",
+    "8B": "p1r3exbe",
+    "32B": "toe74d9a",
 }
 
 # WandB Run IDs for Thinking models
 THINKING_RUN_IDS = {
-    "2B": "0fyrvcyv",
-    "4B": "2yzuuwqm",
-    "8B": "j5m9qihw",
-    "32B": "ml3489zj",
-    # "30B-A3B": "opzspcfj",
+    "8B": "gzjkhtvu",
+    "32B": "wpnjcvjm",
 }
 
 # Metrics to compare
@@ -48,8 +42,8 @@ METRIC_NAMES = list(METRICS.keys())
 # STYLE CONFIGURATION
 # ==========================================
 color_map = {
-    "Instruct": "#1f78b4",  # dark blue
-    "Thinking": "#33a02c",  # dark green
+    "Thinking": "#1f78b4",
+    "Instruct": "#a8cee3",
 }
 
 # Matplotlib config (paper-ready)
