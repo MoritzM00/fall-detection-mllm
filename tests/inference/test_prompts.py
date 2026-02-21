@@ -358,8 +358,9 @@ class TestPromptBuilder:
         builder = PromptBuilder(config, LABEL2IDX)
         prompt = builder.build_prompt()
 
-        assert "Definitions:" in prompt
-        assert "Fall vs. Lie/Sit:" in prompt
+        assert "Definitions & Decision Rules:" in prompt
+        assert "FALL DETECTION" in prompt
+        assert "DISTINGUISHING FALLEN vs. LYING vs. SITTING" in prompt
 
     def test_definitions_variant_extended(self):
         """Test extended definitions variant."""

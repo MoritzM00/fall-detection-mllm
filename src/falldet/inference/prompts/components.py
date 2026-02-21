@@ -76,20 +76,19 @@ DEFINITIONS_COMPONENT_EXTENDED = textwrap.dedent("""
     """).strip()
 
 DEFINITIONS_COMPONENT = textwrap.dedent("""
-    Definitions:
-    - Fall vs. Lie/Sit:
-        - fall: Uncontrolled, rapid descent (accidental).
-        - lie_down / sit_down: Intentional, controlled descent.
-    - Fallen: A person who has already experienced a fall and is now on the ground, regardless of their current posture (e.g., lying, sitting, kneeling).
-    - Stand_up vs. Standing:
-        - stand_up: Transition from e.g. sitting to standing.
-        - standing: Upright posture without recent transition.
-    - 'other' is for actions that do not fit the above categories, such as running etc.
-    - Jump: A person who is intentionally airborne, with both feet off the ground, regardless of the height or distance of the jump.
-    - kneeling, squatting, crawling: A person who is intentionally close to the ground, with one or both knees on the ground (kneeling), a person who is intentionally in a low squatting position (squatting), or a person who is intentionally moving on hands and knees (crawling). Note that these actions are distinct from falling, as they are intentional and controlled movements.
-    - Only one label should be assigned per video clip, even if multiple actions are present. Focus on the primary action.
-    - When in doubt, choose the label that best fits the primary action being performed, even if it is not a perfect match.
-""").strip()
+    Definitions & Decision Rules:
+
+    1. FALL DETECTION (highest priority — classify these first):
+    - fall: Rapid, uncontrolled descent to a lower position. Key indicators: sudden loss of balance, accelerating downward motion, no bracing or controlled lowering, body hits ground/furniture abruptly. Duration is typically < 1-2 seconds.
+    - fallen: Person is on the ground AND context suggests a prior fall (not an intentional action). Key indicators: awkward/unnatural body position, limbs splayed asymmetrically, person appears unable or struggling to get up, position is inconsistent with intentional resting or relaxation. If a person is on the ground and the posture looks unintentional or distressed, prefer "fallen" over "lying" or "sitting".
+
+    2. DISTINGUISHING FALLEN vs. LYING vs. SITTING (critical distinction):
+    - fallen: On the ground after an uncontrolled event. Look for: unusual location (middle of hallway, next to overturned furniture), awkward posture (twisted limbs, face-down in unnatural position), signs of distress or immobility, no pillow/blanket/mat.
+    - lying: Intentionally reclining in a controlled manner. Look for: relaxed posture, natural environment for lying (bed, couch, mat), symmetric body alignment, calm demeanor.
+    - lie_down: The active transition from upright to a lying position, performed deliberately and smoothly.
+    - sitting: Intentionally seated on a surface designed for sitting (chair, bench, floor with controlled posture), stable and relaxed.
+    - sit_down: The active, controlled transition from standing/lying to a seated position.
+    """).strip()
 
 # Chain-of-thought instruction
 COT_INSTRUCTION = textwrap.dedent("""
