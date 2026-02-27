@@ -20,25 +20,56 @@ METRIC_SUFFIXES = [
 ]
 
 # Each dataset entry: wb_name (W&B metric prefix), display_name (LaTeX),
-# specialized_name (row label), specialized_metrics (9 floats as %, or None)
+# specialized_name (row label), specialized_metrics (9 floats as %, or None if unknown)
 DATASETS = [
     {
         "wb_name": "le2i",
         "display_name": "Le2i",
+        "cite_key": "le2i",
         "specialized_name": "VMAE-K400",
         "specialized_metrics": [83.2, 89.7, 82.4, 100.0, 99.4, 97.8, 100.0, 100.0, 100.0],
     },
     {
         "wb_name": "up_fall",
         "display_name": "UP-Fall",
+        "cite_key": "upfall",
         "specialized_name": "VMAE-K400",
         "specialized_metrics": [92.6, 92.0, 82.4, 96.5, 99.3, 96.9, 79.8, 98.0, 85.4],
     },
     {
         "wb_name": "cmdfall",
         "display_name": "CMDFall",
+        "cite_key": "cmdfall",
         "specialized_name": "VMAE-K400",
         "specialized_metrics": [83.0, 85.4, 83.3, 92.6, 98.9, 92.6, 90.9, 98.9, 91.0],
+    },
+    {
+        "wb_name": "gmdcsa24",
+        "display_name": "GMDCSA24",
+        "cite_key": "gmdcsa24",
+        "specialized_name": "VMAE-K400",
+        "specialized_metrics": [80.3, 76.3, 75.0, 64.7, 94.7, 68.8, 82.4, 97.4, 84.8],
+    },
+    {
+        "wb_name": "edf",
+        "display_name": "EDF",
+        "cite_key": "edf_occu",
+        "specialized_name": "VMAE-K400",
+        "specialized_metrics": [55.1, 74.2, 54.2, 82.4, 95.5, 77.8, 100.0, 95.3, 89.4],
+    },
+    {
+        "wb_name": "occu",
+        "display_name": "OCCU",
+        "cite_key": "edf_occu",
+        "specialized_name": "VMAE-K400",
+        "specialized_metrics": [84.4, 91.1, 81.9, 100.0, 97.6, 94.1, 100.0, 98.8, 97.0],
+    },
+    {
+        "wb_name": "caucafall",
+        "display_name": "CaucaFall",
+        "cite_key": "caucafall",
+        "specialized_name": "VMAE-K400",
+        "specialized_metrics": [76.8, 80.9, 76.2, 100.0, 100.0, 100.0, 100.0, 97.4, 94.7],
     },
 ]
 
@@ -48,11 +79,19 @@ MLLM_RUN_IDS: dict[str, dict[str, str]] = {
         "le2i": "rxsihd2u",
         "up_fall": "rocdaohb",
         "cmdfall": "5ia833zb",
+        "gmdcsa24": "pyn6l2qa",
+        "edf": "tnw4d5oq",
+        "occu": "g4lgq7hg",
+        "caucafall": "q4buift2",
     },
     "Qwen3-VL-8B": {
         "le2i": "9uhyvciq",
         "up_fall": "8oj3dfnt",
         "cmdfall": "8fa8ojpb",
+        "gmdcsa24": "lqhm4b5n",
+        "edf": "0hgpttx8",
+        "occu": "ipp0bhcr",
+        "caucafall": "gpq1ipeo",
     },
 }
 
@@ -111,13 +150,14 @@ def generate_latex() -> None:
     for ds in DATASETS:
         rows: list[dict] = []
 
-        # Specialized model row
-        rows.append(
-            {
-                "name": ds["specialized_name"],
-                "metrics": ds["specialized_metrics"],
-            }
-        )
+        # Specialized model row (only if baseline metrics are known)
+        if ds["specialized_metrics"] is not None:
+            rows.append(
+                {
+                    "name": ds["specialized_name"],
+                    "metrics": ds["specialized_metrics"],
+                }
+            )
 
         # MLLM rows
         for model_name, run_ids in MLLM_RUN_IDS.items():
@@ -131,6 +171,7 @@ def generate_latex() -> None:
         dataset_groups.append(
             {
                 "display_name": ds["display_name"],
+                "cite_key": ds["cite_key"],
                 "rows": rows,
             }
         )
@@ -143,11 +184,14 @@ def generate_latex() -> None:
         best = find_best_per_column(metric_rows)
 
         display_name = group["display_name"]
+        cite_key = group["cite_key"]
 
         for row_idx, row in enumerate(rows):
             # Dataset name cell: multirow on the first row of the group
             if row_idx == 0:
-                dataset_cell = f"\\multirow{{3}}{{*}}{{{display_name}}}"
+                dataset_cell = (
+                    f"\\multirow{{{len(rows)}}}{{*}}{{{display_name}~\\cite{{{cite_key}}}}}"
+                )
             else:
                 dataset_cell = ""
 
@@ -166,7 +210,7 @@ def generate_latex() -> None:
 \\begin{{table}}[htp]
 \\caption{{\\textbf{{Zero-shot fall detection on additional datasets.}}
 Results for InternVL3.5-8B and Qwen3-VL-8B compared to a dataset-specific specialized
-baseline on the Le2i, UP-Fall, and CMDFall benchmarks (cross-subject split).
+baseline on the Le2i, UP-Fall, CMDFall, GMDCSA24, EDF, OCCU, CaucaFall, and MCFD benchmarks (cross-subject split).
 Best results per dataset are highlighted in \\textbf{{bold}}.}}
 \\label{{tab:cross_dataset_results}}
 
