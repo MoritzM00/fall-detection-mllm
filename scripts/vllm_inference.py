@@ -101,10 +101,7 @@ def main(cfg: DictConfig):
     train_dataset = None
     if config.prompt.num_shots > 0:
         from falldet.embeddings import get_embedding_filename, load_embeddings
-        from falldet.inference.fewshot.samplers import (
-            SimilaritySampler,
-            create_sampler,
-        )
+        from falldet.inference.fewshot.samplers import create_sampler
 
         # Load train dataset for exemplar video access
         train_datasets = get_video_datasets(
@@ -119,6 +116,9 @@ def main(cfg: DictConfig):
         train_dataset = list(train_datasets["individual"].values())[0]
         logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
 
+        # Load embeddings if needed for similarity-based retrieval
+        query_embeddings = None
+        corpus_embeddings = None
         if config.prompt.shot_selection == "similarity":
             emb_dir = Path(config.embeddings_dir)
             train_emb_file = get_embedding_filename(
@@ -127,7 +127,7 @@ def main(cfg: DictConfig):
             query_emb_file = get_embedding_filename(
                 dataset_name, config.data.mode, config.num_frames, config.model_fps
             )
-            train_embeddings, _ = load_embeddings(emb_dir / train_emb_file)
+            corpus_embeddings, _ = load_embeddings(emb_dir / train_emb_file)
             query_embeddings, _ = load_embeddings(emb_dir / query_emb_file)
 
             # Slice query embeddings to match num_samples Subset
@@ -136,14 +136,12 @@ def main(cfg: DictConfig):
                 query_embeddings = query_embeddings[:n]
                 logger.info(f"Sliced query embeddings to {n} (num_samples={config.num_samples})")
 
-            sampler = SimilaritySampler(
-                corpus=train_dataset,
-                num_shots=config.prompt.num_shots,
-                query_embeddings=query_embeddings,
-                corpus_embeddings=train_embeddings,
-            )
-        else:
-            sampler = create_sampler(config, train_dataset)
+        sampler = create_sampler(
+            config,
+            train_dataset,
+            query_embeddings=query_embeddings,
+            corpus_embeddings=corpus_embeddings,
+        )
 
     logger.info(
         f"Mode: {config.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"

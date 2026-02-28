@@ -135,6 +135,9 @@ class SimilaritySampler(ExemplarSampler):
             raise ValueError(
                 "SimilaritySampler requires both query_embeddings and corpus_embeddings."
             )
+        assert len(corpus) == corpus_embeddings.shape[0], (  # type: ignore[arg-type]
+            "Corpus embeddings must match corpus size."
+        )
 
         # L2-normalise for cosine similarity
         query_norm = F.normalize(query_embeddings.float(), dim=1)
@@ -174,6 +177,7 @@ class SimilaritySampler(ExemplarSampler):
 _SAMPLER_REGISTRY: dict[str, type[ExemplarSampler]] = {
     "random": RandomSampler,
     "balanced": BalancedRandomSampler,
+    "similarity": SimilaritySampler,
 }
 
 
@@ -198,16 +202,16 @@ def create_sampler(
     num_shots = config.prompt.num_shots
     seed = config.prompt.exemplar_seed
 
-    if strategy == "similarity":
-        return SimilaritySampler(
+    sampler_cls = _SAMPLER_REGISTRY.get(strategy)
+    if sampler_cls is None:
+        raise ValueError(f"Unknown shot_selection strategy: {strategy!r}")
+
+    if sampler_cls is SimilaritySampler:
+        return sampler_cls(
             corpus=corpus,
             num_shots=num_shots,
             query_embeddings=query_embeddings,
             corpus_embeddings=corpus_embeddings,
         )
-
-    sampler_cls = _SAMPLER_REGISTRY.get(strategy)
-    if sampler_cls is None:
-        raise ValueError(f"Unknown shot_selection strategy: {strategy!r}")
 
     return sampler_cls(corpus=corpus, num_shots=num_shots, seed=seed)
