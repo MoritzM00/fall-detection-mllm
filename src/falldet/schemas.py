@@ -73,7 +73,7 @@ class PromptConfig(BaseConfig):
 
     # Few-shot settings
     num_shots: int = 0
-    shot_selection: Literal["random", "balanced"] = "balanced"
+    shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
 
     # Variant selectors
@@ -266,6 +266,7 @@ class InferenceConfig(BaseConfig):
     save_metrics: bool = True
     log_videos: int = 1
     num_samples: int | None = None
+    embeddings_dir: str = "outputs/embeddings"
 
     # Mode-specific dataset overrides
     dataset_train: DatasetConfig | None = None

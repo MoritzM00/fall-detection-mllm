@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
 
 import torch
 
@@ -33,19 +32,18 @@ class ConversationData:
 class ConversationBuilder:
     """Builds conversations for zero-shot and few-shot inference.
 
-    Encapsulates:
-    - Exemplar caching (frames + metadata)
-    - Message template building
-    - vLLM input preparation
+    Exemplars are supplied per-call via ``build()`` / ``build_vllm_inputs()``,
+    allowing each query to receive different exemplars (e.g. similarity-based
+    retrieval, or fresh random samples).
 
-    Works identically for zero-shot (num_shots=0) and few-shot (num_shots>0).
+    Works identically for zero-shot (no exemplars) and few-shot (exemplars
+    passed at build time).
     """
 
     def __init__(
         self,
         config: PromptConfig,
         label2idx: dict,
-        exemplars: list[dict] | None = None,
         model_fps: float = 8.0,
         needs_video_metadata: bool = True,
     ):
@@ -54,7 +52,6 @@ class ConversationBuilder:
         Args:
             config: Prompt configuration
             label2idx: Label to index mapping
-            exemplars: Pre-sampled exemplars (empty list or None for zero-shot)
             model_fps: Frame rate for video metadata
             needs_video_metadata: Whether model requires video metadata
         """
@@ -64,29 +61,37 @@ class ConversationBuilder:
         self.needs_video_metadata = needs_video_metadata
 
         self._prompt_builder = PromptBuilder(config, label2idx)
-        self._exemplars = exemplars or []
-
-        # Cache at initialization
-        self._template_cache: list[dict] = self._build_template()
-        self._videos_cache: list[VideoWithMetadata] = self._build_video_cache()
         self._user_prompt: str = self._prompt_builder.build_prompt()
 
-        logger.info(
-            f"ConversationBuilder initialized: {len(self._exemplars)} exemplars, "
-            f"{self.num_videos} videos/request"
-        )
+        # Cache the system message (None when not needed)
+        self._system_msg: dict | None = self._prompt_builder.get_system_message()
+
+        logger.info(f"ConversationBuilder initialized: {self.num_videos} videos/request")
         self._log_conversation()
 
-    def _build_template(self) -> list[dict]:
-        """Build the static message template (cached)."""
-        messages = []
+    def _build_video_metadata(self, frames: torch.Tensor) -> dict:
+        """Build metadata dict for a video."""
+        return dict(
+            total_num_frames=frames.shape[0],
+            fps=self.model_fps,
+            frames_indices=list(range(frames.shape[0])),
+        )
 
-        # System message if needed (e.g., InternVL CoT)
-        if system_msg := self._prompt_builder.get_system_message():
-            messages.append(system_msg)
+    def _build_exemplar_messages(
+        self, exemplars: list[dict]
+    ) -> tuple[list[dict], list[VideoWithMetadata]]:
+        """Build message turns and video list for exemplars.
 
-        # Exemplar turns (empty for zero-shot)
-        for exemplar in self._exemplars:
+        Args:
+            exemplars: List of exemplar dicts, each with 'video' and 'label_str'.
+
+        Returns:
+            Tuple of (messages, videos) for the exemplar turns.
+        """
+        messages: list[dict] = []
+        videos: list[VideoWithMetadata] = []
+
+        for exemplar in exemplars:
             messages.append(
                 {
                     "role": "user",
@@ -107,38 +112,43 @@ class ConversationBuilder:
                     ],
                 }
             )
-
-        return messages
-
-    def _build_video_cache(self) -> list[VideoWithMetadata]:
-        """Cache exemplar videos with their metadata."""
-        return [
-            VideoWithMetadata(
-                frames=exemplar["video"],
-                metadata=self._build_video_metadata(exemplar["video"]),
+            videos.append(
+                VideoWithMetadata(
+                    frames=exemplar["video"],
+                    metadata=self._build_video_metadata(exemplar["video"]),
+                )
             )
-            for exemplar in self._exemplars
-        ]
 
-    def _build_video_metadata(self, frames: torch.Tensor) -> dict:
-        """Build metadata dict for a video."""
-        return dict(
-            total_num_frames=frames.shape[0],
-            fps=self.model_fps,
-            frames_indices=list(range(frames.shape[0])),
-        )
+        return messages, videos
 
-    def build(self, target_video: torch.Tensor) -> ConversationData:
+    def build(
+        self,
+        target_video: torch.Tensor,
+        exemplars: list[dict] | None = None,
+    ) -> ConversationData:
         """Build conversation data for a target video.
 
         Args:
             target_video: Target video frames
+            exemplars: Per-query exemplar dicts (None for zero-shot)
 
         Returns:
             ConversationData with messages and videos
         """
-        # Shallow copy template and append target message
-        messages = self._template_cache.copy()
+        messages: list[dict] = []
+        videos: list[VideoWithMetadata] = []
+
+        # System message
+        if self._system_msg is not None:
+            messages.append(self._system_msg)
+
+        # Exemplar turns
+        if exemplars:
+            ex_messages, ex_videos = self._build_exemplar_messages(exemplars)
+            messages.extend(ex_messages)
+            videos.extend(ex_videos)
+
+        # Target turn
         messages.append(
             {
                 "role": "user",
@@ -148,13 +158,11 @@ class ConversationBuilder:
                 ],
             }
         )
-
-        # Combine cached videos with target
         target_with_meta = VideoWithMetadata(
             frames=target_video,
             metadata=self._build_video_metadata(target_video),
         )
-        videos = [*self._videos_cache, target_with_meta]
+        videos.append(target_with_meta)
 
         return ConversationData(messages=messages, videos=videos)
 
@@ -162,17 +170,19 @@ class ConversationBuilder:
         self,
         target_video: torch.Tensor,
         processor,
+        exemplars: list[dict] | None = None,
     ) -> dict:
         """Build ready-to-use vLLM inputs for a target video.
 
         Args:
             target_video: Target video frames
             processor: AutoProcessor instance
+            exemplars: Per-query exemplar dicts (None for zero-shot)
 
         Returns:
             Dict ready for llm.generate()
         """
-        conv_data = self.build(target_video)
+        conv_data = self.build(target_video, exemplars=exemplars)
 
         # Apply chat template
         text = processor.apply_chat_template(
@@ -200,15 +210,7 @@ class ConversationBuilder:
         return f"The best answer is: {label}"
 
     def _format_content_for_logging(self, content: list[dict], max_text_len: int = 200) -> str:
-        """Format message content for logging, replacing video tensors with shape info.
-
-        Args:
-            content: List of content items (video/text dicts)
-            max_text_len: Maximum text length before truncation
-
-        Returns:
-            Formatted string representation of the content
-        """
+        """Format message content for logging, replacing video tensors with shape info."""
         parts = []
         for item in content:
             if item["type"] == "video":
@@ -227,26 +229,31 @@ class ConversationBuilder:
 
     def _log_conversation(self) -> None:
         """Log the conversation structure at initialization."""
-        # Build a preview including template + target placeholder
         lines = ["Conversation structure:"]
-        for i, msg in enumerate(self._template_cache):
-            role = msg["role"]
-            content_str = self._format_content_for_logging(msg["content"])
-            lines.append(f"  [{i}] {role}: {content_str}")
 
-        # Add placeholder for target message
-        target_idx = len(self._template_cache)
+        idx = 0
+        if self._system_msg is not None:
+            lines.append(f"  [{idx}] system: ...")
+            idx += 1
+
+        if self.config.num_shots > 0:
+            lines.append(
+                f"  [{idx}..{idx + 2 * self.config.num_shots - 1}] "
+                f"{self.config.num_shots} exemplar turns (dynamic per query)"
+            )
+            idx += 2 * self.config.num_shots
+
         target_prompt_preview = (
             self._user_prompt[:200] + "..." if len(self._user_prompt) > 200 else self._user_prompt
         )
-        lines.append(f"  [{target_idx}] user: <video: [target]> {target_prompt_preview}")
+        lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
 
         logger.info("\n".join(lines))
 
     @property
     def num_videos(self) -> int:
         """Number of videos per request (for vLLM limit config)."""
-        return len(self._exemplars) + 1
+        return self.config.num_shots + 1
 
     @property
     def user_prompt(self) -> str:
@@ -265,48 +272,21 @@ def create_conversation_builder(
 ) -> ConversationBuilder:
     """Factory function to create and initialize a ConversationBuilder.
 
-    Handles exemplar sampling if num_shots > 0, keeping this logic
-    outside the main inference script.
+    Exemplar sampling is handled externally by the inference loop; this
+    factory only builds the conversation template.
 
     Args:
         config: Validated inference configuration
         label2idx: Label to index mapping
 
     Returns:
-        Initialized ConversationBuilder with cached exemplars
+        Initialized ConversationBuilder
     """
-    from falldet.data.exemplar_sampler import ExemplarSampler
-    from falldet.data.video_dataset_factory import get_video_datasets
-
     prompt_config = config.prompt.model_copy(update={"labels": list(label2idx.keys())})
-
-    # Sample exemplars if few-shot mode
-    exemplars = []
-    if config.prompt.num_shots > 0:
-        logger.info(f"Setting up {config.prompt.num_shots}-shot prompting...")
-        train_datasets = get_video_datasets(
-            config=config,
-            mode="train",
-            split=config.data.split,
-            size=config.data.size,
-            seed=config.data.seed,
-            return_individual=True,
-        )
-        train_datasets = cast(dict[str, Any], train_datasets)
-        train_dataset = list(train_datasets["individual"].values())[0]
-
-        sampler = ExemplarSampler(
-            dataset=train_dataset,
-            num_shots=config.prompt.num_shots,
-            strategy=config.prompt.shot_selection,
-            seed=config.prompt.exemplar_seed,
-        )
-        exemplars = sampler.sample()
 
     return ConversationBuilder(
         config=prompt_config,
         label2idx=label2idx,
-        exemplars=exemplars,
         model_fps=config.model_fps,
         needs_video_metadata=config.model.needs_video_metadata,
     )

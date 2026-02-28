@@ -113,7 +113,7 @@ class TestConversationBuilder:
     def test_zero_shot_messages_structure(self):
         """Test message structure with zero exemplars."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video)
@@ -125,7 +125,7 @@ class TestConversationBuilder:
     def test_zero_shot_single_video(self):
         """Test that zero-shot has exactly one video."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video)
@@ -134,17 +134,16 @@ class TestConversationBuilder:
         assert conv_data.videos[0].frames is target_video
 
     def test_few_shot_messages_structure(self):
-        """Test message structure with exemplars."""
+        """Test message structure with exemplars passed at build time."""
         num_exemplars = 2
         exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(num_shots=num_exemplars)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
-        conv_data = builder.build(target_video)
+        conv_data = builder.build(target_video, exemplars=exemplars)
 
         # Should have: 2 user-assistant pairs + 1 target user = 5 messages
-        # (no system message for Qwen without CoT)
         assert len(conv_data.messages) == 5
 
         # Check message order: user, assistant, user, assistant, user
@@ -158,10 +157,10 @@ class TestConversationBuilder:
         """Test message order includes system message when needed (InternVL CoT)."""
         exemplars = create_mock_exemplars(1)
         config = PromptConfig(num_shots=1, cot=True, model_family="InternVL")
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
-        conv_data = builder.build(target_video)
+        conv_data = builder.build(target_video, exemplars=exemplars)
 
         # Should have: system, user, assistant, user = 4 messages
         assert len(conv_data.messages) == 4
@@ -175,10 +174,10 @@ class TestConversationBuilder:
         num_exemplars = 3
         exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(num_shots=num_exemplars)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
-        conv_data = builder.build(target_video)
+        conv_data = builder.build(target_video, exemplars=exemplars)
 
         # Should have exemplar videos + target video
         assert len(conv_data.videos) == num_exemplars + 1
@@ -186,7 +185,7 @@ class TestConversationBuilder:
     def test_video_metadata_structure(self):
         """Test that video metadata has correct structure."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[], model_fps=10.0)
+        builder = ConversationBuilder(config, LABEL2IDX, model_fps=10.0)
         target_video = create_mock_video(24)
 
         conv_data = builder.build(target_video)
@@ -199,7 +198,7 @@ class TestConversationBuilder:
     def test_build_vllm_inputs_format(self):
         """Test that build_vllm_inputs returns correct dict structure."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
         processor = MockProcessor()
 
@@ -212,10 +211,25 @@ class TestConversationBuilder:
         assert isinstance(inputs["prompt"], str)
         assert "video" in inputs["multi_modal_data"]
 
+    def test_build_vllm_inputs_with_exemplars(self):
+        """Test that build_vllm_inputs works with per-query exemplars."""
+        num_exemplars = 2
+        exemplars = create_mock_exemplars(num_exemplars)
+        config = PromptConfig(num_shots=num_exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
+        processor = MockProcessor()
+
+        inputs = builder.build_vllm_inputs(target_video, processor, exemplars=exemplars)
+
+        assert isinstance(inputs["prompt"], str)
+        video_data = inputs["multi_modal_data"]["video"]
+        assert len(video_data) == num_exemplars + 1
+
     def test_build_vllm_inputs_with_video_metadata(self):
         """Test that vLLM inputs include video metadata when required."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[], needs_video_metadata=True)
+        builder = ConversationBuilder(config, LABEL2IDX, needs_video_metadata=True)
         target_video = create_mock_video()
         processor = MockProcessor()
 
@@ -230,7 +244,7 @@ class TestConversationBuilder:
     def test_build_vllm_inputs_without_video_metadata(self):
         """Test that vLLM inputs exclude metadata when not required."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[], needs_video_metadata=False)
+        builder = ConversationBuilder(config, LABEL2IDX, needs_video_metadata=False)
         target_video = create_mock_video()
         processor = MockProcessor()
 
@@ -244,23 +258,22 @@ class TestConversationBuilder:
     def test_num_videos_property_zero_shot(self):
         """Test num_videos property for zero-shot."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         assert builder.num_videos == 1
 
     def test_num_videos_property_few_shot(self):
         """Test num_videos property for few-shot."""
         num_exemplars = 4
-        exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(num_shots=num_exemplars)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         assert builder.num_videos == num_exemplars + 1
 
     def test_format_answer_json(self):
         """Test JSON format answer for exemplars."""
         config = PromptConfig(output_format="json")
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         answer = builder._format_answer("fall")
         assert answer == '{"label": "fall"}'
@@ -268,7 +281,7 @@ class TestConversationBuilder:
     def test_format_answer_text(self):
         """Test text format answer for exemplars."""
         config = PromptConfig(output_format="text")
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         answer = builder._format_answer("walk")
         assert answer == "The best answer is: walk"
@@ -276,7 +289,7 @@ class TestConversationBuilder:
     def test_parser_property_json(self):
         """Test parser property returns correct type for JSON."""
         config = PromptConfig(output_format="json", cot=False)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         parser = builder.parser
         assert isinstance(parser, JSONOutputParser)
@@ -284,7 +297,7 @@ class TestConversationBuilder:
     def test_parser_property_text(self):
         """Test parser property returns correct type for text."""
         config = PromptConfig(output_format="text", cot=False)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         parser = builder.parser
         assert isinstance(parser, KeywordOutputParser)
@@ -292,54 +305,39 @@ class TestConversationBuilder:
     def test_user_prompt_property(self):
         """Test user_prompt property returns the prompt text."""
         config = PromptConfig()
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
 
         prompt = builder.user_prompt
         assert isinstance(prompt, str)
         assert len(prompt) > 0
 
-    def test_template_caching(self):
-        """Test that template is built once and reused."""
-        exemplars = create_mock_exemplars(2)
+    def test_different_exemplars_produce_different_conversations(self):
+        """Test that passing different exemplars produces different output."""
         config = PromptConfig(num_shots=2)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
+        processor = MockProcessor()
 
-        # Template should be cached at initialization
-        template1 = builder._template_cache
+        exemplars_a = create_mock_exemplars(2)
+        exemplars_b = create_mock_exemplars(2)
+        # Make labels different
+        exemplars_b[0]["label_str"] = "other"
 
-        # Build multiple times
-        builder.build(create_mock_video())
-        builder.build(create_mock_video())
+        inputs_a = builder.build_vllm_inputs(target_video, processor, exemplars=exemplars_a)
+        inputs_b = builder.build_vllm_inputs(target_video, processor, exemplars=exemplars_b)
 
-        # Template cache should be unchanged
-        assert builder._template_cache is template1
-
-    def test_video_cache_preserved(self):
-        """Test that exemplar videos are cached and reused."""
-        exemplars = create_mock_exemplars(2)
-        config = PromptConfig(num_shots=2)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
-
-        videos_cache = builder._videos_cache
-
-        # Build multiple times
-        conv1 = builder.build(create_mock_video())
-        conv2 = builder.build(create_mock_video())
-
-        # First N videos should be from cache
-        assert conv1.videos[0] is videos_cache[0]
-        assert conv1.videos[1] is videos_cache[1]
-        assert conv2.videos[0] is videos_cache[0]
-        assert conv2.videos[1] is videos_cache[1]
+        assert inputs_a["prompt"] != inputs_b["prompt"]
 
     def test_exemplar_user_message_content(self):
         """Test that exemplar user messages have correct content."""
         exemplars = create_mock_exemplars(1)
         config = PromptConfig(num_shots=1)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
 
-        # Check the cached template
-        user_msg = builder._template_cache[0]
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        user_msg = conv_data.messages[0]
         assert user_msg["role"] == "user"
 
         content = user_msg["content"]
@@ -353,10 +351,12 @@ class TestConversationBuilder:
         exemplars = create_mock_exemplars(1)
         exemplars[0]["label_str"] = "fall"
         config = PromptConfig(num_shots=1, output_format="json")
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
 
-        # Check the cached template
-        asst_msg = builder._template_cache[1]
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        asst_msg = conv_data.messages[1]
         assert asst_msg["role"] == "assistant"
 
         content = asst_msg["content"]
@@ -367,7 +367,7 @@ class TestConversationBuilder:
     def test_target_message_has_full_prompt(self):
         """Test that target message contains full prompt (not exemplar prompt)."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video)
@@ -383,13 +383,17 @@ class TestConversationBuilder:
         prompt_text = content[1]["text"]
         assert "Role:" in prompt_text or "Allowed Labels:" in prompt_text
 
-    def test_none_exemplars_treated_as_empty(self):
-        """Test that None exemplars are treated as empty list."""
+    def test_none_exemplars_treated_as_zero_shot(self):
+        """Test that None exemplars produce zero-shot conversation."""
         config = PromptConfig(num_shots=0)
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=None)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
 
-        assert builder._exemplars == []
-        assert builder.num_videos == 1
+        conv_data = builder.build(target_video, exemplars=None)
+
+        # Zero-shot: just the target message
+        assert len(conv_data.messages) == 1
+        assert len(conv_data.videos) == 1
 
     def test_system_instruction_produces_system_message(self):
         """Test that system_instruction adds a system message to the conversation."""
@@ -397,7 +401,7 @@ class TestConversationBuilder:
             num_shots=0,
             system_instruction="Represent the user's input",
         )
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=[])
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video)
@@ -415,10 +419,10 @@ class TestConversationBuilder:
             num_shots=1,
             system_instruction="Custom system instruction",
         )
-        builder = ConversationBuilder(config, LABEL2IDX, exemplars=exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
-        conv_data = builder.build(target_video)
+        conv_data = builder.build(target_video, exemplars=exemplars)
 
         # Should have: system, user, assistant, user = 4 messages
         assert len(conv_data.messages) == 4

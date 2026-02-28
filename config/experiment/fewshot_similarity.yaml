@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+  - override /prompt: fewshot
+
+# Full dataset evaluation
+num_samples: null
+
+# Similarity-based exemplar selection
+prompt:
+  shot_selection: similarity
+
+# Embeddings directory (filenames auto-derived from dataset/model config)
+embeddings_dir: "outputs/embeddings"
+
+vllm:
+  mm_processor_cache_gb: 4
+
+# W&B tracking
+wandb:
+  project: "fall-detection-fewshot"
+  name:
+  tags: ["fewshot", "similarity"]
+
+# Output settings
+output_dir: "outputs/fewshot_similarity"

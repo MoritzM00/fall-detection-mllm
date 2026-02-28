@@ -135,9 +135,59 @@ def main(cfg: DictConfig):
         prefetch_factor=prefetch_factor,
     )
 
-    # Build conversation builder (handles both zero-shot and few-shot)
+    # Build conversation builder and exemplar sampler
     conversation_builder = create_conversation_builder(config, label2idx)
     parser = conversation_builder.parser
+
+    # Set up per-query exemplar sampling if few-shot
+    sampler = None
+    train_dataset = None
+    if config.prompt.num_shots > 0:
+        from falldet.inference.fewshot.samplers import (
+            SimilaritySampler,
+            create_sampler,
+            get_embedding_filename,
+            load_embeddings,
+        )
+
+        # Load train dataset for exemplar video access
+        train_datasets = get_video_datasets(
+            config=config,
+            mode="train",
+            split=config.data.split,
+            size=config.data.size,
+            seed=config.data.seed,
+            return_individual=True,
+        )
+        train_datasets = cast(dict[str, Any], train_datasets)
+        train_dataset = list(train_datasets["individual"].values())[0]
+        logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
+
+        if config.prompt.shot_selection == "similarity":
+            emb_dir = Path(config.embeddings_dir)
+            train_emb_file = get_embedding_filename(
+                dataset_name, "train", config.num_frames, config.model_fps
+            )
+            query_emb_file = get_embedding_filename(
+                dataset_name, config.data.mode, config.num_frames, config.model_fps
+            )
+            train_embeddings, _ = load_embeddings(emb_dir / train_emb_file)
+            query_embeddings, _ = load_embeddings(emb_dir / query_emb_file)
+
+            # Slice query embeddings to match num_samples Subset
+            if config.num_samples is not None:
+                n = min(config.num_samples, len(query_embeddings))
+                query_embeddings = query_embeddings[:n]
+                logger.info(f"Sliced query embeddings to {n} (num_samples={config.num_samples})")
+
+            sampler = SimilaritySampler(
+                corpus=train_dataset,
+                num_shots=config.prompt.num_shots,
+                query_embeddings=query_embeddings,
+                corpus_embeddings=train_embeddings,
+            )
+        else:
+            sampler = create_sampler(config, train_dataset)
 
     logger.info(
         f"Mode: {config.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
@@ -163,6 +213,7 @@ def main(cfg: DictConfig):
     # Process in batches
     all_outputs = []
     all_samples = []
+    global_sample_idx = 0
     start = time.perf_counter()
     for batch in tqdm(dataloader, desc="Processing batches"):
         batch_inputs = []
@@ -171,9 +222,17 @@ def main(cfg: DictConfig):
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
 
-            # Build vLLM inputs using conversation builder (handles zero/few-shot uniformly)
-            inputs = conversation_builder.build_vllm_inputs(sample["video"], processor)
+            # Sample exemplars per query (None for zero-shot)
+            exemplars = None
+            if sampler is not None and train_dataset is not None:
+                indices = sampler.sample(global_sample_idx)
+                exemplars = [train_dataset[i] for i in indices]
+
+            inputs = conversation_builder.build_vllm_inputs(
+                sample["video"], processor, exemplars=exemplars
+            )
             batch_inputs.append(inputs)
+            global_sample_idx += 1
 
         if is_embed:
             batch_outputs = llm.embed(batch_inputs)
