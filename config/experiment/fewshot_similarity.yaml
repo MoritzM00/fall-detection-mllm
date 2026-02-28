@@ -14,6 +14,10 @@ prompt:
 # Embeddings directory (filenames auto-derived from dataset/model config)
 embeddings_dir: "outputs/embeddings"
 
+# Set to the embedding model name when the classification model differs
+# (e.g. Qwen3-VL-Embedding-2B). null defaults to the classification model name.
+embedding_model_name: null
+
 vllm:
   mm_processor_cache_gb: 4
 

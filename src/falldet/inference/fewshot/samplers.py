@@ -268,11 +268,22 @@ def setup_fewshot_sampler(
         from falldet.embeddings import get_embedding_filename, load_embeddings
 
         emb_dir = Path(config.embeddings_dir)
+        emb_model_name = config.embedding_model_name or config.model.name
         train_emb_file = get_embedding_filename(
-            dataset_name, "train", config.num_frames, config.model_fps
+            dataset_name,
+            "train",
+            config.num_frames,
+            config.model_fps,
+            model_name=emb_model_name,
+            data_size=config.data.size,
         )
         query_emb_file = get_embedding_filename(
-            dataset_name, config.data.mode, config.num_frames, config.model_fps
+            dataset_name,
+            config.data.mode,
+            config.num_frames,
+            config.model_fps,
+            model_name=emb_model_name,
+            data_size=config.data.size,
         )
         corpus_embeddings, _ = load_embeddings(emb_dir / train_emb_file)
         query_embeddings, _ = load_embeddings(emb_dir / query_emb_file)

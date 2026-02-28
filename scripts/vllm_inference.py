@@ -168,6 +168,8 @@ def main(cfg: DictConfig):
             mode=config.data.mode,
             num_frames=config.num_frames,
             model_fps=config.model_fps,
+            model_name=config.model.name,
+            data_size=config.data.size,
         )
         logger.info(f"Logged results to W&B: {run.url}")
         wandb.finish()

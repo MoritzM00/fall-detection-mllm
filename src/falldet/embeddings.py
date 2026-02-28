@@ -31,7 +31,7 @@ def load_embeddings(path: str | Path) -> tuple[torch.Tensor, list[dict]]:
         raise FileNotFoundError(
             f"Embedding file not found: {path}. Run the embed task first to generate embeddings."
         )
-    data = torch.load(path, map_location="cpu", weights_only=False)
+    data = torch.load(path, map_location="cpu", weights_only=True)
     embeddings: torch.Tensor = data["embeddings"]
     samples: list[dict] = data["samples"]
     logger.info(f"Loaded embeddings from {path}: shape={embeddings.shape}")
@@ -39,7 +39,12 @@ def load_embeddings(path: str | Path) -> tuple[torch.Tensor, list[dict]]:
 
 
 def get_embedding_filename(
-    dataset_name: str, mode: str, num_frames: int, model_fps: float | int
+    dataset_name: str,
+    mode: str,
+    num_frames: int,
+    model_fps: float | int,
+    model_name: str,
+    data_size: int | None,
 ) -> str:
     """Derive the embedding filename from config parameters.
 
@@ -47,10 +52,11 @@ def get_embedding_filename(
     ``"OOPS_cs"``).
 
     Returns:
-        Filename like ``"OOPS_cs_train_16@7_5.pt"``.
+        Filename like ``"OOPS_cs_train_16@7_5_Qwen3-VL-Embedding-2B_448.pt"``.
     """
     fps_str = str(model_fps).replace(".", "_") if isinstance(model_fps, float) else str(model_fps)
-    return f"{dataset_name}_{mode}_{num_frames}@{fps_str}.pt"
+    size_str = str(data_size) if data_size is not None else "none"
+    return f"{dataset_name}_{mode}_{num_frames}@{fps_str}_{model_name}_{size_str}.pt"
 
 
 def retrieve_topk(
@@ -85,6 +91,8 @@ def save_embeddings(
     mode: str,
     num_frames: int,
     model_fps: float | int,
+    model_name: str,
+    data_size: int | None,
 ) -> Path:
     """Save embeddings and sample metadata to a .pt file.
 
@@ -96,6 +104,8 @@ def save_embeddings(
         mode: Data mode (e.g. ``"train"``, ``"val"``).
         num_frames: Number of frames per clip.
         model_fps: Sampling FPS used by the model.
+        model_name: Embedding model name (e.g. ``"Qwen3-VL-Embedding-2B"``).
+        data_size: Input resolution (e.g. ``448``), or None.
 
     Returns:
         Path to the saved .pt file.
@@ -103,8 +113,13 @@ def save_embeddings(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = get_embedding_filename(dataset_name, mode, num_frames, model_fps)
+    filename = get_embedding_filename(
+        dataset_name, mode, num_frames, model_fps, model_name, data_size
+    )
     output_path = output_dir / filename
+
+    if output_path.exists():
+        logger.warning(f"Embedding file already exists and will be overwritten: {output_path}")
 
     torch.save(
         {

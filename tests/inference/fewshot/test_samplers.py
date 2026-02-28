@@ -301,13 +301,17 @@ class TestLoadEmbeddings:
 
 class TestGetEmbeddingFilename:
     def test_float_fps(self):
-        name = get_embedding_filename("OOPS_cs", "train", 16, 7.5)
-        assert name == "OOPS_cs_train_16@7_5.pt"
+        name = get_embedding_filename("OOPS_cs", "train", 16, 7.5, "Qwen3-VL-Embedding-2B", 448)
+        assert name == "OOPS_cs_train_16@7_5_Qwen3-VL-Embedding-2B_448.pt"
 
     def test_int_fps(self):
-        name = get_embedding_filename("OOPS_cs", "val", 16, 8)
-        assert name == "OOPS_cs_val_16@8.pt"
+        name = get_embedding_filename("OOPS_cs", "val", 16, 8, "Qwen3-VL-Embedding-2B", 448)
+        assert name == "OOPS_cs_val_16@8_Qwen3-VL-Embedding-2B_448.pt"
 
     def test_different_mode(self):
-        name = get_embedding_filename("OOPS_cs", "test", 9, 7.5)
-        assert name == "OOPS_cs_test_9@7_5.pt"
+        name = get_embedding_filename("OOPS_cs", "test", 9, 7.5, "InternVL3-2B", 448)
+        assert name == "OOPS_cs_test_9@7_5_InternVL3-2B_448.pt"
+
+    def test_data_size_none(self):
+        name = get_embedding_filename("OOPS_cs", "train", 16, 7.5, "Qwen3-VL-Embedding-2B", None)
+        assert name == "OOPS_cs_train_16@7_5_Qwen3-VL-Embedding-2B_none.pt"

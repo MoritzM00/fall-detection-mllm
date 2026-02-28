@@ -256,6 +256,7 @@ class InferenceConfig(BaseConfig):
 
     # Root-level fields
     task: Literal["classify", "embed"] = "classify"
+    embedding_model_name: str | None = None
     model_fps: float = 7.5
     num_frames: int = 16
     batch_size: int = 32
