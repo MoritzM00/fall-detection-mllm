@@ -5,7 +5,7 @@ model_family: ${model.family}
 
 # Variant selectors
 role_variant: null          # no role preamble for embedding
-task_variant: embed         # embedding-specific task instruction
+task_variant: standard         # embedding-specific task instruction
 labels_variant: bulleted    # include labels for semantic context
 definitions_variant: null   # no definitions needed
 

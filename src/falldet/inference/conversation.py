@@ -233,8 +233,15 @@ class ConversationBuilder:
 
         idx = 0
         if self._system_msg is not None:
-            lines.append(f"  [{idx}] system: ...")
-            idx += 1
+            for content_item in self._system_msg["content"]:
+                if content_item["type"] == "text":
+                    text_preview = (
+                        content_item["text"][:200] + "..."
+                        if len(content_item["text"]) > 200
+                        else content_item["text"]
+                    )
+                    lines.append(f"  [{idx}] system: {text_preview}")
+                    idx += 1
 
         if self.config.num_shots > 0:
             lines.append(
