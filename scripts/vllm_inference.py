@@ -128,6 +128,8 @@ def main(cfg: DictConfig):
     all_outputs = []
     all_samples = []
     global_sample_idx = 0
+    queries_with_match = 0
+    total_queries_with_exemplars = 0
     start = time.perf_counter()
     for batch in tqdm(dataloader, desc="Processing batches"):
         batch_inputs = []
@@ -142,6 +144,11 @@ def main(cfg: DictConfig):
         for sample, exemplars in zip(batch, all_exemplars):
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
+
+            if exemplars is not None:
+                total_queries_with_exemplars += 1
+                if any(ex["label_str"] == sample["label_str"] for ex in exemplars):
+                    queries_with_match += 1
 
             inputs = conversation_builder.build_vllm_inputs(
                 sample["video"], processor, exemplars=exemplars
@@ -159,6 +166,18 @@ def main(cfg: DictConfig):
     end = time.perf_counter()
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
+
+    if sampler is not None:
+        match_pct = (
+            100.0 * queries_with_match / total_queries_with_exemplars
+            if total_queries_with_exemplars
+            else 0.0
+        )
+        logger.info(
+            f"Exemplar label match: {queries_with_match}/{total_queries_with_exemplars} "
+            f"({match_pct:.1f}%) queries had at least one exemplar with a matching label"
+        )
+        run.summary["exemplar_label_match_pct"] = match_pct
 
     if is_embed:
         from falldet.embeddings import save_embeddings
