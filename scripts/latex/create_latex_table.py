@@ -32,13 +32,36 @@ MODEL_NAMES_COT: dict[str, str] = {
 DATASET = "OOPS"
 SPLIT = "cs"
 
-# We define the specialized model data as a raw list of floats here
-# so it can be included in the calculation for bold/underline
-SPECIALIZED_MODEL_NAME = "VMAE-K400"
-SPECIALIZED_MODEL_METRICS: list[float] = [21.4, 47.6, 21.9, 72.9, 85.4, 65.6, 33.1, 96.3, 41.0]
+# Whether to include the Fall ∪ Fallen binary metrics column group
+INCLUDE_FALL_UNION_FALLEN = True
 
-# Columns to apply heatmap coloring (indices: 0=BAcc, 2=F1)
+# We define the specialized model data as a raw list of floats here
+# so it can be included in the calculation for bold/underline.
+SPECIALIZED_MODEL_NAME = "VMAE-K400"
+SPECIALIZED_MODEL_METRICS_ALL: list[float | None] = [
+    22.9,
+    94.5,
+    23.3,
+    77.4,
+    84.8,
+    67.5,
+    28.0,
+    97.6,
+    38.2,
+    70.9,
+    84.1,
+    70.3,
+]
+SPECIALIZED_MODEL_METRICS: list[float | None] = (
+    SPECIALIZED_MODEL_METRICS_ALL
+    if INCLUDE_FALL_UNION_FALLEN
+    else SPECIALIZED_MODEL_METRICS_ALL[:9]
+)
+
+# Columns to apply heatmap coloring (indices: 0=BAcc, 2=F1, 5=fall_f1, 8=fallen_f1)
 HEATMAP_COLUMNS = [0, 2, 5, 8]
+if INCLUDE_FALL_UNION_FALLEN:
+    HEATMAP_COLUMNS.append(11)  # fall_union_fallen_f1
 
 # ==========================================
 # METRIC MAPPING
@@ -54,6 +77,12 @@ METRICS_ORDER = [
     f"{DATASET}_{SPLIT}_fallen_specificity",
     f"{DATASET}_{SPLIT}_fallen_f1",
 ]
+if INCLUDE_FALL_UNION_FALLEN:
+    METRICS_ORDER += [
+        f"{DATASET}_{SPLIT}_fall_union_fallen_sensitivity",
+        f"{DATASET}_{SPLIT}_fall_union_fallen_specificity",
+        f"{DATASET}_{SPLIT}_fall_union_fallen_f1",
+    ]
 
 
 def fetch_run_data(api, run_id):
@@ -165,37 +194,53 @@ def generate_latex():
     mllm_body = "\n".join(mllm_latex_rows)
 
     # 4. Construct Final Table
+    # Compute layout dimensions based on INCLUDE_FALL_UNION_FALLEN
+    if INCLUDE_FALL_UNION_FALLEN:
+        col_spec = "@{}l rrr rrr rrr rrr@{}"
+        total_cols = 13
+        union_header = " &\n\\multicolumn{3}{c}{Fall $\\cup$ Fallen}"
+        union_cmidrule = " \\cmidrule(lr){11-13}"
+        union_sub_header = (
+            "\n & \\multicolumn{1}{c}{Se}   & \\multicolumn{1}{c}{Sp}  & \\multicolumn{1}{c}{F1}"
+        )
+    else:
+        col_spec = "@{}l rrr rrr rrr@{}"
+        total_cols = 10
+        union_header = ""
+        union_cmidrule = ""
+        union_sub_header = ""
+
     full_table = f"""
 \\begingroup
 \\renewcommand{{\\arraystretch}}{{1.2}}
 \\begin{{table}}[htp]
-\caption{{\\textbf{{Zero-shot fall detection results}} on the OF-ItW dataset using the cross-subject split.
-We report classification metrics on the cross-subject (CS) split for the 16-class action recognition task, as well as binary metrics for the specific Fall and Fallen classes. The best results are highlighted in \\textbf{{bold}}, and the second-best are \\underline{{underlined}}.}}
+\caption{{\\textbf{{Zero-shot fall detection results}} on the OmniFall-In-the-Wild dataset.
+We report classification metrics for the 16-class action recognition task, as well as binary metrics for the Fall, Fallen and combined Fall/Fallen classes. Open-source MLLMs are sorted by parameter count. The best results are highlighted in \\textbf{{bold}}, and the second-best are \\underline{{underlined}}. Darker cells indicate better performance.}}
 \\label{{tab:zero_shot_fall_detection_results}}
 
 \\resizebox{{\\columnwidth}}{{!}}{{
-\\begin{{tabular}}{{@{{}}l rrr rrr rrr@{{}}}}
+\\begin{{tabular}}{{{col_spec}}}
 \\toprule
 % Top Header Row
-\\multirow{{2}}{{*}}{{\\textbf{{Model}}}} &
+\\multirow{{2}}{{*}}{{{{Model}}}} &
 \\multicolumn{{3}}{{c}}{{16-class}} &
 \\multicolumn{{3}}{{c}}{{Fall $\\Delta$}} &
-\\multicolumn{{3}}{{c}}{{Fallen $\\Delta$}} \\\\
-\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}
+\\multicolumn{{3}}{{c}}{{Fallen $\\Delta$}}{union_header} \\\\
+\\cmidrule(lr){{2-4}} \\cmidrule(lr){{5-7}} \\cmidrule(lr){{8-10}}{union_cmidrule}
 
 % Sub Header Row
  & \\multicolumn{{1}}{{c}}{{BAcc}} & \\multicolumn{{1}}{{c}}{{Acc}} & \\multicolumn{{1}}{{c}}{{F1}}
  & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}}
- & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}} \\\\
+ & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}}{union_sub_header} \\\\
 \\midrule
 
 % SECTION 1
-\\multicolumn{{10}}{{@{{}}l}}{{\\textbf{{Specialized Model}}}} \\\\
+\\multicolumn{{{total_cols}}}{{@{{}}l}}{{\\textit{{Specialized Model}}}} \\\\
 {specialized_latex}
 \\midrule
 
 % SECTION 2
-\\multicolumn{{10}}{{@{{}}l}}{{\\textbf{{Open-source MLLMs}}}} \\\\
+\\multicolumn{{{total_cols}}}{{@{{}}l}}{{\\textit{{Open-source MLLMs}}}} \\\\
 {mllm_body}
 
 \\bottomrule
