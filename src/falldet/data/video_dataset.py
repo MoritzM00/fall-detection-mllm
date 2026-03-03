@@ -156,7 +156,7 @@ class OmnifallVideoDataset(GenericVideoDataset):
                     "label_str": label_str,
                     "start": start,
                     "end": end,
-                    "subsect": subject,
+                    "subject": subject,
                     "cam": cam,
                     "duration": end - start,
                 }
