@@ -240,6 +240,7 @@ class DatasetConfig(BaseConfig):
     num_classes: int | None = None
     metric_for_best_model: str | None = None
     create_all_combined: bool = False
+    split: str | None = None
 
 
 class InferenceConfig(BaseConfig):
