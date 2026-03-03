@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,7 +13,7 @@ from tqdm import tqdm
 from transformers import AutoProcessor
 
 import wandb
-from falldet.config import resolve_model_name_from_config, resolve_model_path_from_config
+from falldet.config import resolve_model_path_from_config
 from falldet.data.video_dataset import label2idx
 from falldet.data.video_dataset_factory import get_video_datasets
 from falldet.evaluation import evaluate_predictions
@@ -228,21 +227,13 @@ def main(cfg: DictConfig):
         predictions_dir = Path(config.output_dir) / "predictions"
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
-        # Add timestamp to filename to avoid overwriting previous runs
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        model_name = resolve_model_name_from_config(config.model)
-        predictions_file = predictions_dir / f"{model_name}_{dataset_name}_{timestamp}.jsonl"
-
-        # Get wandb run ID if available
-        wandb_run_id = run.id if run else None
+        predictions_file = predictions_dir / f"{run.name}.jsonl"
 
         save_predictions_jsonl(
             output_path=predictions_file,
-            model_name=model_name,
-            dataset_name=dataset_name,
             predictions=predictions,
             config=config.model_dump(),
-            wandb_run_id=wandb_run_id,
+            wandb_run_id=run.id,
         )
         run.save(predictions_file.as_posix())
 
