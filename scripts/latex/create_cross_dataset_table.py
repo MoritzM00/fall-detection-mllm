@@ -5,7 +5,6 @@ import wandb
 # ==========================================
 ENTITY = "moritzm00"
 PROJECT = "fall-detection-zeroshot-v4"
-SPLIT = "cs"
 
 METRIC_SUFFIXES = [
     "balanced_accuracy",
@@ -17,59 +16,181 @@ METRIC_SUFFIXES = [
     "fallen_sensitivity",
     "fallen_specificity",
     "fallen_f1",
+    "fall_union_fallen_sensitivity",
+    "fall_union_fallen_specificity",
+    "fall_union_fallen_f1",
 ]
 
 # Each dataset entry: wb_name (W&B metric prefix), display_name (LaTeX),
-# specialized_name (row label), specialized_metrics (9 floats as %, or None if unknown)
+# specialized_name (row label), specialized_metrics (12 floats as %, or None if unknown)
 DATASETS = [
     {
         "wb_name": "le2i",
         "display_name": "Le2i",
         "cite_key": "le2i",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [83.2, 89.7, 82.4, 100.0, 99.4, 97.8, 100.0, 100.0, 100.0],
+        "specialized_metrics": [
+            81.5,
+            96.6,
+            71.7,
+            100.0,
+            98.9,
+            95.7,
+            100.0,
+            98.4,
+            93.3,
+            100.0,
+            96.9,
+            94.5,
+        ],
     },
     {
         "wb_name": "up_fall",
         "display_name": "UP-Fall",
         "cite_key": "upfall",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [92.6, 92.0, 82.4, 96.5, 99.3, 96.9, 79.8, 98.0, 85.4],
+        "specialized_metrics": [
+            83.5,
+            99.6,
+            76.5,
+            98.2,
+            97.1,
+            94.1,
+            86.0,
+            96.6,
+            86.7,
+            92.1,
+            91.2,
+            90.5,
+        ],
     },
     {
         "wb_name": "cmdfall",
         "display_name": "CMDFall",
         "cite_key": "cmdfall",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [83.0, 85.4, 83.3, 92.6, 98.9, 92.6, 90.9, 98.9, 91.0],
+        "specialized_metrics": [
+            85.6,
+            96.1,
+            85.6,
+            95.0,
+            99.2,
+            94.8,
+            94.2,
+            99.4,
+            94.8,
+            95.7,
+            98.7,
+            95.9,
+        ],
     },
     {
         "wb_name": "gmdcsa24",
         "display_name": "GMDCSA24",
         "cite_key": "gmdcsa24",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [80.3, 76.3, 75.0, 64.7, 94.7, 68.8, 82.4, 97.4, 84.8],
+        "specialized_metrics": [
+            80.2,
+            87.1,
+            74.0,
+            100.0,
+            92.1,
+            85.0,
+            76.5,
+            100.0,
+            86.7,
+            88.2,
+            89.8,
+            85.7,
+        ],
     },
     {
         "wb_name": "edf",
         "display_name": "EDF",
         "cite_key": "edf_occu",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [55.1, 74.2, 54.2, 82.4, 95.5, 77.8, 100.0, 95.3, 89.4],
+        "specialized_metrics": [
+            64.6,
+            93.8,
+            68.7,
+            87.5,
+            95.5,
+            80.0,
+            95.0,
+            96.3,
+            88.4,
+            97.2,
+            92.4,
+            89.7,
+        ],
     },
     {
         "wb_name": "occu",
         "display_name": "OCCU",
         "cite_key": "edf_occu",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [84.4, 91.1, 81.9, 100.0, 97.6, 94.1, 100.0, 98.8, 97.0],
+        "specialized_metrics": [
+            82.5,
+            100.0,
+            78.1,
+            100.0,
+            96.5,
+            91.4,
+            100.0,
+            98.8,
+            97.0,
+            100.0,
+            94.2,
+            94.1,
+        ],
     },
     {
         "wb_name": "caucafall",
         "display_name": "CaucaFall",
         "cite_key": "caucafall",
+        "split_type": "cs",
         "specialized_name": "VMAE-K400",
-        "specialized_metrics": [76.8, 80.9, 76.2, 100.0, 100.0, 100.0, 100.0, 97.4, 94.7],
+        "specialized_metrics": [
+            74.0,
+            95.7,
+            74.6,
+            77.8,
+            97.4,
+            82.4,
+            100.0,
+            94.7,
+            90.0,
+            88.9,
+            89.7,
+            86.5,
+        ],
+    },
+    {
+        "wb_name": "wanfall",
+        "display_name": "WanFall",
+        "cite_key": "schneider_omnifall_2025",
+        "split_type": "random",
+        "specialized_name": "VMAE-K400",
+        "specialized_metrics": [
+            58.2,
+            99.3,
+            59.7,
+            93.9,
+            95.6,
+            81.9,
+            65.3,
+            97.6,
+            67.6,
+            88.7,
+            94.1,
+            82.7,
+        ],
     },
 ]
 
@@ -83,6 +204,7 @@ MLLM_RUN_IDS: dict[str, dict[str, str]] = {
         "edf": "tnw4d5oq",
         "occu": "g4lgq7hg",
         "caucafall": "q4buift2",
+        "wanfall": "v1byk2yi",
     },
     "Qwen3-VL-8B": {
         "le2i": "9uhyvciq",
@@ -92,6 +214,7 @@ MLLM_RUN_IDS: dict[str, dict[str, str]] = {
         "edf": "0hgpttx8",
         "occu": "ipp0bhcr",
         "caucafall": "gpq1ipeo",
+        "wanfall": "j61rz8mk",
     },
 }
 
@@ -99,14 +222,16 @@ MLLM_RUN_IDS: dict[str, dict[str, str]] = {
 # ==========================================
 # FETCH
 # ==========================================
-def fetch_run_metrics(api, run_id: str, dataset_wb_name: str) -> list[float | None]:
-    """Fetch the 9 metrics for a given run and dataset prefix."""
+def fetch_run_metrics(
+    api, run_id: str, dataset_wb_name: str, split_type: str
+) -> list[float | None]:
+    """Fetch the 12 metrics for a given run and dataset prefix."""
     try:
         run = api.run(f"{ENTITY}/{PROJECT}/{run_id}")
         summary = run.summary
         values: list[float | None] = []
         for suffix in METRIC_SUFFIXES:
-            key = f"{dataset_wb_name}_{SPLIT}_{suffix}"
+            key = f"{dataset_wb_name}_{split_type}_{suffix}"
             val = summary.get(key)
             values.append(val * 100 if val is not None else None)
         return values
@@ -165,7 +290,7 @@ def generate_latex() -> None:
             if run_id == "TODO":
                 metrics: list[float | None] = [None] * len(METRIC_SUFFIXES)
             else:
-                metrics = fetch_run_metrics(api, run_id, ds["wb_name"])
+                metrics = fetch_run_metrics(api, run_id, ds["wb_name"], ds["split_type"])
             rows.append({"name": model_name, "metrics": metrics})
 
         dataset_groups.append(
@@ -189,9 +314,11 @@ def generate_latex() -> None:
         for row_idx, row in enumerate(rows):
             # Dataset name cell: multirow on the first row of the group
             if row_idx == 0:
-                dataset_cell = (
-                    f"\\multirow{{{len(rows)}}}{{*}}{{{display_name}~\\cite{{{cite_key}}}}}"
-                )
+                if cite_key is not None:
+                    ds_label = f"{display_name}~\\cite{{{cite_key}}}"
+                else:
+                    ds_label = display_name
+                dataset_cell = f"\\multirow{{{len(rows)}}}{{*}}{{{ds_label}}}"
             else:
                 dataset_cell = ""
 
@@ -208,25 +335,27 @@ def generate_latex() -> None:
     table = f"""\\begingroup
 \\renewcommand{{\\arraystretch}}{{1.2}}
 \\begin{{table}}[htp]
-\\caption{{\\textbf{{Zero-shot fall detection on additional datasets.}}
+\\caption{{\\textbf{{Zero-shot fall detection on staged datasets.}}
 Results for InternVL3.5-8B and Qwen3-VL-8B compared to a dataset-specific specialized
-baseline on the Le2i, UP-Fall, CMDFall, GMDCSA24, EDF, OCCU, CaucaFall, and MCFD benchmarks (cross-subject split).
+baseline on several staged fall detection benchmark datasets (cross-subject split) and a synthetic fall dataset WanFall (random split).
 Best results per dataset are highlighted in \\textbf{{bold}}.}}
 \\label{{tab:cross_dataset_results}}
 
 \\resizebox{{\\columnwidth}}{{!}}{{
-\\begin{{tabular}}{{@{{}}l l rrr rrr rrr@{{}}}}
+\\begin{{tabular}}{{@{{}}l l rrr rrr rrr rrr@{{}}}}
 \\toprule
 % Top Header Row
 \\multirow{{2}}{{*}}{{\\textbf{{Dataset}}}} &
 \\multirow{{2}}{{*}}{{\\textbf{{Model}}}} &
 \\multicolumn{{3}}{{c}}{{16-class}} &
 \\multicolumn{{3}}{{c}}{{Fall $\\Delta$}} &
-\\multicolumn{{3}}{{c}}{{Fallen $\\Delta$}} \\\\
-\\cmidrule(lr){{3-5}} \\cmidrule(lr){{6-8}} \\cmidrule(lr){{9-11}}
+\\multicolumn{{3}}{{c}}{{Fallen $\\Delta$}} &
+\\multicolumn{{3}}{{c}}{{Fall $\\cup$ Fallen}} \\\\
+\\cmidrule(lr){{3-5}} \\cmidrule(lr){{6-8}} \\cmidrule(lr){{9-11}} \\cmidrule(lr){{12-14}}
 
 % Sub Header Row
  & & \\multicolumn{{1}}{{c}}{{BAcc}} & \\multicolumn{{1}}{{c}}{{Acc}} & \\multicolumn{{1}}{{c}}{{F1}}
+ & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}}
  & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}}
  & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}} \\\\
 \\midrule
