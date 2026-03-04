@@ -55,7 +55,7 @@ class PromptBuilder:
             sections.append(COT_INSTRUCTION)
 
         # 6. Output format instruction (skip for embed mode)
-        if self.config.output_format != "none":
+        if self.config.output_format is not None:
             sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
 
         return "\n\n".join(sections)
@@ -87,9 +87,9 @@ class PromptBuilder:
 
         Returns:
             OutputParser instance matching the configured output format,
-            or None when output_format is "none" (embed mode)
+            or None when output_format is None (embed mode)
         """
-        if self.config.output_format == "none":
+        if self.config.output_format is None:
             return None
 
         # Select base parser based on output format

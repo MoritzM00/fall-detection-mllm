@@ -48,7 +48,7 @@ class PromptConfig(BaseConfig):
         system_instruction: Free-form system message text. When set, returned as the system
             message by get_system_message(). Takes priority over model-specific auto-detection
             (e.g., InternVL R1). None means no explicit system instruction.
-        output_format: Expected output format - "json" or "text"
+        output_format: Expected output format - "json", "text", or None (embeddings)
         cot: Whether to enable chain-of-thought reasoning
         cot_start_tag: Opening tag for reasoning content (default: "<think>")
         cot_end_tag: Closing tag for reasoning content (default: "</think>")
@@ -64,7 +64,7 @@ class PromptConfig(BaseConfig):
     """
 
     system_instruction: str | None = None
-    output_format: Literal["json", "text", "none"] = "json"
+    output_format: Literal["json", "text"] | None = "json"
     cot: bool = False
     cot_start_tag: str = "<think>"
     cot_end_tag: str = "</think>"

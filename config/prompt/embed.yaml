@@ -1,5 +1,5 @@
 system_instruction: "Represent the user's input"
-output_format: none
+output_format: null
 cot: false
 model_family: ${model.family}
 

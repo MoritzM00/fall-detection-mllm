@@ -89,7 +89,7 @@ class MockLLM:
         model: str,
         seed: int = 0,
         cot: bool = False,
-        output_format: str = "json",
+        output_format: str | None = "json",
         **kwargs,
     ):
         """
@@ -99,7 +99,7 @@ class MockLLM:
             model: Model path (ignored in mock, kept for compatibility)
             seed: Random seed for reproducible predictions
             cot: Whether to include chain-of-thought reasoning in outputs
-            output_format: Output format - "json" or "text"
+            output_format: Output format - "json", "text", or None
             **kwargs: Other vLLM parameters (accepted but ignored for compatibility)
         """
         self.model = model
