@@ -39,12 +39,6 @@ TASK_INSTRUCTION_EXTENDED = textwrap.dedent("""
     You are given a short video clip depicting one or several human subjects. Your task is to analyze the clip and classify the primary action being performed by the main subject. Assign exactly one label from the allowed list below, focusing on fall detection and post-fall assessment. Carefully consider the context, body posture, movement dynamics, and any environmental cues present in the video to make an accurate classification.
 """).strip()
 
-TASK_INSTRUCTION_EMBED = textwrap.dedent("""
-    Task:
-    Analyze the video clip and represent the primary action being performed.
-    Focus on the visual features, body posture, and movement dynamics.
-""").strip()
-
 LABELS_COMPONENT = textwrap.dedent("""
     Allowed Labels:
     * Core: walk, fall, fallen, sit_down, sitting, lie_down, lying, stand_up, standing, other
@@ -200,7 +194,6 @@ ROLE_VARIANTS: dict[str, str] = {
 TASK_VARIANTS: dict[str, str] = {
     TaskVariant.STANDARD: TASK_INSTRUCTION,
     TaskVariant.EXTENDED: TASK_INSTRUCTION_EXTENDED,
-    TaskVariant.EMBED: TASK_INSTRUCTION_EMBED,
 }
 
 DEFINITIONS_VARIANTS: dict[str, str] = {

@@ -26,7 +26,6 @@ class RoleVariant(StrEnum):
 class TaskVariant(StrEnum):
     STANDARD = "standard"
     EXTENDED = "extended"
-    EMBED = "embed"
 
 
 class LabelsVariant(StrEnum):
