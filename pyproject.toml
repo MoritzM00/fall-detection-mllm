@@ -74,6 +74,7 @@ exclude = [
     "src/falldet/**/*subgroup*",
     "src/falldet/utils/logging.py",
     "src/falldet/utils/wandb.py",
+    "src/falldet/visualization.py",
 ]
 
 [tool.ty.environment]

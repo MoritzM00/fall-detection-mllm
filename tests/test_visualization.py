@@ -1,13 +1,33 @@
-"""Tests for the confusion matrix visualization function."""
+"""Tests for the confusion matrix visualization functions."""
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
-from falldet.visualization import plot_confusion_matrix
+from falldet.visualization import plot_confusion_matrix, plot_relative_confusion_matrix
 
 # Use non-interactive backend so tests don't pop up windows
 matplotlib.use("Agg")
+
+
+def _extract_heatmap_annotations(ax: matplotlib.axes.Axes, n: int) -> dict[tuple[int, int], str]:
+    """Return a ``{(row, col): text}`` dict for the *n* x *n* heatmap cells.
+
+    Seaborn annotations live in data-coordinates (cell centres at 0.5, 1.5, …).
+    We keep only data-coordinate texts whose rounded indices fall inside the
+    matrix.
+    """
+    result: dict[tuple[int, int], str] = {}
+    for t in ax.texts:
+        if t.get_transform() != ax.transData:
+            continue
+        x, y = t.get_position()
+        col = round(x - 0.5)
+        row = round(y - 0.5)
+        if 0 <= row < n and 0 <= col < n:
+            result[(row, col)] = t.get_text()
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -377,3 +397,121 @@ class TestEdgeCases:
         xlabels = [t.get_text() for t in ax.get_xticklabels()]
         assert "b" in xlabels
         plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Relative confusion matrix
+# ---------------------------------------------------------------------------
+
+
+class TestRelativeConfusionMatrix:
+    """Tests for relative confusion matrix plotting."""
+
+    def test_returns_fig_and_ax(self):
+        """Function returns a (fig, ax) tuple."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "b", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "a", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+        assert isinstance(fig, plt.Figure)
+        assert isinstance(ax, matplotlib.axes.Axes)
+        plt.close(fig)
+
+    def test_diagonal_improvement_is_plus(self):
+        """Higher diagonal mass for run B is marked with a plus."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "b", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "a", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        texts = _extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 0)] == "+50"
+        assert texts[(1, 1)] == ""
+        plt.close(fig)
+
+    def test_off_diagonal_reduction_is_plus(self):
+        """Lower off-diagonal mass for run B is marked with a positive value."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "b", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "a", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        texts = _extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 1)] == "+50"
+        assert texts[(1, 0)] == ""
+        plt.close(fig)
+
+    def test_off_diagonal_increase_is_minus(self):
+        """Higher off-diagonal mass for run B is marked with a negative value."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "a", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "b", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        texts = _extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 1)] == "-50"
+        assert texts[(0, 0)] == "-50"
+        plt.close(fig)
+
+    def test_heatmap_uses_absolute_difference(self):
+        """Heatmap magnitude is the absolute row-normalized difference."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "b", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "a", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        heatmap_values = np.array(ax.collections[0].get_array()).flatten()
+        assert list(heatmap_values) == pytest.approx([0.5, 0.5, 0.0, 0.0])
+        plt.close(fig)
+
+    def test_subset_slices_from_full_relative_matrix(self):
+        """Subset values are taken from the full relative matrix."""
+        y_true_a = ["a", "a", "b", "b", "c", "c"]
+        y_pred_a = ["a", "b", "b", "a", "c", "a"]
+        y_true_b = ["a", "a", "b", "b", "c", "c"]
+        y_pred_b = ["a", "a", "b", "a", "c", "c"]
+
+        fig, ax = plot_relative_confusion_matrix(
+            y_true_a,
+            y_pred_a,
+            y_true_b,
+            y_pred_b,
+            subset=["a", "b"],
+        )
+
+        xlabels = [t.get_text() for t in ax.get_xticklabels()]
+        assert xlabels == ["a", "b"]
+        heatmap_values = np.array(ax.collections[0].get_array()).flatten()
+        assert list(heatmap_values) == pytest.approx([0.5, 0.5, 0.0, 0.0])
+        plt.close(fig)
+
+    def test_subset_unknown_label_raises(self):
+        """Unknown subset labels raise ValueError."""
+        with pytest.raises(ValueError, match="not present in the data"):
+            plot_relative_confusion_matrix(
+                ["a"],
+                ["a"],
+                ["a"],
+                ["a"],
+                subset=["missing"],
+            )
+
+    def test_mismatched_lengths_raise(self):
+        """Each run validates its own label-array lengths."""
+        with pytest.raises(ValueError, match="same length"):
+            plot_relative_confusion_matrix(["a"], ["a", "b"], ["a"], ["a"])
+
+    def test_different_ground_truths_raise(self):
+        """Comparing runs with different ground-truth labels raises ValueError."""
+        with pytest.raises(ValueError, match="y_true_a and y_true_b must be identical"):
+            plot_relative_confusion_matrix(["a", "b"], ["a", "b"], ["a", "a"], ["a", "a"])
