@@ -77,8 +77,6 @@ def extract_labels_for_metrics(
 
 def save_predictions_jsonl(
     output_path: Path,
-    model_name: str,
-    dataset_name: str,
     config: dict,
     predictions: list[dict],
     wandb_run_id: str | None = None,
@@ -97,8 +95,6 @@ def save_predictions_jsonl(
         # Write metadata line first
         metadata = {
             "type": "metadata",
-            "model": model_name,
-            "dataset": dataset_name,
             "config": config,
             "timestamp": datetime.now().isoformat(),
             "wandb_run_id": wandb_run_id,

@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - /dataset/omnifall/video@dataset: oops
+  - override /prompt: embed
+  - override /model: qwenvl_embed
+
+data:
+  mode: train
+
+task: embed
+num_samples: null
+
+wandb:
+  project: "fall-detection-embeddings"
+  tags: ["embedding"]
+
+output_dir: "outputs/embeddings"

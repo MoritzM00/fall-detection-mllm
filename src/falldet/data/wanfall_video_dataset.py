@@ -1,23 +1,25 @@
 import csv
 import logging
-import random
 from collections import OrderedDict
 
 import pandas as pd
-import torch
 
-from .dataset import GenericVideoDataset
 from .hf_utils import resolve_annotations_file, resolve_split_file
-from .video_dataset import idx2label
+from .video_dataset import OmnifallVideoDataset, idx2label
+
+logger = logging.getLogger(__name__)
 
 
-class WanfallVideoDataset(GenericVideoDataset):
+class WanfallVideoDataset(OmnifallVideoDataset):
     """
-    Video dataset for WanFall that handles temporal segmentation annotations.
-    Extends GenericVideoDataset to support start/end times and proper segment sampling.
+    Video dataset for WanFall that extends OmnifallVideoDataset.
 
-    Unlike OmnifallVideoDataset, WanFall uses a simpler split structure without
-    cross-subject/cross-view subdirectories.
+    Differences from OmnifallVideoDataset:
+    - No cross-subject/cross-view split concept (split parameter is ignored)
+    - Split files have a CSV header row that must be skipped
+    - Annotations CSV uses integer label indices instead of string labels
+    - Annotations include demographic metadata (age_group, gender, ethnicity, bmi_band)
+    - load_item returns demographic metadata alongside segment info
     """
 
     def __init__(
@@ -34,6 +36,9 @@ class WanfallVideoDataset(GenericVideoDataset):
         max_retries=10,
         fast=True,
         ext=".mp4",
+        size=None,
+        max_size=None,
+        seed=0,
         **kwargs,
     ):
         """
@@ -41,20 +46,26 @@ class WanfallVideoDataset(GenericVideoDataset):
 
         Args:
             video_root: Root directory for video files
-            annotations_file: CSV file with temporal labels (path,label,start,end,subject,cam,dataset)
+            annotations_file: CSV file with temporal labels (path,label,start,end,subject,cam,dataset,...)
             target_fps: Target FPS for frame sampling
             vid_frame_count: Number of frames to extract per segment
             split_root: Root directory for split files (contains train.csv, val.csv, test.csv)
             dataset_name: Name of the dataset
             mode: Dataset mode ("train", "val", "test", or "all")
-            data_fps: Original FPS of the videos (if known, default 16.0 for WanFall)
+            data_fps: Original FPS of the videos (default 16.0 for WanFall)
             path_format: Format string for video paths
             max_retries: Maximum retries for loading a video
-            image_processor: Image processor for frame transformation
-            normalize: Normalization parameters
             fast: Whether to use fast video loading
+            ext: Video file extension
+            size: Optional tuple specifying the (height, width) to resize frames to
+            max_size: Optional maximum size for resizing
+            seed: Random seed for reproducibility
         """
-        super().__init__(
+        # Skip OmnifallVideoDataset.__init__ — we call GenericVideoDataset directly
+        # and handle split loading ourselves because WanFall uses a different split
+        # structure (no cross-subject/cross-view, CSV header in split files).
+        # We then reuse the rest of Omnifall's machinery (load_item, get_random_offset, etc.)
+        super(OmnifallVideoDataset, self).__init__(
             video_root=video_root,
             annotations_file=annotations_file,
             target_fps=target_fps,
@@ -64,8 +75,12 @@ class WanfallVideoDataset(GenericVideoDataset):
             max_retries=max_retries,
             mode=mode,
             fast=fast,
+            size=size,
+            max_size=max_size,
+            seed=seed,
         )
         self.dataset_name = dataset_name
+        self.split = None  # WanFall doesn't use cross-subject/cross-view splits
         self.split_root = split_root
         self.ext = ext
 
@@ -103,34 +118,34 @@ class WanfallVideoDataset(GenericVideoDataset):
 
         # Set paths to segment indices
         self.paths = list(range(len(self.video_segments)))
-        self.annotations = {}  # Not used in our case
 
     def _load_temporal_labels(self, annotations_file):
-        """Load temporal segmentation labels from CSV and create segment index."""
-        # Resolve annotations file (supports local paths and HF dataset references)
+        """Load temporal segmentation labels from CSV and create segment index.
+
+        WanFall annotations differ from OmniFall:
+        - Label column contains integer indices (not string labels)
+        - Extra demographic metadata columns (age_group, gender, skin_tone, ethnicity, bmi_band)
+        """
         resolved_path = resolve_annotations_file(annotations_file)
         df = pd.read_csv(resolved_path)
 
         for _, row in df.iterrows():
             path = row.iloc[0]  # Video path
-            label = row.iloc[1]  # Label integer
+            label = row.iloc[1]  # Label integer index
             start = float(row.iloc[2])  # Start time in seconds
             end = float(row.iloc[3])  # End time in seconds
             subject = row.iloc[4]  # Subject ID
             cam = row.iloc[5]  # Camera ID
 
-            # Optional demographic metadata (WanFall-specific, may not exist in all datasets)
-            # Using .get() to safely handle missing columns
-            dataset_name = row.iloc[6] if len(row) > 6 else None  # noqa: F841
+            # Optional demographic metadata (WanFall-specific)
             age_group = row.iloc[7] if len(row) > 7 else None
             gender = row.iloc[8] if len(row) > 8 else None
-            skin_tone = row.iloc[9] if len(row) > 9 else None  # noqa: F841
             ethnicity = row.iloc[10] if len(row) > 10 else None
             bmi_band = row.iloc[11] if len(row) > 11 else None
 
             # WanFall uses 16 classes (0-15)
             # Classes 0-9 match Omnifall, classes 10-15 are WanFall-specific
-            label_str = idx2label[label]
+            label_str = idx2label.get(label)
 
             # Only process videos that are in our split
             if path in self.samples or self.mode == "all":
@@ -166,61 +181,15 @@ class WanfallVideoDataset(GenericVideoDataset):
             f"Loaded {len(self.video_segments)} segments from {len(self.samples)} videos for {self.mode} split"
         )
 
-    def __len__(self):
-        return len(self.video_segments)
-
-    def _id2label(self, idx):
-        """Get segment info and label for given index."""
-        segment = self.video_segments[idx]
-        return segment, segment["label"]
-
-    def get_random_offset(self, length, target_interval, idx, fps, start=0):
-        """
-        Get random offset for temporal segment sampling.
-        Ensures we sample within the annotated segment boundaries.
-        """
-        segment = self.video_segments[idx]
-        segment_start_frame = int(segment["start"] * fps)
-        segment_end_frame = int(segment["end"] * fps)
-        segment_frames = segment_end_frame - segment_start_frame
-
-        required_frames = self.vid_frame_count * target_interval
-
-        if segment_frames <= required_frames:
-            # Segment is too short, start from beginning of segment
-            return segment_start_frame
-        else:
-            # Random offset within the segment
-            max_offset = segment_frames - required_frames
-            random_offset = random.randint(0, max_offset)
-            return segment_start_frame + random_offset
-
     def load_item(self, idx):
-        """Load video segment with temporal boundaries."""
-        segment, label = self._id2label(idx)
+        """Load video segment with temporal boundaries and demographic metadata."""
+        # Reuse parent's load_item for video loading and base segment info
+        inputs = super().load_item(idx)
 
-        # Construct video path
-        video_path = self.path_format.format(
-            video_root=self.video_root, video_path=segment["video_path"], ext=self.ext
-        )
-
-        # Load frames from the video
-        frames = self.load_video(video_path, idx)
-
-        # Transform frames
-        inputs = self.transform_frames(frames)
-
-        # Add segment information
+        # Add WanFall-specific demographic metadata
+        segment = self.video_segments[idx]
         inputs.update(
             {
-                "label": label,
-                "label_str": segment["label_str"],
-                "video_path": segment["video_path"],
-                "start_time": segment["start"],
-                "end_time": segment["end"],
-                "segment_duration": segment["duration"],
-                "dataset": self.dataset_name,
-                # Add demographic metadata (will be None for datasets without this info)
                 "age_group": segment.get("age_group"),
                 "gender": segment.get("gender"),
                 "ethnicity": segment.get("ethnicity"),
@@ -229,11 +198,6 @@ class WanfallVideoDataset(GenericVideoDataset):
         )
 
         return inputs
-
-    @property
-    def targets(self):
-        """Return all class labels for segments in this dataset."""
-        return torch.tensor([segment["label"] for segment in self.video_segments])
 
     def __repr__(self):
         return (

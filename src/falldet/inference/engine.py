@@ -79,7 +79,11 @@ def create_llm_engine(config: InferenceConfig) -> LLM | MockLLM:
             f"Few-shot mode: {num_shots} exemplars, limit_mm_per_prompt={limit_mm_per_prompt}"
         )
 
+    # Set vLLM task based on config
+    vllm_task = "pooling" if config.task == "embed" else "generate"
+
     vllm_kwargs: dict[str, Any] = dict(
+        runner=vllm_task,
         model=checkpoint_path,
         tensor_parallel_size=tensor_parallel_size,
         mm_encoder_tp_mode=config.vllm.mm_encoder_tp_mode,

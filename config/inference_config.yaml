@@ -15,6 +15,9 @@ data:
   size: 448
   max_size: null
 
+# Task mode: "classify" (default) or "embed" (compute embeddings)
+task: classify
+
 # Global video processing parameters
 model_fps: 7.5  # Target frame rate for video sampling
 num_frames: 16  # Number of frames to extract per video

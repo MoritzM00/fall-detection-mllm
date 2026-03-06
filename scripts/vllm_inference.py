@@ -2,18 +2,18 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 import hydra
+import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
 
 import wandb
-from falldet.config import resolve_model_name_from_config, resolve_model_path_from_config
+from falldet.config import resolve_model_path_from_config
 from falldet.data.video_dataset import label2idx
 from falldet.data.video_dataset_factory import get_video_datasets
 from falldet.evaluation import evaluate_predictions
@@ -91,9 +91,16 @@ def main(cfg: DictConfig):
         prefetch_factor=prefetch_factor,
     )
 
-    # Build conversation builder (handles both zero-shot and few-shot)
+    # Build conversation builder and exemplar sampler
     conversation_builder = create_conversation_builder(config, label2idx)
     parser = conversation_builder.parser
+
+    # Set up per-query exemplar sampling if few-shot
+    sampler = None
+    if config.prompt.num_shots > 0:
+        from falldet.inference.fewshot import setup_fewshot_sampler
+
+        sampler = setup_fewshot_sampler(config, dataset_name)
 
     logger.info(
         f"Mode: {config.prompt.num_shots}-shot ({conversation_builder.num_videos} videos/request)"
@@ -109,24 +116,49 @@ def main(cfg: DictConfig):
     llm = create_llm_engine(config)
     sampling_params = create_sampling_params(config)
 
-    logger.info("Generating predictions...")
+    is_embed = config.task == "embed"
+
+    if is_embed:
+        logger.info("Computing embeddings...")
+    else:
+        logger.info("Generating predictions...")
 
     # Process in batches
     all_outputs = []
     all_samples = []
+    global_sample_idx = 0
+    queries_with_match = 0
+    total_queries_with_exemplars = 0
     start = time.perf_counter()
     for batch in tqdm(dataloader, desc="Processing batches"):
         batch_inputs = []
         batch_samples = []
-        for sample in batch:
+
+        # Load all exemplars for the batch in parallel
+        batch_indices = list(range(global_sample_idx, global_sample_idx + len(batch)))
+        all_exemplars = (
+            sampler.get_batch_exemplars(batch_indices) if sampler else [None] * len(batch)
+        )
+
+        for sample, exemplars in zip(batch, all_exemplars):
             metadata = {k: v for k, v in sample.items() if k != "video"}
             batch_samples.append(metadata)
 
-            # Build vLLM inputs using conversation builder (handles zero/few-shot uniformly)
-            inputs = conversation_builder.build_vllm_inputs(sample["video"], processor)
-            batch_inputs.append(inputs)
+            if exemplars is not None:
+                total_queries_with_exemplars += 1
+                if any(ex["label_str"] == sample["label_str"] for ex in exemplars):
+                    queries_with_match += 1
 
-        batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
+            inputs = conversation_builder.build_vllm_inputs(
+                sample["video"], processor, exemplars=exemplars
+            )
+            batch_inputs.append(inputs)
+            global_sample_idx += 1
+
+        if is_embed:
+            batch_outputs = llm.embed(batch_inputs)
+        else:
+            batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
         all_outputs.extend(batch_outputs)
         all_samples.extend(batch_samples)
 
@@ -134,7 +166,39 @@ def main(cfg: DictConfig):
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
 
+    if sampler is not None:
+        match_pct = (
+            100.0 * queries_with_match / total_queries_with_exemplars
+            if total_queries_with_exemplars
+            else 0.0
+        )
+        logger.info(
+            f"Exemplar label match: {queries_with_match}/{total_queries_with_exemplars} "
+            f"({match_pct:.1f}%) queries had at least one exemplar with a matching label"
+        )
+        run.summary["exemplar_label_match_pct"] = match_pct
+
+    if is_embed:
+        from falldet.embeddings import save_embeddings
+
+        embeddings = torch.tensor([out.outputs.embedding for out in all_outputs])
+        save_embeddings(
+            embeddings=embeddings,
+            samples=all_samples,
+            output_dir=config.output_dir,
+            dataset_name=dataset_name,
+            mode=config.data.mode,
+            num_frames=config.num_frames,
+            model_fps=config.model_fps,
+            model_name=config.model.name,
+            data_size=config.data.size,
+        )
+        logger.info(f"Logged results to W&B: {run.url}")
+        wandb.finish()
+        return
+
     # Parse outputs using the configured parser
+    assert parser is not None, "Parser must be set for classify task"
     predictions = []
     predicted_labels = []
     true_labels = []
@@ -163,21 +227,13 @@ def main(cfg: DictConfig):
         predictions_dir = Path(config.output_dir) / "predictions"
         predictions_dir.mkdir(parents=True, exist_ok=True)
 
-        # Add timestamp to filename to avoid overwriting previous runs
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        model_name = resolve_model_name_from_config(config.model)
-        predictions_file = predictions_dir / f"{model_name}_{dataset_name}_{timestamp}.jsonl"
-
-        # Get wandb run ID if available
-        wandb_run_id = run.id if run else None
+        predictions_file = predictions_dir / f"{run.name}.jsonl"
 
         save_predictions_jsonl(
             output_path=predictions_file,
-            model_name=model_name,
-            dataset_name=dataset_name,
             predictions=predictions,
             config=config.model_dump(),
-            wandb_run_id=wandb_run_id,
+            wandb_run_id=run.id,
         )
         run.save(predictions_file.as_posix())
 

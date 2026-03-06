@@ -1,0 +1,15 @@
+system_instruction: "Represent the user's input"
+output_format: null
+cot: false
+model_family: ${model.family}
+
+# Variant selectors
+role_variant: null          # no role preamble for embedding
+task_variant: standard         # uses standard task instruction for the embedding pass
+labels_variant: bulleted    # include labels for semantic context
+definitions_variant: null   # no definitions needed
+
+# Few-shot settings (embedding is always zero-shot)
+num_shots: 0
+shot_selection: balanced
+exemplar_seed: 42

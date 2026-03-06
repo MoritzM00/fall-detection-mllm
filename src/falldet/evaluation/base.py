@@ -14,7 +14,6 @@ import numpy as np
 from torch.utils.data import Dataset
 
 import wandb
-from falldet.evaluation.subgroup import perform_subgroup_evaluation
 from falldet.evaluation.visual import visualize_evaluation_results
 from falldet.metrics.base import compute_metrics
 from falldet.utils.latex import format_subgroup_latex_table
@@ -50,9 +49,6 @@ def evaluate_predictions(
         Dictionary of computed metrics
     """
     logger.info(f"Evaluating {len(predictions)} predictions on {dataset_name}")
-    is_wanfall = dataset_name.lower().startswith("wanfall") or dataset_name.lower().startswith(
-        "wan_fall"
-    )
 
     # Compute comprehensive metrics
     metrics = compute_metrics(y_pred=predictions, y_true=references)
@@ -68,16 +64,8 @@ def evaluate_predictions(
             n_videos=log_videos,
         )
 
-    # Perform subgroup evaluation if applicable
+    # no subgroup evaluation for now
     subgroup_results = None
-    if is_wanfall and predictions is not None:
-        subgroup_results = perform_subgroup_evaluation(
-            dataset=dataset,
-            predictions=predictions,
-            references=references,
-            dataset_name=dataset_name,
-            run=run,
-        )
 
     if run:
         for k, v in metrics.items():
@@ -90,7 +78,7 @@ def evaluate_predictions(
         )
 
     if save_results:
-        save_evaluation_results(metrics, subgroup_results, output_dir)
+        save_evaluation_results(metrics, subgroup_results, output_dir, run)
 
     return metrics
 
@@ -99,7 +87,8 @@ def save_evaluation_results(
     all_results: dict[str, Any],
     subgroup_results: dict[str, Any],
     output_dir: str,
-) -> None:
+    run: wandb.Run | None = None,
+):
     """
     Save evaluation results to files (YAML and LaTeX).
 
@@ -112,16 +101,15 @@ def save_evaluation_results(
     os.makedirs(results_dir, exist_ok=True)
 
     # Save JSON results
-    results_file = os.path.join(results_dir, f"test_results_{time.strftime('%Y%m%d-%H%M%S')}.json")
+    filename = run.name if run else f"results_{time.strftime('%Y%m%d-%H%M%S')}"
+    results_file = os.path.join(results_dir, f"test_results_{filename}.json")
     with open(results_file, "w") as f:
         json.dump(all_results, f, indent=4)
     logger.info(f"Saved evaluation results to {results_file}")
 
     # Save subgroup LaTeX tables if available
     if subgroup_results:
-        latex_file = os.path.join(
-            results_dir, f"subgroup_tables_{time.strftime('%Y%m%d-%H%M%S')}.tex"
-        )
+        latex_file = os.path.join(results_dir, f"subgroup_tables_{filename}.tex")
         logger.info(f"Generating subgroup LaTeX tables for {len(subgroup_results)} dataset(s)")
 
         with open(latex_file, "w") as f:

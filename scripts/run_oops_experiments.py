@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-Run experiments on the OOPS dataset for InternVL and Qwen VL models.
+Run experiments on video datasets for InternVL and Qwen VL models.
 
-This script runs the zeroshot experiment on the OOPS dataset across different
+This script runs the zeroshot experiment on a video dataset across different
 model sizes sequentially, with a cooldown between runs for vLLM cleanup.
 
 Examples:
-    # Run all InternVL models on oops
+    # Run all InternVL models on oops (default dataset)
     python scripts/run_oops_experiments.py --model internvl
 
-    # Run all Qwen models on oops
-    python scripts/run_oops_experiments.py --model qwenvl
+    # Run all Qwen models on cmdfall
+    python scripts/run_oops_experiments.py --model qwenvl --dataset cmdfall
 
-    # Run both model families
-    python scripts/run_oops_experiments.py --model internvl qwenvl
+    # Run on multiple datasets
+    python scripts/run_oops_experiments.py --model internvl --dataset cmdfall up-fall oops
+
+    # Run both model families on up-fall
+    python scripts/run_oops_experiments.py --model internvl qwenvl --dataset up-fall
 
     # Dry run to preview commands
     python scripts/run_oops_experiments.py --model internvl --dry-run
@@ -53,8 +56,18 @@ QWEN_MOE: dict[str, str] = {
     # "235B": "A22B",
 }
 
-# Fixed dataset
-DATASET = "oops"
+VIDEO_DATASETS = [
+    "up-fall",
+    "le2i",
+    "cmdfall",
+    "oops",
+    "gmdcsa24",
+    "edf",
+    "occu",
+    "caucafall",
+    "mcfd",
+]
+DEFAULT_DATASET = "oops"
 
 
 # =============================================================================
@@ -80,7 +93,9 @@ def get_active_params(model: str, params: str) -> str | None:
     return None
 
 
-def generate_command(model: str, params: str, cot: bool = False) -> str:
+def generate_command(
+    model: str, params: str, cot: bool = False, dataset: str = DEFAULT_DATASET
+) -> str:
     """
     Generate the vllm_inference.py command.
 
@@ -88,6 +103,7 @@ def generate_command(model: str, params: str, cot: bool = False) -> str:
         model: Model family ('internvl' or 'qwenvl')
         params: Model parameter size (e.g., '8B', '30B')
         cot: Whether to use chain of thought
+        dataset: Dataset name to run on
 
     Returns:
         Complete command string
@@ -99,7 +115,7 @@ def generate_command(model: str, params: str, cot: bool = False) -> str:
         f"model={model}",
         f"model.params={params}",
         f"experiment={experiment}",
-        f"dataset/omnifall/video@dataset={DATASET}",
+        f"dataset/omnifall/video@dataset={dataset}",
     ]
 
     # Add CoT-specific parameters for qwen models
@@ -140,6 +156,7 @@ def execute_runs(
     dry_run: bool = False,
     cooldown: int = 10,
     cot: bool = False,
+    datasets: list[str] | None = None,
 ) -> None:
     """
     Execute all runs sequentially.
@@ -150,15 +167,20 @@ def execute_runs(
         dry_run: If True, only print commands without executing
         cooldown: Seconds to wait between runs
         cot: If True, run chain of thought experiments
+        datasets: Dataset names to run on
     """
-    # Build list of (model, params) tuples
-    runs: list[tuple[str, str]] = []
+    if datasets is None:
+        datasets = [DEFAULT_DATASET]
+
+    # Build list of (model, params, dataset) tuples
+    runs: list[tuple[str, str, str]] = []
     for model in models:
         params_list = get_params_for_model(model)
         if sizes:
             params_list = [p for p in params_list if p in sizes]
         for params in params_list:
-            runs.append((model, params))
+            for dataset in datasets:
+                runs.append((model, params, dataset))
 
     if not runs:
         logging.error("No models to run! Check your --sizes filter.")
@@ -174,17 +196,20 @@ def execute_runs(
 
     prefix = "[DRY RUN] " if dry_run else ""
     experiment_type = "chain of thought" if cot else "zeroshot"
+    datasets_label = ", ".join(datasets)
     logging.info(
-        f"\n{prefix}Running {total_runs} {experiment_type} experiments on {DATASET} dataset"
+        f"\n{prefix}Running {total_runs} {experiment_type} experiments on [{datasets_label}] datasets"
     )
     logging.info("=" * 60)
 
-    for idx, (model, params) in enumerate(runs, start=1):
-        command = generate_command(model, params, cot=cot)
+    for idx, (model, params, dataset) in enumerate(runs, start=1):
+        command = generate_command(model, params, cot=cot, dataset=dataset)
 
         action = "Would run" if dry_run else "Running"
         moe_label = " (MoE)" if is_moe_model(model, params) else ""
-        logging.info(f"\n[{idx}/{total_runs}] {action} {model.upper()} {params}{moe_label}")
+        logging.info(
+            f"\n[{idx}/{total_runs}] {action} {model.upper()} {params}{moe_label} on {dataset}"
+        )
         logging.info(f"  Command: {command}")
 
         if dry_run:
@@ -223,7 +248,7 @@ def execute_runs(
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description=f"Run experiments on the {DATASET.upper()} dataset",
+        description="Run experiments on a video dataset",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Available model sizes:
@@ -250,6 +275,14 @@ Examples:
         choices=["internvl", "qwenvl", "molmo", "keyevl"],
         required=True,
         help="Model families to run",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        nargs="+",
+        choices=VIDEO_DATASETS,
+        default=[DEFAULT_DATASET],
+        help=f"Video dataset(s) to run on (default: {DEFAULT_DATASET})",
     )
 
     parser.add_argument(
@@ -297,6 +330,7 @@ def main() -> None:
         dry_run=args.dry_run,
         cooldown=args.cooldown,
         cot=args.cot,
+        datasets=args.dataset,
     )
 
 

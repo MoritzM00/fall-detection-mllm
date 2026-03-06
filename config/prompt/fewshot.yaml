@@ -11,6 +11,6 @@ labels_variant: bulleted
 definitions_variant: null
 
 # Few-shot settings
-num_shots: 5
-shot_selection: balanced
+num_shots: 3
+shot_selection: random
 exemplar_seed: 0

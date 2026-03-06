@@ -32,6 +32,7 @@ class TestPromptConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = PromptConfig()
+        assert config.system_instruction is None
         assert config.output_format == "json"
         assert config.cot is False
         assert config.cot_start_tag == "<think>"
@@ -299,6 +300,44 @@ class TestPromptBuilder:
         system_msg = builder.get_system_message()
 
         assert system_msg is None
+
+    def test_get_system_message_explicit_instruction(self):
+        """Test that explicit system_instruction is returned as system message."""
+        config = PromptConfig(system_instruction="Represent the user's input")
+        builder = PromptBuilder(config, LABEL2IDX)
+        system_msg = builder.get_system_message()
+
+        assert system_msg is not None
+        assert system_msg["role"] == "system"
+        assert system_msg["content"][0]["text"] == "Represent the user's input"
+
+    def test_system_instruction_takes_priority_over_internvl_r1(self):
+        """Test that system_instruction takes priority over InternVL R1 auto-detect."""
+        config = PromptConfig(
+            system_instruction="Custom instruction",
+            cot=True,
+            model_family="InternVL",
+        )
+        builder = PromptBuilder(config, LABEL2IDX)
+        system_msg = builder.get_system_message()
+
+        assert system_msg is not None
+        assert system_msg["content"][0]["text"] == "Custom instruction"
+        # Should NOT contain the R1 system prompt
+        assert "think" not in system_msg["content"][0]["text"].lower()
+
+    def test_no_system_instruction_falls_back_to_internvl_r1(self):
+        """Test that None system_instruction falls back to InternVL R1 when applicable."""
+        config = PromptConfig(
+            system_instruction=None,
+            cot=True,
+            model_family="InternVL",
+        )
+        builder = PromptBuilder(config, LABEL2IDX)
+        system_msg = builder.get_system_message()
+
+        assert system_msg is not None
+        assert "think" in system_msg["content"][0]["text"].lower()
 
     # ========================================================================
     # Variant Selection Tests

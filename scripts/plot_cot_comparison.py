@@ -16,15 +16,17 @@ PROJECT = "fall-detection-zeroshot-v4"
 DATASET = "OOPS"
 SPLIT = "cs"
 
-MODEL_SIZES = ["8B", "32B"]
+MODEL_SIZES = ["2B", "8B", "32B"]
 
 INSTRUCT_RUN_IDS = {
+    "2B": "d4e8gwu0",
     "8B": "p1r3exbe",
     "32B": "toe74d9a",
 }
 
 # WandB Run IDs for Thinking models
 THINKING_RUN_IDS = {
+    "2B": "70fkhp71",
     "8B": "gzjkhtvu",
     "32B": "wpnjcvjm",
 }

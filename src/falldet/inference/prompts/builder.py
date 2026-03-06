@@ -54,8 +54,9 @@ class PromptBuilder:
         if self.config.cot:
             sections.append(COT_INSTRUCTION)
 
-        # 6. Output format instruction
-        sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
+        # 6. Output format instruction (skip for embed mode)
+        if self.config.output_format is not None:
+            sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
 
         return "\n\n".join(sections)
 
@@ -81,12 +82,16 @@ class PromptBuilder:
         # Otherwise, use the default hardcoded labels component
         return LABELS_COMPONENT
 
-    def get_parser(self) -> OutputParser:
+    def get_parser(self) -> OutputParser | None:
         """Return the appropriate parser for this prompt's output format.
 
         Returns:
-            OutputParser instance matching the configured output format
+            OutputParser instance matching the configured output format,
+            or None when output_format is None (embed mode)
         """
+        if self.config.output_format is None:
+            return None
+
         # Select base parser based on output format
         if self.config.output_format == "json":
             base_parser = JSONOutputParser(self.label2idx)
@@ -105,14 +110,21 @@ class PromptBuilder:
         return base_parser
 
     def get_system_message(self) -> dict | None:
-        """Return system message dict for models that need it (e.g., InternVL CoT).
+        """Return system message dict if configured.
+
+        Priority: explicit system_instruction > InternVL R1 auto-detect > None.
 
         Returns:
             System message dict with role and content, or None if not needed
         """
-        if self._needs_r1_prefix():
-            return {
-                "role": "system",
-                "content": [{"type": "text", "text": R1_SYSTEM_PROMPT}],
-            }
-        return None
+        if self.config.system_instruction is not None:
+            text = self.config.system_instruction
+        elif self._needs_r1_prefix():
+            text = R1_SYSTEM_PROMPT
+        else:
+            return None
+
+        return {
+            "role": "system",
+            "content": [{"type": "text", "text": text}],
+        }

@@ -1,0 +1,13 @@
+name: "video-dataset-caucafall"
+video_datasets:
+  - name: "caucafall"
+    video_root: "${oc.env:OMNIFALL_ROOT}/caucafall/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/caucafall.csv"
+    dataset_fps: 20.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+# Common parameters
+target_fps: ${model_fps}
+vid_frame_count: ${num_frames}
+num_classes: 16
+path_format: "{video_root}/{video_path}{ext}"

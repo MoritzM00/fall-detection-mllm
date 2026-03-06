@@ -1,0 +1,13 @@
+name: "video-dataset-mcfd"
+video_datasets:
+  - name: "mcfd"
+    video_root: "${oc.env:OMNIFALL_ROOT}/mcfd/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/mcfd.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+# Common parameters
+target_fps: ${model_fps}
+vid_frame_count: ${num_frames}
+num_classes: 16
+path_format: "{video_root}/{video_path}{ext}"

@@ -1,0 +1,12 @@
+# Qwen3-VL-Embedding model (does not follow standard naming convention)
+org: Qwen
+family: Qwen
+version: 3
+variant: null
+params: 2B
+name_override: Qwen3-VL-Embedding-${model.params}
+
+needs_video_metadata: true
+
+mm_processor_kwargs:
+  do_resize: false

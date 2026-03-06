@@ -139,7 +139,6 @@ def get_video_datasets(
             else None,  # WanFall doesn't use split types
             data_fps=ds_item.dataset_fps,
             path_format=dataset_config.path_format,
-            max_retries=4,
             **processing_kwargs,
         )
 

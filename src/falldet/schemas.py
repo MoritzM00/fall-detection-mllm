@@ -44,7 +44,10 @@ class PromptConfig(BaseConfig):
     """Configuration for prompt building.
 
     Attributes:
-        output_format: Expected output format - "json" or "text"
+        system_instruction: Free-form system message text. When set, returned as the system
+            message by get_system_message(). Takes priority over model-specific auto-detection
+            (e.g., InternVL R1). None means no explicit system instruction.
+        output_format: Expected output format - "json", "text", or None (embeddings)
         cot: Whether to enable chain-of-thought reasoning
         cot_start_tag: Opening tag for reasoning content (default: "<think>")
         cot_end_tag: Closing tag for reasoning content (default: "</think>")
@@ -59,7 +62,8 @@ class PromptConfig(BaseConfig):
         definitions_variant: Which definitions component variant to use (None = omit definitions)
     """
 
-    output_format: Literal["json", "text"] = "json"
+    system_instruction: str | None = None
+    output_format: Literal["json", "text"] | None = "json"
     cot: bool = False
     cot_start_tag: str = "<think>"
     cot_end_tag: str = "</think>"
@@ -68,7 +72,7 @@ class PromptConfig(BaseConfig):
 
     # Few-shot settings
     num_shots: int = 0
-    shot_selection: Literal["random", "balanced"] = "balanced"
+    shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
 
     # Variant selectors
@@ -112,6 +116,7 @@ class ModelConfig(BaseConfig):
     variant: str | None = None
     params: str
     active_params: str | None = None
+    name_override: str | None = None
     needs_video_metadata: bool = True
     mm_processor_kwargs: dict[str, Any] = {}
 
@@ -234,6 +239,7 @@ class DatasetConfig(BaseConfig):
     num_classes: int | None = None
     metric_for_best_model: str | None = None
     create_all_combined: bool = False
+    split: str | None = None
 
 
 class InferenceConfig(BaseConfig):
@@ -249,6 +255,8 @@ class InferenceConfig(BaseConfig):
     wandb: WandbConfig
 
     # Root-level fields
+    task: Literal["classify", "embed"] = "classify"
+    embedding_model_name: str | None = None
     model_fps: float = 7.5
     num_frames: int = 16
     batch_size: int = 32
@@ -259,6 +267,7 @@ class InferenceConfig(BaseConfig):
     save_metrics: bool = True
     log_videos: int = 1
     num_samples: int | None = None
+    embeddings_dir: str = "outputs/embeddings"
 
     # Mode-specific dataset overrides
     dataset_train: DatasetConfig | None = None

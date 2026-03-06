@@ -9,6 +9,7 @@ video_datasets:
     annotations_file: "hf://simplexsigil2/wanfall/labels/wanfall.csv"
     dataset_fps: 16.0
     split_root: "hf://simplexsigil2/wanfall/splits/random"
+    split: "random"
 
 # Common parameters
 target_fps: ${model_fps}

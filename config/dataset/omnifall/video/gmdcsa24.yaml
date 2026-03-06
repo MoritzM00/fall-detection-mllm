@@ -1,0 +1,13 @@
+name: "video-dataset-gmdcsa24"
+video_datasets:
+  - name: "gmdcsa24"
+    video_root: "${oc.env:OMNIFALL_ROOT}/GMDCSA24/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/GMDCSA24.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+# Common parameters
+target_fps: ${model_fps}
+vid_frame_count: ${num_frames}
+num_classes: 16
+path_format: "{video_root}/{video_path}{ext}"

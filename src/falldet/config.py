@@ -36,6 +36,9 @@ def resolve_model_name_from_config(model_config: ModelConfig) -> str:
     Returns:
         The model name (e.g., "Qwen3-VL-4B-Instruct", "InternVL3_5-2B-HF")
     """
+    if model_config.name_override is not None:
+        return model_config.name_override
+
     family = model_config.family
     version = model_config.version
     variant = model_config.variant
