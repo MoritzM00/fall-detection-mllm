@@ -1,14 +1,14 @@
 # Video-based Fall Detection using Multimodal Large Language Models
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://docs.astral.sh/ruff/) [![vLLM](https://img.shields.io/badge/inference-vLLM-1e3a5f?logo=python)](https://docs.vllm.ai) [![Hydra](https://img.shields.io/badge/config-Hydra-89b8cd)](https://hydra.cc) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE) [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg?style=for-the-badge)](https://www.python.org/downloads/) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=for-the-badge)](https://docs.astral.sh/ruff/) [![vLLM](https://img.shields.io/badge/inference-vLLM-1e3a5f?logo=python&style=for-the-badge)](https://docs.vllm.ai) [![Hydra](https://img.shields.io/badge/config-Hydra-89b8cd?style=for-the-badge)](https://hydra.cc) [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&style=for-the-badge)](https://pre-commit.com)
 
 ## Project Overview
 This project provides code for the master thesis on Video-based Fall Detection using Multimodal Large Language Models (MLLMs), specifically the detection of Human Falls and the subsequent state of being fallen. We also evaluate MLLMs jointly with general Human Activity classes like `walking` or `standing` to assess models on Human Activity Recognition (HAR).
 
 The main experiments we conduct are:
 - Zero-shot: No exemplars are given, just the task instruction
-- Few-shot: Few (usually 1-10) video exemplars with associated ground truth label are supplied for In-Context Learning (ICL)
-- Chain-of-Thought (CoT): Specifically, Zero-Shot CoT, i.e. no exemplars with reasoning trace are given. The model can come up with its own reasoning trace.
+- Few-shot: Video exemplars with ground truth labels are supplied for In-Context Learning (ICL), selected randomly or via similarity-based retrieval
+- Chain-of-Thought (CoT): Zero-Shot CoT where the model produces its own reasoning trace
 
 ## Quick Start
 
@@ -22,14 +22,26 @@ To run zero-shot experiments with InternVL3.5-8B, execute
 ```shell
 python scripts/vllm_inference.py experiment=zeroshot model=internvl model.params=8B
 ```
-To run few-shot experiments with Qwen3-VL-4B, execute
+To run few-shot experiments with random exemplar selection, execute
 ```shell
-python scripts/vllm_inference.py experiment=fewshot  model=qwenvl model.params=4B
+python scripts/vllm_inference.py experiment=fewshot model=qwenvl model.params=4B
+```
+To run few-shot experiments with similarity-based exemplar retrieval (requires precomputed embeddings, see below), execute
+```shell
+python scripts/vllm_inference.py experiment=fewshot_similarity model=qwenvl model.params=8B
 ```
 To run CoT experiments with the default model, execute
 ```shell
 python scripts/vllm_inference.py experiment=zeroshot_cot
 ```
+
+#### Computing Embeddings
+
+Similarity-based few-shot requires precomputed embeddings. To compute them:
+```shell
+python scripts/vllm_inference.py experiment=embed
+```
+This uses the Qwen3-VL-Embedding model and saves embeddings to `outputs/embeddings/`.
 
 
 ### Configuration options
