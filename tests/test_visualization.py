@@ -433,8 +433,8 @@ class TestRelativeConfusionMatrix:
         assert texts[(1, 1)] == ""
         plt.close(fig)
 
-    def test_off_diagonal_reduction_is_plus(self):
-        """Lower off-diagonal mass for run B is marked with a positive value."""
+    def test_off_diagonal_reduction_is_negative(self):
+        """Lower off-diagonal mass for run B shows a negative raw difference."""
         y_true_a = ["a", "a", "b", "b"]
         y_pred_a = ["a", "b", "b", "a"]
         y_true_b = ["a", "a", "b", "b"]
@@ -443,12 +443,12 @@ class TestRelativeConfusionMatrix:
         fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
 
         texts = _extract_heatmap_annotations(ax, n=2)
-        assert texts[(0, 1)] == "+50"
+        assert texts[(0, 1)] == "-50"
         assert texts[(1, 0)] == ""
         plt.close(fig)
 
-    def test_off_diagonal_increase_is_minus(self):
-        """Higher off-diagonal mass for run B is marked with a negative value."""
+    def test_off_diagonal_increase_is_positive(self):
+        """Higher off-diagonal mass for run B shows a positive raw difference."""
         y_true_a = ["a", "a", "b", "b"]
         y_pred_a = ["a", "a", "b", "a"]
         y_true_b = ["a", "a", "b", "b"]
@@ -457,7 +457,7 @@ class TestRelativeConfusionMatrix:
         fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
 
         texts = _extract_heatmap_annotations(ax, n=2)
-        assert texts[(0, 1)] == "-50"
+        assert texts[(0, 1)] == "+50"
         assert texts[(0, 0)] == "-50"
         plt.close(fig)
 
@@ -471,7 +471,7 @@ class TestRelativeConfusionMatrix:
         fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
 
         heatmap_values = np.array(ax.collections[0].get_array()).flatten()
-        assert list(heatmap_values) == pytest.approx([0.5, 0.5, 0.0, 0.0])
+        assert list(heatmap_values) == pytest.approx([50.0, 50.0, 0.0, 0.0])
         plt.close(fig)
 
     def test_subset_slices_from_full_relative_matrix(self):
@@ -492,7 +492,7 @@ class TestRelativeConfusionMatrix:
         xlabels = [t.get_text() for t in ax.get_xticklabels()]
         assert xlabels == ["a", "b"]
         heatmap_values = np.array(ax.collections[0].get_array()).flatten()
-        assert list(heatmap_values) == pytest.approx([0.5, 0.5, 0.0, 0.0])
+        assert list(heatmap_values) == pytest.approx([50.0, 50.0, 0.0, 0.0])
         plt.close(fig)
 
     def test_subset_unknown_label_raises(self):

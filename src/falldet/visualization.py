@@ -234,13 +234,13 @@ def plot_confusion_matrix(
         ax=ax,
     )
 
-    ax.set_xlabel("Predicted Label")
-    ax.set_ylabel("True Label")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
     if title is not None:
         ax.set_title(title)
 
     # Rotate tick labels for readability
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
     fig.tight_layout()
@@ -253,19 +253,20 @@ def plot_relative_confusion_matrix(
     y_true_b: list[str],
     y_pred_b: list[str],
     subset: list[str] | None = None,
-    title: str | None = "Relative Confusion Matrix",
+    title: str | None = None,
     cmap: str = "Blues",
+    cbar: bool = False,
     figsize: tuple[float, float] | None = None,
     ax: matplotlib.axes.Axes | None = None,
 ) -> tuple[plt.Figure, matplotlib.axes.Axes]:
     """Plot a relative row-normalized confusion matrix for two runs.
 
     The matrix compares run *B* against run *A*. Cell color shows the
-    absolute change in row-normalized confusion. On the diagonal, a
-    larger value is better; off-diagonal, a smaller value is better
-    because those cells represent misclassifications. The annotation is
-    ``+`` when run *B* is better, ``-`` when run *A* is better, and
-    empty when the cell is unchanged.
+    absolute change in row-normalized confusion. The annotation shows
+    the raw difference (B − A) in percentage points: positive means B's
+    value is higher, negative means B's value is lower. On the diagonal,
+    positive is good (higher recall); off-diagonal, negative is good
+    (fewer misclassifications).
     """
     import seaborn as sns
 
@@ -281,25 +282,9 @@ def plot_relative_confusion_matrix(
     all_labels: list[str] = sorted(set(y_true_a) | set(y_pred_a) | set(y_true_b) | set(y_pred_b))
     cm_a_norm = confusion_matrix(y_true_a, y_pred_a, labels=all_labels, normalize="true")
     cm_b_norm = confusion_matrix(y_true_b, y_pred_b, labels=all_labels, normalize="true")
-    diff_matrix = cm_b_norm - cm_a_norm
-
-    magnitude_matrix = np.abs(diff_matrix)
-    sign_annot = np.empty_like(magnitude_matrix, dtype=object)
-    tol = 1e-12
-
-    for i in range(magnitude_matrix.shape[0]):
-        for j in range(magnitude_matrix.shape[1]):
-            diff = diff_matrix[i, j]
-            if abs(diff) <= tol:
-                sign_annot[i, j] = ""
-            elif i == j:
-                # Diagonal: higher is better for B → positive pp
-                pct = round(diff * 100)
-                sign_annot[i, j] = f"{pct:+d}"
-            else:
-                # Off-diagonal: lower is better for B → flip sign
-                pct = round(-diff * 100)
-                sign_annot[i, j] = f"{pct:+d}"
+    diff_pp = np.round((cm_b_norm - cm_a_norm) * 100).astype(int)
+    magnitude_matrix = np.abs(diff_pp).astype(float)
+    sign_annot = np.where(diff_pp == 0, "", np.vectorize(lambda v: f"{v:+d}")(diff_pp))
 
     display_labels, display_matrix = _resolve_display_subset(all_labels, magnitude_matrix, subset)
     _, display_annot = _resolve_display_subset(all_labels, sign_annot, subset)
@@ -323,22 +308,25 @@ def plot_relative_confusion_matrix(
         yticklabels=display_labels,
         square=True,
         vmin=0.0,
-        vmax=vmax if vmax > 0 else 1.0,
-        cbar_kws={"label": "Absolute difference (pp)", "shrink": 0.85},
+        vmax=vmax if vmax > 0 else 100.0,
+        cbar=cbar,
+        cbar_kws={"label": "Absolute difference (pp)", "shrink": 0.8},
         linewidths=0.5,
         linecolor="white",
         ax=ax,
     )
 
-    ax.set_xlabel("Predicted Label")
-    ax.set_ylabel("True Label")
-    ax.set_title(title)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    if title is not None:
+        ax.set_title(title)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
-    cbar = ax.collections[0].colorbar
-    cbar.set_ticks([0.0, vmax if vmax > 0 else 1.0])
-    cbar.set_ticklabels([f"{0.0:.2f}", f"{vmax:.2f}" if vmax > 0 else f"{1.0:.2f}"])
+    if cbar:
+        colorbar = ax.collections[0].colorbar
+        colorbar.set_ticks([0.0, vmax if vmax > 0 else 100.0])
+        colorbar.set_ticklabels(["0", f"{vmax:.0f}" if vmax > 0 else "100"])
 
     fig.tight_layout()
     return fig, ax

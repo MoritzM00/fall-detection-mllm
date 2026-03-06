@@ -100,7 +100,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--title",
         default=None,
-        help="Plot title (default: 'Relative Confusion Matrix')",
+        help="Plot title (default: None)",
+    )
+    parser.add_argument(
+        "--cbar",
+        action="store_true",
+        default=False,
+        help="Show color bar (default: off)",
     )
     parser.add_argument(
         "--cache-dir",
@@ -141,6 +147,8 @@ def main() -> None:
         plot_kwargs["subset"] = args.subset
     if args.title:
         plot_kwargs["title"] = args.title
+    if args.cbar:
+        plot_kwargs["cbar"] = args.cbar
 
     # Plot
     fig, _ = plot_relative_confusion_matrix(
