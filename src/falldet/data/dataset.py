@@ -90,6 +90,7 @@ class GenericVideoDataset(Dataset):
         return inputs
 
     def __getitem__(self, idx):
+        original_idx = idx
         retries = 0
         while retries < self.max_retries:
             try:
@@ -98,13 +99,21 @@ class GenericVideoDataset(Dataset):
             except Exception as e:
                 retries += 1
                 if retries >= self.max_retries:
-                    logging.error(f"Error loading video at index {idx}: {str(e)}")
-                idx = random.randint(0, len(self) - 1)  # Randomly sample another video on failure
-                logger.warning(
-                    f"Retrying with a different video (attempt {retries}/{self.max_retries})"
-                )
+                    logging.error(
+                        f"Error loading video at original index {original_idx} "
+                        f"(last tried {idx}): {str(e)}"
+                    )
+                else:
+                    idx = random.randint(0, len(self) - 1)
+                    logger.warning(
+                        f"Failed to load video at index {idx}, "
+                        f"retrying with a different video (attempt {retries}/{self.max_retries})"
+                    )
 
-        raise RuntimeError(f"Failed to load video at index {idx} after {self.max_retries} attempts")
+        raise RuntimeError(
+            f"Failed to load video at original index {original_idx} "
+            f"after {self.max_retries} attempts"
+        )
 
     def transform_frames(self, frames):
         # frames is a ndarrays (T, H, W, C)

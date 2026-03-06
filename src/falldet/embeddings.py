@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,23 @@ def get_embedding_filename(
     return f"{dataset_name}_{mode}_{num_frames}@{fps_str}_{model_name}_{size_str}.pt"
 
 
+def compute_similarity_scores(
+    query_embeddings: torch.Tensor, corpus_embeddings: torch.Tensor
+) -> torch.Tensor:
+    """Compute cosine similarity scores between query and corpus embeddings.
+
+    Args:
+        query_embeddings: Tensor of shape (num_queries, embedding_dim)
+        corpus_embeddings: Tensor of shape (num_corpus, embedding_dim)
+
+    Returns:
+        Tensor of shape (num_queries, num_corpus) with cosine similarity scores.
+    """
+    query_norm = F.normalize(query_embeddings.float(), dim=1)
+    corpus_norm = F.normalize(corpus_embeddings.float(), dim=1)
+    return query_norm @ corpus_norm.T
+
+
 def retrieve_topk(
     query_embeddings: torch.Tensor, corpus_embeddings: torch.Tensor, k: int = 10
 ) -> list[dict]:
@@ -71,7 +89,7 @@ def retrieve_topk(
     Returns:
         List of dicts with 'ranked_indices' and 'ranked_scores' for each query.
     """
-    similarity_scores = query_embeddings @ corpus_embeddings.T
+    similarity_scores = compute_similarity_scores(query_embeddings, corpus_embeddings)
     results = []
     for i in range(len(query_embeddings)):
         scores = similarity_scores[i].cpu().float().numpy()

@@ -11,9 +11,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.utils.data import Dataset
 
+from falldet.embeddings import compute_similarity_scores
 from falldet.schemas import InferenceConfig
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class ExemplarSampler(ABC):
             for shot_pos, idx in enumerate(indices):
                 flat_keys.append((idx, batch_pos, shot_pos))
 
-        with ThreadPoolExecutor(max_workers=len(flat_keys)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(flat_keys), 16)) as executor:
             flat_items = list(executor.map(self.corpus.__getitem__, [k[0] for k in flat_keys]))
 
         # Reassemble into list[list[dict]] preserving order
@@ -174,12 +174,7 @@ class SimilaritySampler(ExemplarSampler):
             f"query dim {query_embeddings.shape[1]} and corpus dim {corpus_embeddings.shape[1]}."
         )
 
-        # L2-normalise for cosine similarity
-        query_norm = F.normalize(query_embeddings.float(), dim=1)
-        corpus_norm = F.normalize(corpus_embeddings.float(), dim=1)
-
-        # Batched cosine similarity: [num_queries, num_corpus]
-        similarity = query_norm @ corpus_norm.T
+        similarity = compute_similarity_scores(query_embeddings, corpus_embeddings)
 
         k = min(num_shots, corpus_embeddings.shape[0])
         topk_scores, topk_indices = torch.topk(similarity, k=k, dim=1)
@@ -287,7 +282,7 @@ def setup_fewshot_sampler(
     )
     train_datasets = cast(dict[str, object], train_datasets)
     train_dataset = list(train_datasets["individual"].values())[0]  # type: ignore[union-attr]
-    logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")  # type: ignore[arg-type]
+    logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
 
     # Load embeddings if needed for similarity-based retrieval
     query_embeddings: torch.Tensor | None = None
