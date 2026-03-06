@@ -1,8 +1,17 @@
+"""Visualization utilities for video data and evaluation results.
+
+This module provides matplotlib-based visualization functions including
+video frame grids and confusion matrix plots.
+"""
+
 import logging
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torchvision.utils as vutils
-from matplotlib import pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -70,4 +79,178 @@ def visualize_video(
     ax.imshow(grid_image)
     ax.axis("off")
 
+    return fig, ax
+
+
+def plot_confusion_matrix(
+    y_true: list[str],
+    y_pred: list[str],
+    normalize: str | None = None,
+    subset: list[str] | None = None,
+    title: str = "Confusion Matrix",
+    cmap: str = "Blues",
+    figsize: tuple[float, float] | None = None,
+    ax: matplotlib.axes.Axes | None = None,
+) -> tuple[plt.Figure, matplotlib.axes.Axes]:
+    """Plot a confusion matrix computed from string label arrays.
+
+    The confusion matrix is always computed over all classes present in
+    ``y_true`` and ``y_pred``.  When *subset* is given, only the
+    requested classes are shown in the plot (adjacently, in the order
+    provided).  Leading and/or trailing ``...`` labels indicate that
+    omitted classes exist outside the displayed range.
+
+    Args:
+        y_true: Ground-truth labels (e.g. ``["fall", "walk", ...]``).
+        y_pred: Predicted labels, same length as *y_true*.
+        normalize: How to normalize cell values.  One of
+
+            * ``None`` -- raw counts (default).
+            * ``"true"`` -- normalize over each **row** (true label),
+              so that rows sum to 1.  Equivalent to recall per class.
+            * ``"pred"`` -- normalize over each **column** (predicted
+              label), so that columns sum to 1.
+            * ``"all"`` -- normalize over the entire matrix so that all
+              cells sum to 1.
+
+        subset: Optional list of class names to display.  The order of
+            classes in the plot matches the order in this list.  Classes
+            not listed are omitted from the visualization but still
+            contribute to the computed matrix values.
+        title: Title shown above the plot.
+        cmap: Matplotlib / seaborn colormap name used for the heatmap.
+        figsize: ``(width, height)`` in inches.  When ``None`` the size
+            is derived from the number of displayed classes.
+        ax: An existing :class:`~matplotlib.axes.Axes` to draw into.
+            When ``None`` a new figure and axes are created.
+
+    Returns:
+        A ``(fig, ax)`` tuple with the matplotlib
+        :class:`~matplotlib.figure.Figure` and
+        :class:`~matplotlib.axes.Axes` containing the plot.
+
+    Raises:
+        ValueError: If *y_true* and *y_pred* differ in length, if
+            either is empty, if *normalize* is not a recognized value,
+            or if *subset* contains labels not present in the data.
+
+    Example::
+
+        y_true = ["fall", "walk", "fallen", "walk", "sitting"]
+        y_pred = ["fall", "walk", "walk",   "walk", "fall"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
+        fig.savefig("cm.pdf", bbox_inches="tight")
+    """
+    import seaborn as sns
+
+    # ------------------------------------------------------------------
+    # Input validation
+    # ------------------------------------------------------------------
+    if len(y_true) == 0 or len(y_pred) == 0:
+        raise ValueError("y_true and y_pred must not be empty.")
+    if len(y_true) != len(y_pred):
+        raise ValueError(
+            f"y_true and y_pred must have the same length, got {len(y_true)} and {len(y_pred)}."
+        )
+    valid_normalize = {None, "true", "pred", "all"}
+    if normalize not in valid_normalize:
+        raise ValueError(f"normalize must be one of {valid_normalize}, got {normalize!r}.")
+
+    # ------------------------------------------------------------------
+    # Compute the full confusion matrix
+    # ------------------------------------------------------------------
+    all_labels: list[str] = sorted(set(y_true) | set(y_pred))
+    cm = confusion_matrix(y_true, y_pred, labels=all_labels)
+
+    # ------------------------------------------------------------------
+    # Normalize
+    # ------------------------------------------------------------------
+    if normalize == "true":
+        row_sums = cm.sum(axis=1, keepdims=True)
+        # Avoid division by zero for classes with no true samples
+        row_sums[row_sums == 0] = 1
+        cm_norm = cm.astype(np.float64) / row_sums
+    elif normalize == "pred":
+        col_sums = cm.sum(axis=0, keepdims=True)
+        col_sums[col_sums == 0] = 1
+        cm_norm = cm.astype(np.float64) / col_sums
+    elif normalize == "all":
+        total = cm.sum()
+        cm_norm = cm.astype(np.float64) / (total if total > 0 else 1)
+    else:
+        cm_norm = None  # will display raw counts
+
+    display_values = cm_norm if cm_norm is not None else cm.astype(np.float64)
+
+    # ------------------------------------------------------------------
+    # Subset selection
+    # ------------------------------------------------------------------
+    if subset is not None:
+        unknown = set(subset) - set(all_labels)
+        if unknown:
+            raise ValueError(f"subset contains labels not present in the data: {unknown}")
+
+        # Indices of subset classes in the full label list
+        label_to_idx = {label: i for i, label in enumerate(all_labels)}
+        subset_indices = [label_to_idx[s] for s in subset]
+
+        # Slice the matrix to only the subset rows and columns
+        display_labels = list(subset)
+        display_matrix = display_values[np.ix_(subset_indices, subset_indices)]
+    else:
+        display_labels = list(all_labels)
+        display_matrix = display_values
+
+    # ------------------------------------------------------------------
+    # Annotation formatting
+    # ------------------------------------------------------------------
+    annot = np.empty_like(display_matrix, dtype=object)
+    for i in range(display_matrix.shape[0]):
+        for j in range(display_matrix.shape[1]):
+            if normalize is None:
+                # Raw counts -- show integer
+                annot[i, j] = f"{int(display_matrix[i, j])}"
+            else:
+                # Normalized -- show proportion to two decimals
+                annot[i, j] = f"{display_matrix[i, j]:.2f}"
+
+    # ------------------------------------------------------------------
+    # Figure / axes setup
+    # ------------------------------------------------------------------
+    n = len(display_labels)
+    if ax is None:
+        if figsize is None:
+            side = max(4.0, 0.6 * n + 2.0)
+            figsize = (side, side)
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
+    # ------------------------------------------------------------------
+    # Draw heatmap
+    # ------------------------------------------------------------------
+    sns.heatmap(
+        display_matrix,
+        annot=annot,
+        fmt="",
+        cmap=cmap,
+        xticklabels=display_labels,
+        yticklabels=display_labels,
+        square=True,
+        cbar_kws={"label": "Proportion" if normalize else "Count"},
+        linewidths=0.5,
+        linecolor="white",
+        ax=ax,
+    )
+
+    ax.set_xlabel("Predicted Label")
+    ax.set_ylabel("True Label")
+    ax.set_title(title)
+
+    # Rotate tick labels for readability
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+
+    fig.tight_layout()
     return fig, ax
