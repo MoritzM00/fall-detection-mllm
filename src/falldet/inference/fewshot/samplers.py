@@ -88,8 +88,9 @@ class RandomSampler(ExemplarSampler):
 
     def sample(self, query_index: int) -> list[int]:
         """Return freshly sampled random indices (``query_index`` ignored)."""
-        n = min(self.num_shots, len(self.corpus))  # type: ignore[arg-type]
-        return self.rng.choice(len(self.corpus), size=n, replace=False).tolist()  # type: ignore[arg-type]
+        n = len(self.corpus)  # type: ignore[arg-type]
+        k = min(self.num_shots, n)
+        return self.rng.choice(n, size=k, replace=False).tolist()
 
 
 class BalancedRandomSampler(ExemplarSampler):
