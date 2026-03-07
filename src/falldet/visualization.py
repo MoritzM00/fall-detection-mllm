@@ -85,7 +85,7 @@ def set_publication_rc_defaults(
     style: str = "whitegrid",
     palette: str = "colorblind",
     font_scale: float = 1.0,
-    use_tex: bool = False,
+    use_tex: bool = True,
     text_width_pt: float | None = None,
     width_fraction: float = 1.0,
     height_ratio: float = 0.66,
