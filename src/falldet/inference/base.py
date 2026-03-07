@@ -5,7 +5,6 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
-from video_reader import PyVideoReader
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 logger = logging.getLogger(__name__)
@@ -64,6 +63,14 @@ def load_video_clip(
         ``timestamps``, ``available_sec``, ``clip_start_sec``,
         ``clip_end_sec``, ``shift_sec``, and ``actual_frames``.
     """
+    try:
+        from video_reader import PyVideoReader
+    except ImportError as e:
+        raise ImportError(
+            "PyVideoReader is required for load_video_clip. Please install it via "
+            "pip: `pip install video-reader-rs-next`."
+        ) from e
+
     # ------------------------------------------------------------------
     # 1. Open video & read metadata
     # ------------------------------------------------------------------
