@@ -56,7 +56,13 @@ def resolve_model_name_from_config(model_config: ModelConfig) -> str:
 
     match family.lower():
         case "qwen":
-            path = f"{family}{version}-VL-{params_str}-{variant}"
+            if version == "3.5":
+                # Qwen 3.5 models do not use the "VL" suffix in their names, unlike Qwen 3-VL, and they dont use a variant
+                path = f"{family}{version}-{params_str}"
+            elif version == "3":
+                path = f"{family}{version}-VL-{params_str}-{variant}"
+            else:
+                raise ValueError(f"Unsupported version '{version}' for family '{family}'.")
         case "internvl":
             if variant is not None:
                 logger.warning("InternVL models do not use variants; ignoring variant field.")
