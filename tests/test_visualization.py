@@ -5,7 +5,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from falldet.visualization import plot_confusion_matrix, plot_relative_confusion_matrix
+from falldet.visualization import (
+    compute_publication_figsize,
+    plot_confusion_matrix,
+    plot_relative_confusion_matrix,
+    set_publication_rc_defaults,
+)
 
 # Use non-interactive backend so tests don't pop up windows
 matplotlib.use("Agg")
@@ -76,6 +81,90 @@ def multiclass_data():
 # ---------------------------------------------------------------------------
 # Basic functionality
 # ---------------------------------------------------------------------------
+
+
+class TestPublicationRcDefaults:
+    """Tests for publication-style rc defaults."""
+
+    def test_returns_resolved_rc_dict(self):
+        """The helper returns the rcParams it applies."""
+        rc, figsize = set_publication_rc_defaults()
+        assert isinstance(rc, dict)
+        assert isinstance(figsize, tuple)
+        assert rc["font.family"] == "serif"
+        assert rc["text.usetex"] is False
+        assert rc["axes.labelsize"] == 9
+        assert rc["xtick.labelsize"] == 8
+        assert rc["ytick.labelsize"] == 8
+        assert figsize == pytest.approx((427.43153 / 72.27, (427.43153 / 72.27) * 0.66))
+        assert rc["figure.figsize"] == pytest.approx(figsize)
+
+    def test_paper_target_uses_smaller_defaults(self):
+        """Paper preset uses a narrower default figure width."""
+        rc, figsize = set_publication_rc_defaults(target="paper")
+        assert rc["axes.labelsize"] == 9
+        assert figsize == pytest.approx((246.0 / 72.27, (246.0 / 72.27) * 0.66))
+
+    def test_applies_custom_rc_overrides(self):
+        """Explicit rc overrides are applied last."""
+        rc, _ = set_publication_rc_defaults(rc={"axes.labelsize": 13, "lines.linewidth": 2.5})
+        assert rc["axes.labelsize"] == 13
+        assert rc["lines.linewidth"] == 2.5
+        assert plt.rcParams["axes.labelsize"] == 13
+        assert plt.rcParams["lines.linewidth"] == 2.5
+
+    def test_enables_tex_when_requested(self):
+        """LaTeX text rendering is opt-in."""
+        rc, _ = set_publication_rc_defaults(use_tex=True)
+        assert rc["text.usetex"] is True
+        assert "text.latex.preamble" in rc
+
+    def test_custom_text_width_and_fraction_control_figure_size(self):
+        """Figure size can be derived from a custom LaTeX text width."""
+        rc, figsize = set_publication_rc_defaults(
+            text_width_pt=360.0,
+            width_fraction=0.5,
+            height_ratio=0.75,
+        )
+        width_in = (360.0 / 72.27) * 0.5
+        assert figsize == pytest.approx((width_in, width_in * 0.75))
+        assert rc["figure.figsize"] == pytest.approx(figsize)
+
+    def test_invalid_target_raises(self):
+        """Unknown target presets are rejected."""
+        with pytest.raises(ValueError, match="target must be one of"):
+            set_publication_rc_defaults(target="poster")
+
+
+class TestPublicationFigsize:
+    """Tests for the standalone publication figsize helper."""
+
+    def test_default_thesis_figsize(self):
+        """The helper uses the thesis text width by default."""
+        figsize = compute_publication_figsize()
+        assert figsize == pytest.approx((427.43153 / 72.27, (427.43153 / 72.27) * 0.66))
+
+    def test_custom_fraction_and_ratio(self):
+        """Width fraction and height ratio scale the computed size."""
+        figsize = compute_publication_figsize(
+            text_width_pt=360.0, width_fraction=0.5, height_ratio=0.75
+        )
+        width_in = (360.0 / 72.27) * 0.5
+        assert figsize == pytest.approx((width_in, width_in * 0.75))
+
+    def test_invalid_figsize_target_raises(self):
+        """Unknown targets are rejected."""
+        with pytest.raises(ValueError, match="target must be one of"):
+            compute_publication_figsize(target="poster")
+
+    def test_non_positive_dimensions_raise(self):
+        """Invalid width and ratio arguments are rejected."""
+        with pytest.raises(ValueError, match="text_width_pt must be positive"):
+            compute_publication_figsize(text_width_pt=0.0)
+        with pytest.raises(ValueError, match="width_fraction must be positive"):
+            compute_publication_figsize(width_fraction=0.0)
+        with pytest.raises(ValueError, match="height_ratio must be positive"):
+            compute_publication_figsize(height_ratio=0.0)
 
 
 class TestBasicFunctionality:
@@ -160,6 +249,19 @@ class TestBasicFunctionality:
         assert abs(h - 8) < 0.5
         plt.close(fig)
 
+    def test_default_figsize_uses_rc_params(self, simple_data):
+        """When figsize is omitted, the current rc figure size is used."""
+        y_true, y_pred = simple_data
+        original = plt.rcParams["figure.figsize"]
+        plt.rcParams["figure.figsize"] = [5.9, 5.0]
+        try:
+            fig, _ = plot_confusion_matrix(y_true, y_pred)
+            w, h = fig.get_size_inches()
+            assert (w, h) == pytest.approx((5.9, 5.0))
+            plt.close(fig)
+        finally:
+            plt.rcParams["figure.figsize"] = original
+
     def test_existing_ax(self, simple_data):
         """Plotting into an existing axes works."""
         y_true, y_pred = simple_data
@@ -167,6 +269,20 @@ class TestBasicFunctionality:
         fig, ax = plot_confusion_matrix(y_true, y_pred, ax=ax_ext)
         assert ax is ax_ext
         assert fig is fig_ext
+        plt.close(fig)
+
+    def test_cbar_disabled_by_default(self, simple_data):
+        """Color bar is hidden unless explicitly requested."""
+        y_true, y_pred = simple_data
+        fig, _ = plot_confusion_matrix(y_true, y_pred)
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+    def test_cbar_enabled_when_requested(self, simple_data):
+        """Color bar can be enabled explicitly."""
+        y_true, y_pred = simple_data
+        fig, _ = plot_confusion_matrix(y_true, y_pred, cbar=True)
+        assert len(fig.axes) == 2
         plt.close(fig)
 
     def test_perfect_predictions(self):
@@ -352,6 +468,11 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="normalize must be one of"):
             plot_confusion_matrix(["a"], ["a"], normalize="invalid")
 
+    def test_negative_annotation_threshold_raises(self):
+        """Negative annotation thresholds are rejected."""
+        with pytest.raises(ValueError, match="annot_threshold must be non-negative"):
+            plot_confusion_matrix(["a"], ["a"], annot_threshold=-1)
+
 
 # ---------------------------------------------------------------------------
 # Edge cases
@@ -398,6 +519,34 @@ class TestEdgeCases:
         assert "b" in xlabels
         plt.close(fig)
 
+    def test_annotation_threshold_hides_small_raw_counts(self):
+        """Raw-count annotations below the threshold are blanked."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "a", "b"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, annot_threshold=2)
+
+        texts = _extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 0)] == "2"
+        assert texts[(0, 1)] == ""
+        assert texts[(1, 0)] == ""
+        assert texts[(1, 1)] == ""
+        plt.close(fig)
+
+    def test_annotation_threshold_hides_small_normalized_values(self):
+        """Normalized annotations use the threshold as a proportion."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "b", "a"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true", annot_threshold=0.4)
+
+        texts = _extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 0)] == "0.67"
+        assert texts[(0, 1)] == ""
+        assert texts[(1, 0)] == "0.50"
+        assert texts[(1, 1)] == "0.50"
+        plt.close(fig)
+
 
 # ---------------------------------------------------------------------------
 # Relative confusion matrix
@@ -418,6 +567,23 @@ class TestRelativeConfusionMatrix:
         assert isinstance(fig, plt.Figure)
         assert isinstance(ax, matplotlib.axes.Axes)
         plt.close(fig)
+
+    def test_default_figsize_uses_rc_params(self):
+        """Relative confusion matrix also uses the current rc figure size."""
+        original = plt.rcParams["figure.figsize"]
+        plt.rcParams["figure.figsize"] = [5.9, 5.0]
+        try:
+            fig, _ = plot_relative_confusion_matrix(
+                ["a", "a", "b", "b"],
+                ["a", "b", "b", "a"],
+                ["a", "a", "b", "b"],
+                ["a", "a", "b", "a"],
+            )
+            w, h = fig.get_size_inches()
+            assert (w, h) == pytest.approx((5.9, 5.0))
+            plt.close(fig)
+        finally:
+            plt.rcParams["figure.figsize"] = original
 
     def test_diagonal_improvement_is_plus(self):
         """Higher diagonal mass for run B is marked with a plus."""

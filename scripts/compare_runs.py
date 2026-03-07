@@ -30,7 +30,7 @@ from typing import Any
 
 from falldet.utils.predictions import extract_labels_for_metrics, load_predictions_jsonl
 from falldet.utils.wandb import load_run_from_wandb
-from falldet.visualization import plot_relative_confusion_matrix
+from falldet.visualization import plot_relative_confusion_matrix, set_publication_rc_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,9 @@ def _run_display_name(run_ref: str) -> str:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    _, (figure_width, figure_height) = set_publication_rc_defaults(
+        use_tex=True, height_ratio=0.9, width_fraction=1
+    )
     args = parse_args()
 
     cache_dir = Path(args.cache_dir)
@@ -156,6 +159,7 @@ def main() -> None:
         y_pred_a=y_pred_a,
         y_true_b=y_true_b,
         y_pred_b=y_pred_b,
+        figsize=(figure_width, figure_height),
         **plot_kwargs,
     )
 
