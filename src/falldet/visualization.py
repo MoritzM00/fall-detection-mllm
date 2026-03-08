@@ -402,23 +402,8 @@ def plot_confusion_matrix(
                 annot[i, j] = f"{int(display_matrix[i, j])}"
             else:
                 # Normalized -- show proportion to two decimals
-                # annot[i, j] = f"{display_matrix[i, j]:.2f}"
-                # show in percentages
-                annot[i, j] = f"{display_matrix[i, j] * 100:.0f}"
+                annot[i, j] = f"{display_matrix[i, j]:.2f}"
 
-    # ------------------------------------------------------------------
-    # Figure / axes setup
-    # ------------------------------------------------------------------
-    if ax is None:
-        if figsize is None:
-            figsize = _default_figsize()
-        fig, ax = plt.subplots(figsize=figsize)
-    else:
-        fig = ax.get_figure()
-
-    # ------------------------------------------------------------------
-    # Draw heatmap with separate diagonal / off-diagonal semantics
-    # ------------------------------------------------------------------
     n_labels = len(display_labels)
     diagonal_mask = ~np.eye(n_labels, dtype=bool)
     off_diagonal_mask = np.eye(n_labels, dtype=bool)
@@ -433,6 +418,38 @@ def plot_confusion_matrix(
         off_diagonal_vmax = 0.0
     off_diagonal_vmax = off_diagonal_vmax if off_diagonal_vmax > 0 else 1.0
 
+    # ------------------------------------------------------------------
+    # Figure / axes setup
+    # ------------------------------------------------------------------
+    diagonal_cax = None
+    off_diagonal_cax = None
+    uses_gridspec_colorbars = cbar and ax is None
+    if ax is None:
+        if figsize is None:
+            figsize = _default_figsize()
+        if uses_gridspec_colorbars:
+            fig = plt.figure(figsize=figsize)
+            outer_gs = matplotlib.gridspec.GridSpec(
+                1,
+                2,
+                figure=fig,
+                width_ratios=[24, 1.8],
+                wspace=0.2,
+            )
+            cbar_gs = matplotlib.gridspec.GridSpecFromSubplotSpec(
+                2,
+                1,
+                subplot_spec=outer_gs[1],
+                hspace=0.35,
+            )
+            ax = fig.add_subplot(outer_gs[0])
+            diagonal_cax = fig.add_subplot(cbar_gs[0])
+            off_diagonal_cax = fig.add_subplot(cbar_gs[1])
+        else:
+            fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.get_figure()
+
     sns.heatmap(
         diagonal_values,
         mask=diagonal_mask,
@@ -444,7 +461,9 @@ def plot_confusion_matrix(
         square=True,
         vmin=0.0,
         vmax=diagonal_vmax,
-        cbar=False,
+        cbar=diagonal_cax is not None,
+        cbar_ax=diagonal_cax,
+        cbar_kws={"ticks": [0.0, diagonal_vmax]} if diagonal_cax is not None else None,
         linewidths=0.5,
         linecolor="white",
         ax=ax,
@@ -464,12 +483,16 @@ def plot_confusion_matrix(
             square=True,
             vmin=0.0,
             vmax=off_diagonal_vmax,
-            cbar=False,
+            cbar=off_diagonal_cax is not None,
+            cbar_ax=off_diagonal_cax,
+            cbar_kws={"ticks": [0.0, off_diagonal_vmax]} if off_diagonal_cax is not None else None,
             linewidths=0.5,
             linecolor="white",
             ax=ax,
         )
         off_diagonal_mesh = ax.collections[-1]
+    elif off_diagonal_cax is not None:
+        off_diagonal_cax.set_visible(False)
 
     for i in range(n_labels):
         for j in range(n_labels):
@@ -502,22 +525,40 @@ def plot_confusion_matrix(
 
     if cbar:
         value_label = "Proportion" if normalize else "Count"
-        diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
-        diagonal_colorbar.set_label(f"Diagonal {value_label}")
-        diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
-        diagonal_colorbar.set_ticklabels(
-            ["0", f"{diagonal_vmax:.2f}" if normalize else f"{diagonal_vmax:.0f}"]
-        )
+        diagonal_ticklabels = ["0", f"{diagonal_vmax:.2f}" if normalize else f"{diagonal_vmax:.0f}"]
+        off_diagonal_ticklabels = [
+            "0",
+            f"{off_diagonal_vmax:.2f}" if normalize else f"{off_diagonal_vmax:.0f}",
+        ]
+        if uses_gridspec_colorbars:
+            diagonal_colorbar = diagonal_mesh.colorbar
+            diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
+            diagonal_colorbar.set_ticklabels(diagonal_ticklabels)
+            diagonal_cax.set_title("Diagonal", pad=6)
+            if off_diagonal_mesh is not None and off_diagonal_cax is not None:
+                off_diagonal_colorbar = off_diagonal_mesh.colorbar
+                off_diagonal_colorbar.set_ticks([0.0, off_diagonal_vmax])
+                off_diagonal_colorbar.set_ticklabels(off_diagonal_ticklabels)
+                off_diagonal_cax.set_title("Off-diagonal", pad=6)
+        else:
+            diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
+            diagonal_colorbar.set_label(f"Diagonal {value_label}")
+            diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
+            diagonal_colorbar.set_ticklabels(diagonal_ticklabels)
 
-        if off_diagonal_mesh is not None:
-            off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)
-            off_diagonal_colorbar.set_label(f"Off-diagonal {value_label}")
-            off_diagonal_colorbar.set_ticks([0.0, off_diagonal_vmax])
-            off_diagonal_colorbar.set_ticklabels(
-                ["0", f"{off_diagonal_vmax:.2f}" if normalize else f"{off_diagonal_vmax:.0f}"]
-            )
+            if off_diagonal_mesh is not None:
+                off_diagonal_colorbar = fig.colorbar(
+                    off_diagonal_mesh,
+                    ax=ax,
+                    fraction=0.046,
+                    pad=0.12,
+                )
+                off_diagonal_colorbar.set_label(f"Off-diagonal {value_label}")
+                off_diagonal_colorbar.set_ticks([0.0, off_diagonal_vmax])
+                off_diagonal_colorbar.set_ticklabels(off_diagonal_ticklabels)
 
-    fig.tight_layout()
+    if not uses_gridspec_colorbars:
+        fig.tight_layout()
     return fig, ax
 
 
