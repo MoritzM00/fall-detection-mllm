@@ -45,6 +45,7 @@ NORMAL_CONFUSION_OFFDIAGONAL_CMAP = matplotlib.colors.LinearSegmentedColormap.fr
     "normal_confusion_offdiagonal",
     ["#ffffff", "#fddbc7", "#b2182b"],
 )
+RELATIVE_CONFUSION_DIAGONAL_CMAP = matplotlib.colormaps["RdBu"]
 
 
 def _latex_pt_to_inches(value_pt: float) -> float:
@@ -569,7 +570,7 @@ def plot_relative_confusion_matrix(
     y_pred_b: list[str],
     subset: list[str] | None = None,
     title: str | None = None,
-    cmap: str = "Blues",
+    cmap: str | matplotlib.colors.Colormap = RELATIVE_CONFUSION_DIAGONAL_CMAP,
     cbar: bool = False,
     figsize: tuple[float, float] | None = None,
     ax: matplotlib.axes.Axes | None = None,
@@ -577,14 +578,15 @@ def plot_relative_confusion_matrix(
     """Plot a relative row-normalized confusion matrix for two runs.
 
     The matrix compares run *B* against run *A*. Cell color shows the
-    change in row-normalized confusion. Diagonal cells use a sequential
-    colormap over the absolute change magnitude, while off-diagonal
-    cells use a signed blue-to-red diverging colormap where negative
-    values are blue and positive values are red. The annotation shows
-    the raw difference (B − A) in percentage points: positive means B's
-    value is higher, negative means B's value is lower. On the diagonal,
-    positive is good (higher recall); off-diagonal, negative is good
-    (fewer misclassifications).
+    change in row-normalized confusion. Diagonal cells use a signed
+    red-to-blue diverging colormap where negative values are red and
+    positive values are blue. Off-diagonal cells use a signed
+    blue-to-red diverging colormap where negative values are blue and
+    positive values are red. The annotation shows the raw difference
+    (B − A) in percentage points: positive means B's value is higher,
+    negative means B's value is lower. On the diagonal, positive is good
+    (higher recall); off-diagonal, negative is good (fewer
+    misclassifications).
     """
 
     _validate_confusion_inputs(y_true_a, y_pred_a)
@@ -617,7 +619,7 @@ def plot_relative_confusion_matrix(
     diagonal_mask = ~np.eye(n_labels, dtype=bool)
     off_diagonal_mask = np.eye(n_labels, dtype=bool)
 
-    diagonal_values = np.abs(display_matrix)
+    diagonal_values = display_matrix
     diagonal_vmax = float(np.max(np.abs(np.diag(display_matrix)))) if n_labels else 0.0
     diagonal_vmax = diagonal_vmax if diagonal_vmax > 0 else 100.0
     off_diagonal_values = display_matrix
@@ -636,8 +638,11 @@ def plot_relative_confusion_matrix(
         xticklabels=display_labels,
         yticklabels=display_labels,
         square=True,
-        vmin=0.0,
-        vmax=diagonal_vmax,
+        norm=matplotlib.colors.TwoSlopeNorm(
+            vmin=-diagonal_vmax,
+            vcenter=0.0,
+            vmax=diagonal_vmax,
+        ),
         cbar=False,
         linewidths=0.5,
         linecolor="white",
@@ -670,7 +675,7 @@ def plot_relative_confusion_matrix(
 
     def _annotation_color(value: float, *, is_diagonal: bool) -> str:
         if is_diagonal:
-            rgba = diagonal_mesh.cmap(diagonal_mesh.norm(abs(value)))
+            rgba = diagonal_mesh.cmap(diagonal_mesh.norm(value))
         elif off_diagonal_mesh is not None:
             rgba = off_diagonal_mesh.cmap(off_diagonal_mesh.norm(value))
         else:
@@ -700,9 +705,9 @@ def plot_relative_confusion_matrix(
 
     if cbar:
         diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
-        diagonal_colorbar.set_label("Diagonal |Δ| (pp)")
-        diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
-        diagonal_colorbar.set_ticklabels(["0", f"{diagonal_vmax:.0f}"])
+        diagonal_colorbar.set_label("Diagonal Δ (pp)")
+        diagonal_colorbar.set_ticks([-diagonal_vmax, 0.0, diagonal_vmax])
+        diagonal_colorbar.set_ticklabels([f"-{diagonal_vmax:.0f}", "0", f"{diagonal_vmax:.0f}"])
 
         if off_diagonal_mesh is not None:
             off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)

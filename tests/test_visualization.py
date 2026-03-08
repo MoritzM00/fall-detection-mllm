@@ -699,7 +699,9 @@ class TestRelativeConfusionMatrix:
         diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
         off_diagonal = _extract_heatmap_collection(ax, 1, n=2).filled(np.nan)
 
-        assert ax.collections[0].cmap.name == "Blues"
+        assert ax.collections[0].cmap.name == "RdBu"
+        assert isinstance(ax.collections[0].norm, matplotlib.colors.TwoSlopeNorm)
+        assert ax.collections[0].norm.vcenter == 0.0
         assert ax.collections[1].cmap.name == "RdBu_r"
         assert isinstance(ax.collections[1].norm, matplotlib.colors.TwoSlopeNorm)
         assert ax.collections[1].norm.vcenter == 0.0
@@ -713,6 +715,40 @@ class TestRelativeConfusionMatrix:
         assert off_diagonal[0, 1] == pytest.approx(-50.0)
         assert off_diagonal[1, 0] == pytest.approx(0.0)
         assert np.isnan(off_diagonal[1, 1])
+        plt.close(fig)
+
+    def test_negative_diagonal_uses_signed_color_scale(self):
+        """A diagonal regression keeps its negative sign in the heatmap data."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "a", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "b", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        assert diagonal[0, 0] == pytest.approx(-50.0)
+
+        rgba = ax.collections[0].cmap(ax.collections[0].norm(diagonal[0, 0]))
+        assert rgba[0] > rgba[1]
+        assert rgba[0] > rgba[2]
+        plt.close(fig)
+
+    def test_positive_diagonal_uses_blue_signed_color_scale(self):
+        """A diagonal improvement maps to the blue side of the signed scale."""
+        y_true_a = ["a", "a", "b", "b"]
+        y_pred_a = ["a", "b", "b", "a"]
+        y_true_b = ["a", "a", "b", "b"]
+        y_pred_b = ["a", "a", "b", "a"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        assert diagonal[0, 0] == pytest.approx(50.0)
+
+        rgba = ax.collections[0].cmap(ax.collections[0].norm(diagonal[0, 0]))
+        assert rgba[2] > rgba[0]
+        assert rgba[2] > rgba[1]
         plt.close(fig)
 
     def test_dark_cells_use_light_annotation_text(self):
