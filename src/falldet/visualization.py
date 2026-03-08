@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 PUBLICATION_TARGET_DEFAULTS: dict[str, dict[str, float | int]] = {
     "paper": {
         "text_width_pt": 246.0,
+        "font.size": 9,
         "axes.titlesize": 10,
         "axes.labelsize": 9,
         "legend.fontsize": 8,
@@ -30,6 +31,7 @@ PUBLICATION_TARGET_DEFAULTS: dict[str, dict[str, float | int]] = {
     },
     "thesis": {
         "text_width_pt": 427.43153,
+        "font.size": 9,
         "axes.titlesize": 10,
         "axes.labelsize": 9,
         "legend.fontsize": 8,
@@ -38,6 +40,11 @@ PUBLICATION_TARGET_DEFAULTS: dict[str, dict[str, float | int]] = {
         "ytick.labelsize": 8,
     },
 }
+
+NORMAL_CONFUSION_OFFDIAGONAL_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list(
+    "normal_confusion_offdiagonal",
+    ["#ffffff", "#fddbc7", "#b2182b"],
+)
 
 
 def _latex_pt_to_inches(value_pt: float) -> float:
@@ -142,6 +149,7 @@ def set_publication_rc_defaults(
         "axes.spines.top": False,
         "axes.spines.right": False,
         "axes.grid": True,
+        "axes.axisbelow": True,
         "grid.linewidth": 0.5,
         "grid.alpha": 0.25,
         "grid.linestyle": "--",
@@ -212,6 +220,12 @@ def _resolve_display_subset(
         return list(subset), display_values[np.ix_(subset_indices, subset_indices)]
 
     return list(all_labels), display_values
+
+
+def _annotation_text_color_for_rgba(rgba: tuple[float, float, float, float]) -> str:
+    """Choose black or white annotation text based on cell luminance."""
+    luminance = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
+    return "white" if luminance < 0.45 else "black"
 
 
 def video_to_image_grid(
@@ -318,8 +332,10 @@ def plot_confusion_matrix(
             not listed are omitted from the visualization but still
             contribute to the computed matrix values.
         title: Title shown above the plot.
-        cmap: Matplotlib / seaborn colormap name used for the heatmap.
-        cbar: Whether to show the color bar.
+        cmap: Matplotlib / seaborn colormap name used for diagonal cells.
+            Off-diagonal cells use a fixed blue-to-red colormap where
+            lower values are blue and higher values are red.
+        cbar: Whether to show the color bar(s).
         annot_threshold: Minimum cell value required before showing a
             text annotation. For normalized matrices, use proportions
             (for example ``0.01`` for 1%). For raw-count matrices, use
@@ -386,7 +402,9 @@ def plot_confusion_matrix(
                 annot[i, j] = f"{int(display_matrix[i, j])}"
             else:
                 # Normalized -- show proportion to two decimals
-                annot[i, j] = f"{display_matrix[i, j]:.2f}"
+                # annot[i, j] = f"{display_matrix[i, j]:.2f}"
+                # show in percentages
+                annot[i, j] = f"{display_matrix[i, j] * 100:.0f}"
 
     # ------------------------------------------------------------------
     # Figure / axes setup
@@ -399,27 +417,79 @@ def plot_confusion_matrix(
         fig = ax.get_figure()
 
     # ------------------------------------------------------------------
-    # Draw heatmap
+    # Draw heatmap with separate diagonal / off-diagonal semantics
     # ------------------------------------------------------------------
-    heatmap_kwargs = {
-        "data": display_matrix,
-        "annot": annot,
-        "fmt": "",
-        "cmap": cmap,
-        "xticklabels": display_labels,
-        "yticklabels": display_labels,
-        "square": True,
-        "cbar": cbar,
-        "linewidths": 0.5,
-        "linecolor": "white",
-        "ax": ax,
-    }
-    if cbar:
-        heatmap_kwargs["cbar_kws"] = {"label": "Proportion" if normalize else "Count"}
+    n_labels = len(display_labels)
+    diagonal_mask = ~np.eye(n_labels, dtype=bool)
+    off_diagonal_mask = np.eye(n_labels, dtype=bool)
+
+    diagonal_values = display_matrix
+    off_diagonal_values = display_matrix
+    diagonal_vmax = float(np.max(np.diag(display_matrix))) if n_labels else 0.0
+    diagonal_vmax = diagonal_vmax if diagonal_vmax > 0 else 1.0
+    if n_labels > 1:
+        off_diagonal_vmax = float(np.max(off_diagonal_values[~off_diagonal_mask]))
+    else:
+        off_diagonal_vmax = 0.0
+    off_diagonal_vmax = off_diagonal_vmax if off_diagonal_vmax > 0 else 1.0
 
     sns.heatmap(
-        **heatmap_kwargs,
+        diagonal_values,
+        mask=diagonal_mask,
+        annot=False,
+        fmt="",
+        cmap=cmap,
+        xticklabels=display_labels,
+        yticklabels=display_labels,
+        square=True,
+        vmin=0.0,
+        vmax=diagonal_vmax,
+        cbar=False,
+        linewidths=0.5,
+        linecolor="white",
+        ax=ax,
     )
+    diagonal_mesh = ax.collections[-1]
+
+    off_diagonal_mesh = None
+    if n_labels > 1:
+        sns.heatmap(
+            off_diagonal_values,
+            mask=off_diagonal_mask,
+            annot=False,
+            fmt="",
+            cmap=NORMAL_CONFUSION_OFFDIAGONAL_CMAP,
+            xticklabels=display_labels,
+            yticklabels=display_labels,
+            square=True,
+            vmin=0.0,
+            vmax=off_diagonal_vmax,
+            cbar=False,
+            linewidths=0.5,
+            linecolor="white",
+            ax=ax,
+        )
+        off_diagonal_mesh = ax.collections[-1]
+
+    for i in range(n_labels):
+        for j in range(n_labels):
+            if annot[i, j] == "":
+                continue
+            if i == j:
+                rgba = diagonal_mesh.cmap(diagonal_mesh.norm(display_matrix[i, j]))
+            elif off_diagonal_mesh is not None:
+                rgba = off_diagonal_mesh.cmap(off_diagonal_mesh.norm(display_matrix[i, j]))
+            else:
+                rgba = (1.0, 1.0, 1.0, 1.0)
+
+            ax.text(
+                j + 0.5,
+                i + 0.5,
+                annot[i, j],
+                ha="center",
+                va="center",
+                color=_annotation_text_color_for_rgba(rgba),
+            )
 
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
@@ -429,6 +499,23 @@ def plot_confusion_matrix(
     # Rotate tick labels for readability
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+
+    if cbar:
+        value_label = "Proportion" if normalize else "Count"
+        diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
+        diagonal_colorbar.set_label(f"Diagonal {value_label}")
+        diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
+        diagonal_colorbar.set_ticklabels(
+            ["0", f"{diagonal_vmax:.2f}" if normalize else f"{diagonal_vmax:.0f}"]
+        )
+
+        if off_diagonal_mesh is not None:
+            off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)
+            off_diagonal_colorbar.set_label(f"Off-diagonal {value_label}")
+            off_diagonal_colorbar.set_ticks([0.0, off_diagonal_vmax])
+            off_diagonal_colorbar.set_ticklabels(
+                ["0", f"{off_diagonal_vmax:.2f}" if normalize else f"{off_diagonal_vmax:.0f}"]
+            )
 
     fig.tight_layout()
     return fig, ax
@@ -449,7 +536,10 @@ def plot_relative_confusion_matrix(
     """Plot a relative row-normalized confusion matrix for two runs.
 
     The matrix compares run *B* against run *A*. Cell color shows the
-    absolute change in row-normalized confusion. The annotation shows
+    change in row-normalized confusion. Diagonal cells use a sequential
+    colormap over the absolute change magnitude, while off-diagonal
+    cells use a signed blue-to-red diverging colormap where negative
+    values are blue and positive values are red. The annotation shows
     the raw difference (B − A) in percentage points: positive means B's
     value is higher, negative means B's value is lower. On the diagonal,
     positive is good (higher recall); off-diagonal, negative is good
@@ -469,10 +559,10 @@ def plot_relative_confusion_matrix(
     cm_a_norm = confusion_matrix(y_true_a, y_pred_a, labels=all_labels, normalize="true")
     cm_b_norm = confusion_matrix(y_true_b, y_pred_b, labels=all_labels, normalize="true")
     diff_pp = np.round((cm_b_norm - cm_a_norm) * 100).astype(int)
-    magnitude_matrix = np.abs(diff_pp).astype(float)
+    signed_matrix = diff_pp.astype(float)
     sign_annot = np.where(diff_pp == 0, "", np.vectorize(lambda v: f"{v:+d}")(diff_pp))
 
-    display_labels, display_matrix = _resolve_display_subset(all_labels, magnitude_matrix, subset)
+    display_labels, display_matrix = _resolve_display_subset(all_labels, signed_matrix, subset)
     _, display_annot = _resolve_display_subset(all_labels, sign_annot, subset)
 
     if ax is None:
@@ -482,23 +572,83 @@ def plot_relative_confusion_matrix(
     else:
         fig = ax.get_figure()
 
-    vmax = float(display_matrix.max()) if display_matrix.size else 0.0
+    n_labels = len(display_labels)
+    diagonal_mask = ~np.eye(n_labels, dtype=bool)
+    off_diagonal_mask = np.eye(n_labels, dtype=bool)
+
+    diagonal_values = np.abs(display_matrix)
+    diagonal_vmax = float(np.max(np.abs(np.diag(display_matrix)))) if n_labels else 0.0
+    diagonal_vmax = diagonal_vmax if diagonal_vmax > 0 else 100.0
+    off_diagonal_values = display_matrix
+    if n_labels > 1:
+        off_diagonal_vmax = float(np.max(np.abs(off_diagonal_values[~off_diagonal_mask])))
+    else:
+        off_diagonal_vmax = 0.0
+    off_diagonal_vmax = off_diagonal_vmax if off_diagonal_vmax > 0 else 100.0
+
     sns.heatmap(
-        display_matrix,
-        annot=display_annot,
+        diagonal_values,
+        mask=diagonal_mask,
+        annot=False,
         fmt="",
         cmap=cmap,
         xticklabels=display_labels,
         yticklabels=display_labels,
         square=True,
         vmin=0.0,
-        vmax=vmax if vmax > 0 else 100.0,
-        cbar=cbar,
-        cbar_kws={"label": "Absolute difference (pp)", "shrink": 0.8},
+        vmax=diagonal_vmax,
+        cbar=False,
         linewidths=0.5,
         linecolor="white",
         ax=ax,
     )
+    diagonal_mesh = ax.collections[-1]
+
+    off_diagonal_mesh = None
+    if n_labels > 1:
+        sns.heatmap(
+            off_diagonal_values,
+            mask=off_diagonal_mask,
+            annot=False,
+            fmt="",
+            cmap="RdBu_r",
+            xticklabels=display_labels,
+            yticklabels=display_labels,
+            square=True,
+            norm=matplotlib.colors.TwoSlopeNorm(
+                vmin=-off_diagonal_vmax,
+                vcenter=0.0,
+                vmax=off_diagonal_vmax,
+            ),
+            cbar=False,
+            linewidths=0.5,
+            linecolor="white",
+            ax=ax,
+        )
+        off_diagonal_mesh = ax.collections[-1]
+
+    def _annotation_color(value: float, *, is_diagonal: bool) -> str:
+        if is_diagonal:
+            rgba = diagonal_mesh.cmap(diagonal_mesh.norm(abs(value)))
+        elif off_diagonal_mesh is not None:
+            rgba = off_diagonal_mesh.cmap(off_diagonal_mesh.norm(value))
+        else:
+            rgba = (1.0, 1.0, 1.0, 1.0)
+        return _annotation_text_color_for_rgba(rgba)
+
+    for i in range(n_labels):
+        for j in range(n_labels):
+            if display_annot[i, j] == "":
+                continue
+            is_diagonal = i == j
+            ax.text(
+                j + 0.5,
+                i + 0.5,
+                display_annot[i, j],
+                ha="center",
+                va="center",
+                color=_annotation_color(display_matrix[i, j], is_diagonal=is_diagonal),
+            )
 
     ax.set_xlabel("Predicted")
     ax.set_ylabel("True")
@@ -508,9 +658,18 @@ def plot_relative_confusion_matrix(
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
     if cbar:
-        colorbar = ax.collections[0].colorbar
-        colorbar.set_ticks([0.0, vmax if vmax > 0 else 100.0])
-        colorbar.set_ticklabels(["0", f"{vmax:.0f}" if vmax > 0 else "100"])
+        diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
+        diagonal_colorbar.set_label("Diagonal |Δ| (pp)")
+        diagonal_colorbar.set_ticks([0.0, diagonal_vmax])
+        diagonal_colorbar.set_ticklabels(["0", f"{diagonal_vmax:.0f}"])
+
+        if off_diagonal_mesh is not None:
+            off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)
+            off_diagonal_colorbar.set_label("Off-diagonal Δ (pp)")
+            off_diagonal_colorbar.set_ticks([-off_diagonal_vmax, 0.0, off_diagonal_vmax])
+            off_diagonal_colorbar.set_ticklabels(
+                [f"-{off_diagonal_vmax:.0f}", "0", f"{off_diagonal_vmax:.0f}"]
+            )
 
     fig.tight_layout()
     return fig, ax

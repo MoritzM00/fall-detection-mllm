@@ -35,6 +35,32 @@ def _extract_heatmap_annotations(ax: matplotlib.axes.Axes, n: int) -> dict[tuple
     return result
 
 
+def _extract_heatmap_texts(
+    ax: matplotlib.axes.Axes,
+    n: int,
+) -> dict[tuple[int, int], matplotlib.text.Text]:
+    """Return a ``{(row, col): text_artist}`` dict for the *n* x *n* heatmap cells."""
+    result: dict[tuple[int, int], matplotlib.text.Text] = {}
+    for t in ax.texts:
+        if t.get_transform() != ax.transData:
+            continue
+        x, y = t.get_position()
+        col = round(x - 0.5)
+        row = round(y - 0.5)
+        if 0 <= row < n and 0 <= col < n:
+            result[(row, col)] = t
+    return result
+
+
+def _extract_heatmap_collection(
+    ax: matplotlib.axes.Axes,
+    collection_index: int,
+    n: int,
+) -> np.ma.MaskedArray:
+    """Return a heatmap collection as an ``n x n`` masked array."""
+    return np.ma.asarray(ax.collections[collection_index].get_array()).reshape(n, n)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -282,7 +308,7 @@ class TestBasicFunctionality:
         """Color bar can be enabled explicitly."""
         y_true, y_pred = simple_data
         fig, _ = plot_confusion_matrix(y_true, y_pred, cbar=True)
-        assert len(fig.axes) == 2
+        assert len(fig.axes) == 3
         plt.close(fig)
 
     def test_perfect_predictions(self):
@@ -300,6 +326,40 @@ class TestBasicFunctionality:
         # With 3 classes, there are 9 cells; 3 diagonal = 3, 6 off-diagonal = 0
         assert values.count(3) == 3
         assert values.count(0) == 6
+        plt.close(fig)
+
+    def test_heatmap_uses_split_colormaps(self):
+        """Diagonal and off-diagonal cells use different color semantics."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "b", "a"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
+
+        diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        off_diagonal = _extract_heatmap_collection(ax, 1, n=2).filled(np.nan)
+
+        assert ax.collections[0].cmap.name == "Blues"
+        assert ax.collections[1].cmap.name == "normal_confusion_offdiagonal"
+        assert not isinstance(ax.collections[1].norm, matplotlib.colors.TwoSlopeNorm)
+        assert diagonal[0, 0] == pytest.approx(2 / 3)
+        assert np.isnan(diagonal[0, 1])
+        assert np.isnan(diagonal[1, 0])
+        assert diagonal[1, 1] == pytest.approx(1 / 2)
+        assert np.isnan(off_diagonal[0, 0])
+        assert off_diagonal[0, 1] == pytest.approx(1 / 3)
+        assert off_diagonal[1, 0] == pytest.approx(1 / 2)
+        assert np.isnan(off_diagonal[1, 1])
+        plt.close(fig)
+
+    def test_dark_cells_use_light_annotation_text(self):
+        """Very dark normal-confusion cells switch annotations to white."""
+        y_true = ["a", "a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "a", "a", "a", "b"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
+
+        texts = _extract_heatmap_texts(ax, n=2)
+        assert texts[(0, 0)].get_color() == "white"
         plt.close(fig)
 
 
@@ -627,8 +687,8 @@ class TestRelativeConfusionMatrix:
         assert texts[(0, 0)] == "-50"
         plt.close(fig)
 
-    def test_heatmap_uses_absolute_difference(self):
-        """Heatmap magnitude is the absolute row-normalized difference."""
+    def test_heatmap_uses_split_colormaps(self):
+        """Diagonal and off-diagonal cells use different color semantics."""
         y_true_a = ["a", "a", "b", "b"]
         y_pred_a = ["a", "b", "b", "a"]
         y_true_b = ["a", "a", "b", "b"]
@@ -636,8 +696,37 @@ class TestRelativeConfusionMatrix:
 
         fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
 
-        heatmap_values = np.array(ax.collections[0].get_array()).flatten()
-        assert list(heatmap_values) == pytest.approx([50.0, 50.0, 0.0, 0.0])
+        diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        off_diagonal = _extract_heatmap_collection(ax, 1, n=2).filled(np.nan)
+
+        assert ax.collections[0].cmap.name == "Blues"
+        assert ax.collections[1].cmap.name == "RdBu_r"
+        assert isinstance(ax.collections[1].norm, matplotlib.colors.TwoSlopeNorm)
+        assert ax.collections[1].norm.vcenter == 0.0
+
+        assert diagonal[0, 0] == pytest.approx(50.0)
+        assert np.isnan(diagonal[0, 1])
+        assert np.isnan(diagonal[1, 0])
+        assert diagonal[1, 1] == pytest.approx(0.0)
+
+        assert np.isnan(off_diagonal[0, 0])
+        assert off_diagonal[0, 1] == pytest.approx(-50.0)
+        assert off_diagonal[1, 0] == pytest.approx(0.0)
+        assert np.isnan(off_diagonal[1, 1])
+        plt.close(fig)
+
+    def test_dark_cells_use_light_annotation_text(self):
+        """Very dark heatmap cells switch annotations to white."""
+        y_true_a = ["a", "b"]
+        y_pred_a = ["b", "a"]
+        y_true_b = ["a", "b"]
+        y_pred_b = ["a", "b"]
+
+        fig, ax = plot_relative_confusion_matrix(y_true_a, y_pred_a, y_true_b, y_pred_b)
+
+        texts = _extract_heatmap_texts(ax, n=2)
+        assert texts[(0, 0)].get_color() == "white"
+        assert texts[(0, 1)].get_color() == "white"
         plt.close(fig)
 
     def test_subset_slices_from_full_relative_matrix(self):
@@ -657,8 +746,10 @@ class TestRelativeConfusionMatrix:
 
         xlabels = [t.get_text() for t in ax.get_xticklabels()]
         assert xlabels == ["a", "b"]
-        heatmap_values = np.array(ax.collections[0].get_array()).flatten()
-        assert list(heatmap_values) == pytest.approx([50.0, 50.0, 0.0, 0.0])
+        diagonal = _extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        off_diagonal = _extract_heatmap_collection(ax, 1, n=2).filled(np.nan)
+        assert diagonal[0, 0] == pytest.approx(50.0)
+        assert off_diagonal[0, 1] == pytest.approx(-50.0)
         plt.close(fig)
 
     def test_subset_unknown_label_raises(self):
