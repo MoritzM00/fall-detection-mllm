@@ -28,9 +28,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from falldet.plot import plot_relative_confusion_matrix, set_publication_rc_defaults
 from falldet.utils.predictions import extract_labels_for_metrics, load_predictions_jsonl
 from falldet.utils.wandb import load_run_from_wandb
-from falldet.visualization import plot_relative_confusion_matrix, set_publication_rc_defaults
 
 logger = logging.getLogger(__name__)
 
