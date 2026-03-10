@@ -22,7 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from falldet.data.video_dataset import idx2label
-from falldet.plot import PredictionMetricInput, plot_metric_comparison_from_predictions
+from falldet.plot import (
+    COLORS,
+    MetricComparisonPanelSpec,
+    PredictionMetricInput,
+    plot_label_distribution_comparison_from_predictions,
+    plot_metric_comparison_from_predictions,
+    plot_metric_comparison_panels_from_predictions,
+)
 from falldet.plot.base import set_publication_rc_defaults
 from falldet.schemas import InferenceConfig, ModelConfig
 from falldet.utils.predictions import extract_labels_for_metrics, load_predictions_jsonl
@@ -40,6 +47,9 @@ CLASS_SUBSET: tuple[str, ...] | None = (
     "other",
     "walk",
     "standing",
+    "sit_down",
+    "sitting",
+    "crawl",
 )
 
 
@@ -104,6 +114,16 @@ def _default_class_output_name(dataset_name: str, run_names: list[str]) -> str:
     return f"{dataset_name}_class_f1_comparison_{'_vs_'.join(safe_names)}.pdf"
 
 
+def _default_distribution_output_name(dataset_name: str, run_names: list[str]) -> str:
+    safe_names = [_sanitize_filename_part(name) for name in run_names]
+    return f"{dataset_name}_label_distribution_{'_vs_'.join(safe_names)}.pdf"
+
+
+def _default_precision_recall_output_name(dataset_name: str, run_names: list[str]) -> str:
+    safe_names = [_sanitize_filename_part(name) for name in run_names]
+    return f"{dataset_name}_precision_recall_{'_vs_'.join(safe_names)}.pdf"
+
+
 def _sanitize_filename_part(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
     sanitized = sanitized.strip("_")
@@ -156,6 +176,50 @@ def _per_class_metric_labels(class_subset: tuple[str, ...] | None = CLASS_SUBSET
         else tuple(idx2label[idx] for idx in sorted(idx2label))
     )
     return {f"{label}_f1": label.replace("_", " ") for label in labels}
+
+
+def _per_class_precision_metric_order(
+    class_subset: tuple[str, ...] | None = CLASS_SUBSET,
+) -> tuple[str, ...]:
+    labels = (
+        class_subset
+        if class_subset is not None
+        else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    return tuple(f"{label}_precision" for label in labels)
+
+
+def _per_class_precision_metric_labels(
+    class_subset: tuple[str, ...] | None = CLASS_SUBSET,
+) -> dict[str, str]:
+    labels = (
+        class_subset
+        if class_subset is not None
+        else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    return {f"{label}_precision": label.replace("_", " ") for label in labels}
+
+
+def _per_class_recall_metric_order(
+    class_subset: tuple[str, ...] | None = CLASS_SUBSET,
+) -> tuple[str, ...]:
+    labels = (
+        class_subset
+        if class_subset is not None
+        else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    return tuple(f"{label}_sensitivity" for label in labels)
+
+
+def _per_class_recall_metric_labels(
+    class_subset: tuple[str, ...] | None = CLASS_SUBSET,
+) -> dict[str, str]:
+    labels = (
+        class_subset
+        if class_subset is not None
+        else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    return {f"{label}_sensitivity": label.replace("_", " ") for label in labels}
 
 
 def load_run_predictions(
@@ -269,18 +333,6 @@ def main() -> None:
     set_publication_rc_defaults(
         use_tex=True,
         rc={
-            "font.family": "serif",
-            "font.serif": ["DejaVu Serif", "Computer Modern Roman"],
-            "font.size": 10,
-            "axes.labelsize": 11,
-            "axes.titlesize": 12,
-            "xtick.labelsize": 9,
-            "ytick.labelsize": 9,
-            "legend.fontsize": 9,
-            "figure.titlesize": 13,
-            "figure.dpi": 100,
-            "savefig.dpi": 300,
-            "savefig.bbox": "tight",
             "savefig.pad_inches": 0.1,
         },
     )
@@ -324,6 +376,60 @@ def main() -> None:
     class_output_path = output_path.with_name(_default_class_output_name(dataset_name, run_names))
     class_fig.savefig(class_output_path, bbox_inches="tight")
     logger.info(f"Saved class F1 comparison plot to {class_output_path}")
+
+    distribution_labels = (
+        CLASS_SUBSET
+        if CLASS_SUBSET is not None
+        else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    distribution_fig, _ = plot_label_distribution_comparison_from_predictions(
+        metric_inputs,
+        label_order=distribution_labels,
+        label_labels={label: label.replace("_", " ") for label in distribution_labels},
+        title=None,
+        figsize=(10.0, 4.8),
+        actual_name="Actual",
+        actual_color=COLORS["neutral"],
+    )
+    distribution_output_path = output_path.with_name(
+        _default_distribution_output_name(dataset_name, run_names)
+    )
+    distribution_fig.savefig(distribution_output_path, bbox_inches="tight")
+    logger.info(f"Saved label distribution plot to {distribution_output_path}")
+
+    precision_recall_fig, _ = plot_metric_comparison_panels_from_predictions(
+        metric_inputs,
+        panel_specs=[
+            MetricComparisonPanelSpec(
+                metric_order=_per_class_precision_metric_order(),
+                metric_labels=_per_class_precision_metric_labels(),
+                title=None,
+                xlabel="(a) Precision",
+                ylabel="Score (\\%)",
+                xtick_rotation=0.0,
+                xtick_horizontalalignment="center",
+            ),
+            MetricComparisonPanelSpec(
+                metric_order=_per_class_recall_metric_order(),
+                metric_labels=_per_class_recall_metric_labels(),
+                title=None,
+                xlabel="(b) Recall",
+                ylabel="",
+                xtick_rotation=0.0,
+                xtick_horizontalalignment="center",
+            ),
+        ],
+        figsize=(12.0, 4.8),
+        sharey=True,
+        legend_panel_index=1,
+        wspace=0.10,
+        missing_metric_value=0.0,
+    )
+    precision_recall_output_path = output_path.with_name(
+        _default_precision_recall_output_name(dataset_name, run_names)
+    )
+    precision_recall_fig.savefig(precision_recall_output_path, bbox_inches="tight")
+    logger.info(f"Saved precision/recall comparison plot to {precision_recall_output_path}")
 
 
 if __name__ == "__main__":
