@@ -7,11 +7,11 @@ predictions. The script saves one overall metric comparison plot and one per-cla
 F1 comparison plot.
 
 Usage:
-    python scripts/plot/run_comparison_script.py RUN [RUN ...] [OPTIONS]
+    python scripts/plot/compare_runs.py RUN [RUN ...] [OPTIONS]
 
 Examples:
-    python scripts/plot/run_comparison_script.py abc123 def456 ghi789
-    python scripts/plot/run_comparison_script.py outputs/preds/a.jsonl def456
+    python scripts/plot/compare_runs.py abc123 def456 ghi789
+    python scripts/plot/compare_runs.py outputs/preds/a.jsonl def456
 """
 
 import argparse

@@ -6,20 +6,20 @@ predictions file.  W&B downloads are cached under
 re-download.
 
 Usage:
-    python scripts/compare_runs.py RUN_A RUN_B [OPTIONS]
+    python scripts/plot/relative_confusion.py RUN_A RUN_B [OPTIONS]
 
 Examples:
     # Two W&B run IDs
-    python scripts/compare_runs.py abc123 def456
+    python scripts/plot/relative_confusion.py abc123 def456
 
     # One local file, one W&B run
-    python scripts/compare_runs.py outputs/preds/baseline.jsonl def456
+    python scripts/plot/relative_confusion.py outputs/preds/baseline.jsonl def456
 
     # Both local files
-    python scripts/compare_runs.py run_a.jsonl run_b.jsonl
+    python scripts/plot/relative_confusion.py run_a.jsonl run_b.jsonl
 
     # With subset
-    python scripts/compare_runs.py abc123 def456 \\
+    python scripts/plot/relative_confusion.py abc123 def456 \\
         --subset fall fallen lie_down lying
 """
 
