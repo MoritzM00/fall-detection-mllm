@@ -1,61 +1,15 @@
-"""Tests for the confusion matrix visualization function."""
-
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
-from falldet.visualization import plot_confusion_matrix
+from falldet.plot import plot_confusion_matrix
 
-# Use non-interactive backend so tests don't pop up windows
-matplotlib.use("Agg")
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def simple_data():
-    """Simple 3-class data with some misclassifications."""
-    y_true = ["fall", "fall", "walk", "walk", "sitting", "sitting"]
-    y_pred = ["fall", "walk", "walk", "walk", "sitting", "fall"]
-    return y_true, y_pred
-
-
-@pytest.fixture
-def multiclass_data():
-    """Larger multi-class data for subset tests."""
-    y_true = [
-        "fall",
-        "fall",
-        "fallen",
-        "walk",
-        "walk",
-        "sitting",
-        "standing",
-        "lying",
-        "crawl",
-        "jump",
-    ]
-    y_pred = [
-        "fall",
-        "walk",
-        "fallen",
-        "walk",
-        "sitting",
-        "sitting",
-        "standing",
-        "lying",
-        "crawl",
-        "walk",
-    ]
-    return y_true, y_pred
-
-
-# ---------------------------------------------------------------------------
-# Basic functionality
-# ---------------------------------------------------------------------------
+from .helpers import (
+    extract_heatmap_annotations,
+    extract_heatmap_collection,
+    extract_heatmap_texts,
+)
 
 
 class TestBasicFunctionality:
@@ -74,11 +28,8 @@ class TestBasicFunctionality:
         y_true, y_pred = simple_data
         fig, ax = plot_confusion_matrix(y_true, y_pred, normalize=None)
 
-        # The annotations should be integer strings
-        # Collect text objects from the axes
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
         for t in texts:
-            # Should be parseable as an integer
             assert t.lstrip("-").isdigit(), f"Expected integer annotation, got {t!r}"
         plt.close(fig)
 
@@ -140,6 +91,19 @@ class TestBasicFunctionality:
         assert abs(h - 8) < 0.5
         plt.close(fig)
 
+    def test_default_figsize_uses_rc_params(self, simple_data):
+        """When figsize is omitted, the current rc figure size is used."""
+        y_true, y_pred = simple_data
+        original = plt.rcParams["figure.figsize"]
+        plt.rcParams["figure.figsize"] = [5.9, 5.0]
+        try:
+            fig, _ = plot_confusion_matrix(y_true, y_pred)
+            w, h = fig.get_size_inches()
+            assert (w, h) == pytest.approx((5.9, 5.0))
+            plt.close(fig)
+        finally:
+            plt.rcParams["figure.figsize"] = original
+
     def test_existing_ax(self, simple_data):
         """Plotting into an existing axes works."""
         y_true, y_pred = simple_data
@@ -147,6 +111,20 @@ class TestBasicFunctionality:
         fig, ax = plot_confusion_matrix(y_true, y_pred, ax=ax_ext)
         assert ax is ax_ext
         assert fig is fig_ext
+        plt.close(fig)
+
+    def test_cbar_disabled_by_default(self, simple_data):
+        """Color bar is hidden unless explicitly requested."""
+        y_true, y_pred = simple_data
+        fig, _ = plot_confusion_matrix(y_true, y_pred)
+        assert len(fig.axes) == 1
+        plt.close(fig)
+
+    def test_cbar_enabled_when_requested(self, simple_data):
+        """Color bar can be enabled explicitly."""
+        y_true, y_pred = simple_data
+        fig, _ = plot_confusion_matrix(y_true, y_pred, cbar=True)
+        assert len(fig.axes) == 3
         plt.close(fig)
 
     def test_perfect_predictions(self):
@@ -157,19 +135,45 @@ class TestBasicFunctionality:
 
         fig, ax = plot_confusion_matrix(y_true, y_pred, normalize=None)
 
-        # Collect non-empty annotations
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
         values = [int(t) for t in texts]
-        # The diagonal entries should be 3, off-diagonal 0
-        # With 3 classes, there are 9 cells; 3 diagonal = 3, 6 off-diagonal = 0
         assert values.count(3) == 3
         assert values.count(0) == 6
         plt.close(fig)
 
+    def test_heatmap_uses_split_colormaps(self):
+        """Diagonal and off-diagonal cells use different color semantics."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "b", "a"]
 
-# ---------------------------------------------------------------------------
-# Normalization correctness
-# ---------------------------------------------------------------------------
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
+
+        diagonal = extract_heatmap_collection(ax, 0, n=2).filled(np.nan)
+        off_diagonal = extract_heatmap_collection(ax, 1, n=2).filled(np.nan)
+
+        assert ax.collections[0].cmap.name == "Blues"
+        assert ax.collections[1].cmap.name == "normal_confusion_offdiagonal"
+        assert not isinstance(ax.collections[1].norm, matplotlib.colors.TwoSlopeNorm)
+        assert diagonal[0, 0] == pytest.approx(2 / 3)
+        assert np.isnan(diagonal[0, 1])
+        assert np.isnan(diagonal[1, 0])
+        assert diagonal[1, 1] == pytest.approx(1 / 2)
+        assert np.isnan(off_diagonal[0, 0])
+        assert off_diagonal[0, 1] == pytest.approx(1 / 3)
+        assert off_diagonal[1, 0] == pytest.approx(1 / 2)
+        assert np.isnan(off_diagonal[1, 1])
+        plt.close(fig)
+
+    def test_dark_cells_use_light_annotation_text(self):
+        """Very dark normal-confusion cells switch annotations to white."""
+        y_true = ["a", "a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "a", "a", "a", "b"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
+
+        texts = extract_heatmap_texts(ax, n=2)
+        assert texts[(0, 0)].get_color() == "white"
+        plt.close(fig)
 
 
 class TestNormalizationValues:
@@ -182,15 +186,9 @@ class TestNormalizationValues:
 
         fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true")
 
-        # Extract the heatmap data from the axes
-        # The seaborn heatmap stores data in the QuadMesh
         collections = ax.collections
         assert len(collections) > 0
-        # Alternatively, verify via annotations
-        # Row 0 (a): TP=2, FP_pred_b=1 -> [2/3, 1/3] -> [0.67, 0.33]
-        # Row 1 (b): FP_pred_a=1, TP=1 -> [1/2, 1/2] -> [0.50, 0.50]
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
-        # 4 cells: [0.67, 0.33, 0.50, 0.50] (row-major)
         vals = [float(t) for t in texts]
         assert abs(vals[0] + vals[1] - 1.0) < 0.01
         assert abs(vals[2] + vals[3] - 1.0) < 0.01
@@ -205,8 +203,6 @@ class TestNormalizationValues:
 
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
         vals = [float(t) for t in texts]
-        # Col 0: vals[0] + vals[2] should be 1.0
-        # Col 1: vals[1] + vals[3] should be 1.0
         assert abs(vals[0] + vals[2] - 1.0) < 0.01
         assert abs(vals[1] + vals[3] - 1.0) < 0.01
         plt.close(fig)
@@ -224,11 +220,6 @@ class TestNormalizationValues:
         plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# Subset
-# ---------------------------------------------------------------------------
-
-
 class TestSubset:
     """Tests for the subset parameter."""
 
@@ -240,7 +231,6 @@ class TestSubset:
 
         xlabels = [t.get_text() for t in ax.get_xticklabels()]
         assert xlabels == subset
-        # No other real class labels should appear
         other_classes = (set(y_true) | set(y_pred)) - set(subset)
         for cls in other_classes:
             assert cls not in xlabels
@@ -258,12 +248,6 @@ class TestSubset:
 
     def test_subset_values_from_full_matrix(self):
         """Subset cell values are taken from the full confusion matrix."""
-        # Build data where we know exact counts:
-        # true=a, pred=a: 2 times
-        # true=a, pred=b: 1 time
-        # true=b, pred=a: 1 time
-        # true=b, pred=b: 1 time
-        # true=c, pred=c: 1 time  (will be omitted by subset)
         y_true = ["a", "a", "a", "b", "b", "c"]
         y_pred = ["a", "a", "b", "a", "b", "c"]
         subset = ["a", "b"]
@@ -272,10 +256,6 @@ class TestSubset:
 
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
         values = [int(t) for t in texts]
-        # The 2x2 submatrix for a, b (in that order) should be:
-        #       a  b
-        #   a [ 2  1 ]
-        #   b [ 1  1 ]
         assert values == [2, 1, 1, 1]
         plt.close(fig)
 
@@ -289,8 +269,6 @@ class TestSubset:
 
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
         vals = [float(t) for t in texts]
-        # Row "a" in full matrix (normalized by true): [2/3, 1/3, 0] -> a=0.67, b=0.33
-        # Row "b" in full matrix (normalized by true): [1/2, 1/2, 0] -> a=0.50, b=0.50
         assert abs(vals[0] - 2 / 3) < 0.01
         assert abs(vals[1] - 1 / 3) < 0.01
         assert abs(vals[2] - 0.50) < 0.01
@@ -302,11 +280,6 @@ class TestSubset:
         y_true, y_pred = simple_data
         with pytest.raises(ValueError, match="not present in the data"):
             plot_confusion_matrix(y_true, y_pred, subset=["nonexistent"])
-
-
-# ---------------------------------------------------------------------------
-# Input validation
-# ---------------------------------------------------------------------------
 
 
 class TestInputValidation:
@@ -332,10 +305,10 @@ class TestInputValidation:
         with pytest.raises(ValueError, match="normalize must be one of"):
             plot_confusion_matrix(["a"], ["a"], normalize="invalid")
 
-
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
+    def test_negative_annotation_threshold_raises(self):
+        """Negative annotation thresholds are rejected."""
+        with pytest.raises(ValueError, match="annot_threshold must be non-negative"):
+            plot_confusion_matrix(["a"], ["a"], annot_threshold=-1)
 
 
 class TestEdgeCases:
@@ -355,7 +328,6 @@ class TestEdgeCases:
         """Works with a single sample."""
         fig, ax = plot_confusion_matrix(["fall"], ["walk"])
         texts = [t.get_text() for t in ax.texts if t.get_text() != ""]
-        # 2x2 matrix: fall/walk x fall/walk
         assert len(texts) == 4
         plt.close(fig)
 
@@ -376,4 +348,32 @@ class TestEdgeCases:
 
         xlabels = [t.get_text() for t in ax.get_xticklabels()]
         assert "b" in xlabels
+        plt.close(fig)
+
+    def test_annotation_threshold_hides_small_raw_counts(self):
+        """Raw-count annotations below the threshold are blanked."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "a", "b"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, annot_threshold=2)
+
+        texts = extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 0)] == "2"
+        assert texts[(0, 1)] == ""
+        assert texts[(1, 0)] == ""
+        assert texts[(1, 1)] == ""
+        plt.close(fig)
+
+    def test_annotation_threshold_hides_small_normalized_values(self):
+        """Normalized annotations use the threshold as a proportion."""
+        y_true = ["a", "a", "a", "b", "b"]
+        y_pred = ["a", "a", "b", "b", "a"]
+
+        fig, ax = plot_confusion_matrix(y_true, y_pred, normalize="true", annot_threshold=0.4)
+
+        texts = extract_heatmap_annotations(ax, n=2)
+        assert texts[(0, 0)] == "0.67"
+        assert texts[(0, 1)] == ""
+        assert texts[(1, 0)] == "0.50"
+        assert texts[(1, 1)] == "0.50"
         plt.close(fig)

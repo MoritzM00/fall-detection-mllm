@@ -5,12 +5,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+PREDICTIONS_SUBDIR = Path("predictions")
+
+
+def prediction_jsonl_relpath(project: str, run_id: str) -> Path:
+    """Return the canonical project-scoped relative path for a prediction JSONL."""
+    return PREDICTIONS_SUBDIR / project / f"{run_id}.jsonl"
+
+
+def prediction_jsonl_path(output_root: str | Path, project: str, run_id: str) -> Path:
+    """Return the canonical local path for a prediction JSONL."""
+    return Path(output_root) / prediction_jsonl_relpath(project, run_id)
+
 
 def load_predictions_jsonl(file_path: str | Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Load predictions from JSONL file.
 
     The JSONL format contains:
-    - Line 1: Metadata dict with type="metadata", model, dataset, config, timestamp, wandb_run_id
+    - Line 1: Metadata dict with type="metadata", config, timestamp, wandb_run_id
     - Lines 2+: Prediction dicts with type="prediction", idx, and all prediction fields
 
     Args:
@@ -18,7 +30,7 @@ def load_predictions_jsonl(file_path: str | Path) -> tuple[dict[str, Any], list[
 
     Returns:
         Tuple of (metadata, predictions)
-        - metadata: Dict with model, dataset, config, timestamp, wandb_run_id
+        - metadata: Dict with config, timestamp, wandb_run_id
         - predictions: List of prediction dicts (each contains idx, video_path, label_str, predicted_label, etc.)
 
     Example:
@@ -85,8 +97,6 @@ def save_predictions_jsonl(
 
     Args:
         output_path: Path to output JSONL file
-        model_name: Model name
-        dataset_name: Dataset name
         config: Configuration dictionary
         predictions: List of prediction dicts
         wandb_run_id: Optional W&B run ID for linking
