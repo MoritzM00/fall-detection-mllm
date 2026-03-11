@@ -1,10 +1,10 @@
 """Load multiple runs, recompute metrics, and generate comparison plots.
 
 Each run can be specified as either a W&B run ID or a path to a local JSONL
-predictions file. W&B downloads are cached under
-``outputs/{wandb_project}/{run_id}.jsonl`` so repeated runs do not re-download
-predictions. The script saves one overall metric comparison plot and one per-class
-F1 comparison plot.
+predictions file. W&B runs resolve to canonical local files under
+``outputs/predictions/{wandb_project}/{run_id}.jsonl``; missing files are
+downloaded once and backfilled there. The script saves one overall metric
+comparison plot and one per-class F1 comparison plot.
 
 Usage:
     python scripts/plot/compare_runs.py RUN [RUN ...] [OPTIONS]
@@ -227,7 +227,7 @@ def load_run_predictions(
     *,
     entity: str | None = None,
     project: str | None = None,
-    cache_dir: Path = DEFAULT_CACHE_DIR,
+    output_root: Path = DEFAULT_CACHE_DIR,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Load config and predictions from a local JSONL file or a W&B run ID."""
     if _is_local_file(run_ref):
@@ -235,7 +235,7 @@ def load_run_predictions(
         metadata, predictions = load_predictions_jsonl(run_ref)
         return metadata.get("config", {}), predictions
 
-    return load_run_from_wandb(run_ref, project=project, entity=entity, cache_dir=cache_dir)
+    return load_run_from_wandb(run_ref, project=project, entity=entity, output_root=output_root)
 
 
 def load_comparison_runs(
@@ -243,18 +243,24 @@ def load_comparison_runs(
     *,
     entity: str | None = None,
     project: str | None = None,
-    cache_dir: Path = DEFAULT_CACHE_DIR,
+    output_root: Path = DEFAULT_CACHE_DIR,
     display_names: list[str] | None = None,
 ) -> list[LoadedRun]:
     """Load all runs needed for a comparison workflow."""
     loaded_runs: list[LoadedRun] = []
+
+    if display_names is not None and len(display_names) != len(run_refs):
+        raise ValueError(
+            f"display_names must have exactly one entry per run ({len(run_refs)} runs, "
+            f"{len(display_names)} names provided)."
+        )
 
     for idx, run_ref in enumerate(run_refs):
         config, predictions = load_run_predictions(
             run_ref,
             entity=entity,
             project=project,
-            cache_dir=cache_dir,
+            output_root=output_root,
         )
         display_name = (
             display_names[idx] if display_names else _run_display_name(run_ref, config=config)
@@ -315,7 +321,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cache-dir",
         default=str(DEFAULT_CACHE_DIR),
-        help="Cache directory for W&B downloads (default: outputs/)",
+        help="Output root containing predictions/<project>/<run_id>.jsonl (default: outputs/)",
     )
     return parser.parse_args()
 
@@ -337,12 +343,12 @@ def main() -> None:
         },
     )
 
-    cache_dir = Path(args.cache_dir)
+    output_root = Path(args.cache_dir)
     loaded_runs = load_comparison_runs(
         args.runs,
         entity=args.entity,
         project=args.project,
-        cache_dir=cache_dir,
+        output_root=output_root,
         display_names=args.names,
     )
     metric_inputs = build_prediction_metric_inputs(loaded_runs)

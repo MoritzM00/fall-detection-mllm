@@ -1,9 +1,9 @@
 """Compare two runs by generating a relative confusion matrix.
 
 Each run can be specified as either a W&B run ID or a path to a local JSONL
-predictions file.  W&B downloads are cached under
-``outputs/{wandb_project}/{run_id}.jsonl`` so that repeated comparisons don't
-re-download.
+predictions file. W&B runs resolve to canonical local files under
+``outputs/predictions/{wandb_project}/{run_id}.jsonl``; missing files are
+downloaded once and backfilled there.
 
 Usage:
     python scripts/plot/relative_confusion.py RUN_A RUN_B [OPTIONS]
@@ -48,7 +48,7 @@ def load_predictions(
     *,
     entity: str | None = None,
     project: str | None = None,
-    cache_dir: Path = DEFAULT_CACHE_DIR,
+    output_root: Path = DEFAULT_CACHE_DIR,
 ) -> list[dict[str, Any]]:
     """Load predictions from a local JSONL file or a W&B run ID.
 
@@ -56,7 +56,7 @@ def load_predictions(
         run_ref: Either a path to a local ``.jsonl`` file or a W&B run ID.
         entity: W&B entity (only used when *run_ref* is a run ID).
         project: W&B project (only used when *run_ref* is a run ID).
-        cache_dir: Root directory for caching W&B downloads.
+        output_root: Root directory containing the ``predictions/`` subtree.
 
     Returns:
         List of prediction dicts.
@@ -66,7 +66,7 @@ def load_predictions(
         _, predictions = load_predictions_jsonl(run_ref)
     else:
         _, predictions = load_run_from_wandb(
-            run_ref, project=project, entity=entity, cache_dir=cache_dir
+            run_ref, project=project, entity=entity, output_root=output_root
         )
     return predictions
 
@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cache-dir",
         default=str(DEFAULT_CACHE_DIR),
-        help="Cache directory for W&B downloads (default: outputs/)",
+        help="Output root containing predictions/<project>/<run_id>.jsonl (default: outputs/)",
     )
     return parser.parse_args()
 
@@ -130,14 +130,14 @@ def main() -> None:
     )
     args = parse_args()
 
-    cache_dir = Path(args.cache_dir)
+    output_root = Path(args.cache_dir)
 
     # Load predictions
     preds_a = load_predictions(
-        args.run_a, entity=args.entity, project=args.project, cache_dir=cache_dir
+        args.run_a, entity=args.entity, project=args.project, output_root=output_root
     )
     preds_b = load_predictions(
-        args.run_b, entity=args.entity, project=args.project, cache_dir=cache_dir
+        args.run_b, entity=args.entity, project=args.project, output_root=output_root
     )
 
     # Extract label lists

@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 from typing import Any, cast
 
 import hydra
@@ -25,7 +24,7 @@ from falldet.inference import (
 from falldet.schemas import from_dictconfig
 from falldet.utils.logging import reconfigure_logging_after_wandb, setup_logging
 from falldet.utils.predictions import save_predictions_jsonl
-from falldet.utils.wandb import initialize_run_from_config
+from falldet.utils.wandb import get_prediction_output_path, initialize_run_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -224,10 +223,12 @@ def main(cfg: DictConfig):
     # Save predictions if enabled
     predictions_file = None
     if config.save_predictions:
-        predictions_dir = Path(config.output_dir) / "predictions"
-        predictions_dir.mkdir(parents=True, exist_ok=True)
-
-        predictions_file = predictions_dir / f"{run.name}.jsonl"
+        predictions_file = get_prediction_output_path(
+            config.output_dir,
+            config.wandb.project,
+            run.id,
+        )
+        predictions_file.parent.mkdir(parents=True, exist_ok=True)
 
         save_predictions_jsonl(
             output_path=predictions_file,

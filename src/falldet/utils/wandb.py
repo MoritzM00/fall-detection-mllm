@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,11 @@ from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
 from falldet.schemas import InferenceConfig
+from falldet.utils.predictions import (
+    load_predictions_jsonl,
+    prediction_jsonl_path,
+    prediction_jsonl_relpath,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +24,13 @@ logger = logging.getLogger(__name__)
 def initialize_run_from_config(config: InferenceConfig):
     wandb_mode = config.wandb.mode
     logger.info(f"Initializing W&B in {wandb_mode} mode")
-    name, tags = create_name_and_tags_from_config(config)
+    run_id = wandb.util.generate_id()
+    base_name, tags = create_name_and_tags_from_config(config)
+    run_name = f"{base_name}_{run_id}"
     run = wandb.init(
         project=config.wandb.project,
-        name=name,
+        id=run_id,
+        name=run_name,
         tags=tags,
         config=config.model_dump(),
         mode=wandb_mode,
@@ -34,19 +41,18 @@ def initialize_run_from_config(config: InferenceConfig):
 
 
 def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list[str]]:
-    """Create a W&B run name and tags based on the configuration.
+    """Create a W&B base run name and tags based on the configuration.
 
     Args:
         config: Validated inference configuration.
 
     Returns:
-        tuple: (name, tags) where name is a string or None, and tags is a list of strings.
-    """  # Create a descriptive run name
+        tuple: (base_name, tags) where base_name is the descriptive name prefix and tags is a
+        list of strings.
+    """
     if config.wandb.name:
-        # Use name from config if available
         base_name = config.wandb.name
     else:
-        # Create name from config parameters
         model_info = resolve_model_name_from_config(config.model)
 
         frame_count = config.num_frames
@@ -55,21 +61,11 @@ def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list
         dataset_info = f"F{frame_count}@{model_fps}"
         base_name = f"{model_info}-{dataset_info}"
 
-    if wandb.run is not None:
-        id = wandb.run.id
-    else:
-        id = wandb.util.generate_id()
-
-    run_name = f"{base_name}_{id}"
-
-    # tags contain info about the experiment, dataset and model (highlevel)
     tags = list(config.wandb.tags) if config.wandb.tags else []
 
-    # name is inside config.dataset.video_datasets[i].name
     for dataset_item in config.dataset.video_datasets:
         tags.append(dataset_item.name)
 
-    # Use model family from config
     model_family = config.model.family
     tags.append(model_family)
 
@@ -78,7 +74,48 @@ def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list
 
     tags = [tag.lower() for tag in tags]
     tags = list(set(tags))  # Ensure uniqueness
-    return run_name, tags
+    return base_name, tags
+
+
+def get_prediction_output_path(output_root: str | Path, project: str, run_id: str) -> Path:
+    """Return the canonical local path for predictions belonging to a W&B run."""
+    return prediction_jsonl_path(output_root, project, run_id)
+
+
+def _download_predictions_file(
+    run: Any,
+    *,
+    destination_path: Path,
+    project: str,
+    run_id: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Download a run's canonical predictions JSONL and persist it locally."""
+    expected_filename = destination_path.name
+    expected_relpath = prediction_jsonl_relpath(project, run_id).as_posix()
+    jsonl_files = [file for file in run.files() if file.name.endswith(".jsonl")]
+
+    prioritized_files = [
+        file
+        for file in jsonl_files
+        if file.name.endswith(expected_relpath) or file.name.endswith(expected_filename)
+    ]
+    fallback_files = [file for file in jsonl_files if file not in prioritized_files]
+
+    for file in prioritized_files + fallback_files:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file.download(root=temp_dir, replace=True)
+            downloaded_path = Path(temp_dir) / file.name
+            metadata, predictions = load_predictions_jsonl(downloaded_path)
+            metadata_run_id = metadata.get("wandb_run_id")
+            if metadata_run_id and metadata_run_id != run_id:
+                continue
+
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            destination_path.write_bytes(downloaded_path.read_bytes())
+            logger.info(f"Saved predictions to {destination_path}")
+            return metadata, predictions
+
+    raise FileNotFoundError(f"No prediction JSONL for run {run_id} found in W&B files")
 
 
 def log_videos_with_predictions(
@@ -157,19 +194,20 @@ def load_run_from_wandb(
     run_id: str,
     project: str | None = None,
     entity: str | None = None,
-    cache_dir: Path | str | None = None,
+    output_root: Path | str = "outputs",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Load run config and predictions from W&B, with optional local caching.
+    """Load run config and predictions from W&B via the canonical local prediction path.
 
-    When ``cache_dir`` is provided the downloaded JSONL file is persisted to
-    ``<cache_dir>/<project>/<run_name>.jsonl``.  On subsequent calls with the
-    same arguments the cached file is loaded directly, skipping the W&B API.
+    Predictions are stored locally under
+    ``<output_root>/predictions/<project>/<run_id>.jsonl``. If the file already
+    exists, it is loaded directly. Otherwise it is downloaded from W&B and saved
+    to that canonical location before loading.
 
     Args:
         run_id: W&B run ID.
         project: W&B project (defaults to ``WANDB_PROJECT`` env var).
         entity: W&B entity (defaults to ``WANDB_ENTITY`` env var).
-        cache_dir: Optional directory for caching downloaded JSONL files.
+        output_root: Root output directory containing the ``predictions/`` subtree.
 
     Returns:
         Tuple of (config_dict, predictions_list).
@@ -178,50 +216,33 @@ def load_run_from_wandb(
         ValueError: If entity or project is not provided and env var is not set.
         FileNotFoundError: If no JSONL predictions file is found in the run.
     """
-    # Import here to avoid circular import
-    from falldet.utils.predictions import load_predictions_jsonl
-
-    entity = entity or os.getenv("WANDB_ENTITY")
     project = project or os.getenv("WANDB_PROJECT")
-
-    if not entity:
-        raise ValueError("Entity not provided and WANDB_ENTITY environment variable not set")
     if not project:
         raise ValueError("Project not provided and WANDB_PROJECT environment variable not set")
 
-    # Check cache first
-    if cache_dir is not None:
-        cache_dir = Path(cache_dir)
-        cached_path = cache_dir / project / f"{run_id}.jsonl"
-        if cached_path.exists():
-            logger.info(f"Loading cached predictions from {cached_path}")
-            metadata, predictions = load_predictions_jsonl(cached_path)
-            config = metadata.get("config", {})
-            return config, predictions
+    local_path = get_prediction_output_path(output_root, project, run_id)
+    if local_path.exists():
+        logger.info(f"Loading local predictions from {local_path}")
+        metadata, predictions = load_predictions_jsonl(local_path)
+        metadata_run_id = metadata.get("wandb_run_id")
+        if metadata_run_id and metadata_run_id != run_id:
+            raise ValueError(
+                f"Local predictions belong to run {metadata_run_id}, expected {run_id}"
+            )
+        return metadata.get("config", {}), predictions
+
+    entity = entity or os.getenv("WANDB_ENTITY")
+    if not entity:
+        raise ValueError("Entity not provided and WANDB_ENTITY environment variable not set")
 
     logger.info(f"Loading W&B run {entity}/{project}/{run_id}")
 
     api = wandb.Api()
     run = api.run(f"{entity}/{project}/{run_id}")
-
-    # Get full config
-    config = dict(run.config)
-
-    # Find and download JSONL file
-    for file in run.files():
-        if file.name.endswith(".jsonl"):
-            with tempfile.TemporaryDirectory() as temp_dir:
-                file.download(root=temp_dir, replace=True)
-                downloaded_path = Path(temp_dir) / file.name
-
-                # Persist to cache
-                if cache_dir is not None:
-                    cached_path = cache_dir / project / f"{run_id}.jsonl"
-                    cached_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(downloaded_path, cached_path)
-                    logger.info(f"Cached predictions to {cached_path}")
-
-                _, predictions = load_predictions_jsonl(downloaded_path)
-                return config, predictions
-
-    raise FileNotFoundError(f"No JSONL predictions file found in run {run_id}")
+    metadata, predictions = _download_predictions_file(
+        run,
+        destination_path=local_path,
+        project=project,
+        run_id=run_id,
+    )
+    return metadata.get("config", {}), predictions
