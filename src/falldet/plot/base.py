@@ -136,6 +136,7 @@ def set_publication_rc_defaults(
         "savefig.pad_inches": 0.02,
         "figure.figsize": (figure_width_in, figure_height_in),
         "figure.constrained_layout.use": False,
+        "font.size": preset["font.size"],
         "axes.titlesize": preset["axes.titlesize"],
         "axes.labelsize": preset["axes.labelsize"],
         "axes.linewidth": 0.8,
