@@ -123,6 +123,12 @@ FEWSHOT_PREAMBLE = textwrap.dedent("""
 # Few-shot exemplar prompt (used for exemplar user turns)
 EXEMPLAR_USER_PROMPT = "Classify the action shown in this video."
 
+# Few-shot section markers
+SECTION_DEMONSTRATIONS = "[DEMONSTRATIONS]"
+SECTION_REQUEST = "[REQUEST]"
+SECTION_RESPONSE = "[RESPONSE]"
+SECTION_QUERY = "[QUERY]"
+
 
 # ============================================================================
 # Label Formatter Functions

@@ -8,9 +8,17 @@ import torch
 from falldet.schemas import InferenceConfig, PromptConfig
 
 from .prompts import PromptBuilder
-from .prompts.components import EXEMPLAR_USER_PROMPT
+from .prompts.components import (
+    EXEMPLAR_USER_PROMPT,
+    SECTION_DEMONSTRATIONS,
+    SECTION_QUERY,
+    SECTION_REQUEST,
+    SECTION_RESPONSE,
+)
 
 logger = logging.getLogger(__name__)
+
+_MAX_LOG_TEXT_LEN = 2000
 
 
 @dataclass
@@ -83,11 +91,12 @@ class ConversationBuilder:
 
     def _build_video_metadata(self, frames: torch.Tensor) -> dict:
         """Build metadata dict for a video."""
-        return dict(
-            total_num_frames=frames.shape[0],
-            fps=self.model_fps,
-            frames_indices=list(range(frames.shape[0])),
-        )
+        n = frames.shape[0]
+        return dict(total_num_frames=n, fps=self.model_fps, frames_indices=list(range(n)))
+
+    def _make_video(self, frames: torch.Tensor) -> VideoWithMetadata:
+        """Wrap frames with computed metadata."""
+        return VideoWithMetadata(frames=frames, metadata=self._build_video_metadata(frames))
 
     def _build_fewshot_content(
         self, exemplars: list[dict], target_video: torch.Tensor
@@ -109,7 +118,10 @@ class ConversationBuilder:
 
         # First text: preamble + opening section markers
         content.append(
-            {"type": "text", "text": f"{self._preamble}\n\n[DEMONSTRATIONS]\n\n[REQUEST]\n"}
+            {
+                "type": "text",
+                "text": f"{self._preamble}\n\n{SECTION_DEMONSTRATIONS}\n\n{SECTION_REQUEST}\n",
+            }
         )
 
         for i, exemplar in enumerate(exemplars):
@@ -117,29 +129,17 @@ class ConversationBuilder:
 
             # Exemplar video
             content.append({"type": "video", "video": exemplar["video"]})
-            videos.append(
-                VideoWithMetadata(
-                    frames=exemplar["video"],
-                    metadata=self._build_video_metadata(exemplar["video"]),
-                )
-            )
+            videos.append(self._make_video(exemplar["video"]))
 
             # Text: prompt + response + transition to next section
             answer = self._format_answer(exemplar["label_str"])
-            if is_last:
-                text = f"\n{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[QUERY]\n\n[REQUEST]\n"
-            else:
-                text = f"\n{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[REQUEST]\n"
+            next_marker = f"{SECTION_QUERY}\n\n{SECTION_REQUEST}" if is_last else SECTION_REQUEST
+            text = f"\n{EXEMPLAR_USER_PROMPT}\n\n{SECTION_RESPONSE}\n{answer}\n\n{next_marker}\n"
             content.append({"type": "text", "text": text})
 
         # Target video + final prompt
         content.append({"type": "video", "video": target_video})
-        videos.append(
-            VideoWithMetadata(
-                frames=target_video,
-                metadata=self._build_video_metadata(target_video),
-            )
-        )
+        videos.append(self._make_video(target_video))
         content.append({"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"})
 
         return content, videos
@@ -174,12 +174,7 @@ class ConversationBuilder:
                 # Fallback: few-shot mode but no exemplars provided
                 target_content: list[dict] = [{"type": "video", "video": target_video}]
                 messages.append({"role": "user", "content": target_content})
-                videos.append(
-                    VideoWithMetadata(
-                        frames=target_video,
-                        metadata=self._build_video_metadata(target_video),
-                    )
-                )
+                videos.append(self._make_video(target_video))
         else:
             # Zero-shot target turn
             target_content = [
@@ -187,12 +182,7 @@ class ConversationBuilder:
                 {"type": "text", "text": self._user_prompt},
             ]
             messages.append({"role": "user", "content": target_content})
-            videos.append(
-                VideoWithMetadata(
-                    frames=target_video,
-                    metadata=self._build_video_metadata(target_video),
-                )
-            )
+            videos.append(self._make_video(target_video))
 
         return ConversationData(messages=messages, videos=videos)
 
@@ -243,25 +233,7 @@ class ConversationBuilder:
             return f'{{"label": "{label}"}}'
         return f"The best answer is: {label}"
 
-    def _format_content_for_logging(self, content: list[dict], max_text_len: int = 2000) -> str:
-        """Format message content for logging, replacing video tensors with shape info."""
-        parts = []
-        for item in content:
-            if item["type"] == "video":
-                video = item.get("video")
-                if isinstance(video, torch.Tensor):
-                    shape_str = "x".join(str(d) for d in video.shape)
-                    parts.append(f"<video: [{shape_str}]>")
-                else:
-                    parts.append("<video>")
-            elif item["type"] == "text":
-                text = item.get("text", "")
-                if len(text) > max_text_len:
-                    text = text[:max_text_len] + "..."
-                parts.append(text)
-        return " ".join(parts)
-
-    def _log_conversation(self, max_text_len: int = 2000) -> None:
+    def _log_conversation(self) -> None:
         """Log the conversation structure at initialization."""
         lines = ["Conversation structure:"]
 
@@ -270,8 +242,8 @@ class ConversationBuilder:
             for content_item in self._system_msg["content"]:
                 if content_item["type"] == "text":
                     text_preview = (
-                        content_item["text"][:max_text_len] + "..."
-                        if len(content_item["text"]) > max_text_len
+                        content_item["text"][:_MAX_LOG_TEXT_LEN] + "..."
+                        if len(content_item["text"]) > _MAX_LOG_TEXT_LEN
                         else content_item["text"]
                     )
                     lines.append(f"  [{idx}] system: {text_preview}")
@@ -284,8 +256,8 @@ class ConversationBuilder:
             )
         else:
             target_prompt_preview = (
-                self._user_prompt[:max_text_len] + "..."
-                if len(self._user_prompt) > max_text_len
+                self._user_prompt[:_MAX_LOG_TEXT_LEN] + "..."
+                if len(self._user_prompt) > _MAX_LOG_TEXT_LEN
                 else self._user_prompt
             )
             lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
