@@ -4,11 +4,17 @@ defaults:
   - /dataset/omnifall/video@dataset: oops
   - override /prompt: fewshot
 
+model:
+  params: 8B
+
 # Full dataset evaluation
 num_samples: null
 
 vllm:
   mm_processor_cache_gb: 4
+
+batch_size: 16
+num_workers: 4
 
 # W&B tracking
 wandb:

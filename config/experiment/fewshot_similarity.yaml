@@ -10,6 +10,9 @@ num_samples: null
 model:
   params: 8B
 
+batch_size: 16
+num_workers: 4
+
 # Similarity-based exemplar selection
 prompt:
   shot_selection: similarity
