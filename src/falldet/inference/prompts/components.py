@@ -117,7 +117,7 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
 
 # Few-shot: explanation added to the system instruction to set up the ICL format
 FEWSHOT_PREAMBLE = textwrap.dedent("""
-    First, you will be given example videos with correct classifications. Then, classify the action in the final video based on the allowed labels, following the same format as the examples.
+    You will be shown example videos paired with correct responses. After the examples, classify the action in the final video using only the allowed labels. Match the exact output format used in the examples.
 """).strip()
 
 # Few-shot exemplar prompt (used for exemplar user turns)

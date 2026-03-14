@@ -8,6 +8,7 @@ import torch
 from falldet.schemas import InferenceConfig, PromptConfig
 
 from .prompts import PromptBuilder
+from .prompts.components import EXEMPLAR_USER_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -60,36 +61,25 @@ class ConversationBuilder:
         self.needs_video_metadata = needs_video_metadata
 
         self._prompt_builder = PromptBuilder(config, label2idx)
+        self._sample_logged = False
 
         if config.num_shots > 0:
-            self._user_prompt: str = ""
-            introduction = self._prompt_builder.build_fewshot_system_instruction()
-            self._system_msg: dict | None = self._compose_fewshot_system_message(introduction)
+            self._preamble: str = self._prompt_builder.build_fewshot_system_instruction()
+            # System message only when explicitly overridden; preamble goes into user message
+            if config.system_instruction is not None:
+                self._system_msg: dict | None = {
+                    "role": "system",
+                    "content": [{"type": "text", "text": config.system_instruction}],
+                }
+            else:
+                self._system_msg = None
         else:
-            self._user_prompt = self._prompt_builder.build_prompt()
+            self._preamble = ""
+            self._user_prompt: str = self._prompt_builder.build_prompt()
             self._system_msg = self._prompt_builder.get_system_message()
 
         logger.info(f"ConversationBuilder initialized: {self.num_videos} videos/request")
         self._log_conversation()
-
-    def _compose_fewshot_system_message(self, introduction: str) -> dict:
-        """Compose system message for few-shot mode.
-
-        Priority: explicit system_instruction > introduction (as-is).
-        R1 prefix is not applied since CoT is incompatible with few-shot.
-
-        Args:
-            introduction: System instruction built from prompt components.
-
-        Returns:
-            System message dict with role and content.
-        """
-        text = (
-            self.config.system_instruction
-            if self.config.system_instruction is not None
-            else introduction
-        )
-        return {"role": "system", "content": [{"type": "text", "text": text}]}
 
     def _build_video_metadata(self, frames: torch.Tensor) -> dict:
         """Build metadata dict for a video."""
@@ -99,36 +89,34 @@ class ConversationBuilder:
             frames_indices=list(range(frames.shape[0])),
         )
 
-    def _build_exemplar_messages(
-        self, exemplars: list[dict]
+    def _build_fewshot_content(
+        self, exemplars: list[dict], target_video: torch.Tensor
     ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Build message turns and video list for exemplars.
+        """Build content items and video list for a single-message few-shot conversation.
+
+        Produces interleaved text/video items with section markers:
+          [DEMONSTRATIONS] -> exemplar pairs ([REQUEST] / video / text+[RESPONSE]) -> [QUERY] -> target
 
         Args:
             exemplars: List of exemplar dicts, each with 'video' and 'label_str'.
+            target_video: Target video frames.
 
         Returns:
-            Tuple of (messages, videos) for the exemplar turns.
+            Tuple of (content_items, videos).
         """
-        messages: list[dict] = []
+        content: list[dict] = []
         videos: list[VideoWithMetadata] = []
 
-        for exemplar in exemplars:
-            content: list[dict] = [{"type": "video", "video": exemplar["video"]}]
-            if self.config.fewshot_user_prompt:
-                content.append({"type": "text", "text": self.config.fewshot_user_prompt})
-            messages.append({"role": "user", "content": content})
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": self._format_answer(exemplar["label_str"]),
-                        },
-                    ],
-                }
-            )
+        # First text: preamble + opening section markers
+        content.append(
+            {"type": "text", "text": f"{self._preamble}\n\n[DEMONSTRATIONS]\n\n[REQUEST]"}
+        )
+
+        for i, exemplar in enumerate(exemplars):
+            is_last = i == len(exemplars) - 1
+
+            # Exemplar video
+            content.append({"type": "video", "video": exemplar["video"]})
             videos.append(
                 VideoWithMetadata(
                     frames=exemplar["video"],
@@ -136,7 +124,25 @@ class ConversationBuilder:
                 )
             )
 
-        return messages, videos
+            # Text: prompt + response + transition to next section
+            answer = self._format_answer(exemplar["label_str"])
+            if is_last:
+                text = f"{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[QUERY]\n\n[REQUEST]"
+            else:
+                text = f"{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[REQUEST]"
+            content.append({"type": "text", "text": text})
+
+        # Target video + final prompt
+        content.append({"type": "video", "video": target_video})
+        videos.append(
+            VideoWithMetadata(
+                frames=target_video,
+                metadata=self._build_video_metadata(target_video),
+            )
+        )
+        content.append({"type": "text", "text": EXEMPLAR_USER_PROMPT})
+
+        return content, videos
 
     def build(
         self,
@@ -155,32 +161,38 @@ class ConversationBuilder:
         messages: list[dict] = []
         videos: list[VideoWithMetadata] = []
 
-        # System message
+        # System message (only when explicitly set via system_instruction)
         if self._system_msg is not None:
             messages.append(self._system_msg)
 
-        # Exemplar turns
-        if exemplars:
-            ex_messages, ex_videos = self._build_exemplar_messages(exemplars)
-            messages.extend(ex_messages)
-            videos.extend(ex_videos)
-
-        # Target turn
         if self.config.num_shots > 0:
-            target_content: list[dict] = [{"type": "video", "video": target_video}]
-            if self.config.fewshot_user_prompt:
-                target_content.append({"type": "text", "text": self.config.fewshot_user_prompt})
+            if exemplars:
+                content, fewshot_videos = self._build_fewshot_content(exemplars, target_video)
+                messages.append({"role": "user", "content": content})
+                videos.extend(fewshot_videos)
+            else:
+                # Fallback: few-shot mode but no exemplars provided
+                target_content: list[dict] = [{"type": "video", "video": target_video}]
+                messages.append({"role": "user", "content": target_content})
+                videos.append(
+                    VideoWithMetadata(
+                        frames=target_video,
+                        metadata=self._build_video_metadata(target_video),
+                    )
+                )
         else:
+            # Zero-shot target turn
             target_content = [
                 {"type": "video", "video": target_video},
                 {"type": "text", "text": self._user_prompt},
             ]
-        messages.append({"role": "user", "content": target_content})
-        target_with_meta = VideoWithMetadata(
-            frames=target_video,
-            metadata=self._build_video_metadata(target_video),
-        )
-        videos.append(target_with_meta)
+            messages.append({"role": "user", "content": target_content})
+            videos.append(
+                VideoWithMetadata(
+                    frames=target_video,
+                    metadata=self._build_video_metadata(target_video),
+                )
+            )
 
         return ConversationData(messages=messages, videos=videos)
 
@@ -208,6 +220,10 @@ class ConversationBuilder:
             tokenize=False,
             add_generation_prompt=True,
         )
+
+        if not self._sample_logged:
+            logger.debug("First formatted prompt (chat template applied):\n%s", text)
+            self._sample_logged = True
 
         # Build multi-modal data with list of (frames, metadata) tuples
         if self.needs_video_metadata:
@@ -263,17 +279,16 @@ class ConversationBuilder:
 
         if self.config.num_shots > 0:
             lines.append(
-                f"  [{idx}..{idx + 2 * self.config.num_shots - 1}] "
-                f"{self.config.num_shots} exemplar turns (dynamic per query)"
+                f"  [{idx}] user: single message with preamble + "
+                f"{self.config.num_shots} exemplar(s) + target (dynamic per query)"
             )
-            idx += 2 * self.config.num_shots
-
-        target_prompt_preview = (
-            self._user_prompt[:max_text_len] + "..."
-            if len(self._user_prompt) > max_text_len
-            else self._user_prompt
-        )
-        lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
+        else:
+            target_prompt_preview = (
+                self._user_prompt[:max_text_len] + "..."
+                if len(self._user_prompt) > max_text_len
+                else self._user_prompt
+            )
+            lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
 
         logger.info("\n".join(lines))
 
@@ -285,6 +300,8 @@ class ConversationBuilder:
     @property
     def user_prompt(self) -> str:
         """Get the user prompt text."""
+        if self.config.num_shots > 0:
+            return self._preamble
         return self._user_prompt
 
     @property

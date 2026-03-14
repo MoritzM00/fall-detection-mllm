@@ -351,7 +351,7 @@ class TestPromptBuilder:
     # ========================================================================
 
     def test_build_fewshot_system_instruction_contains_all_sections(self):
-        """Test that build_fewshot_system_instruction includes context + preamble + output."""
+        """Test that build_fewshot_system_instruction includes context + preamble."""
         config = PromptConfig(
             role_variant="standard", definitions_variant="standard", output_format="json"
         )
@@ -363,7 +363,6 @@ class TestPromptBuilder:
         assert "Allowed Labels:" in instr
         assert "Definitions" in instr
         assert "example videos" in instr  # FEWSHOT_PREAMBLE
-        assert "Output Format:" in instr
 
     def test_build_fewshot_system_instruction_excludes_cot(self):
         """Test that CoT instruction is not included (CoT unsupported with few-shot)."""

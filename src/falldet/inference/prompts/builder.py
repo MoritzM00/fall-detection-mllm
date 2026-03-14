@@ -84,9 +84,6 @@ class PromptBuilder:
 
         sections.append(FEWSHOT_PREAMBLE)
 
-        if self.config.output_format is not None:
-            sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
-
         return "\n\n".join(sections)
 
     def _needs_r1_prefix(self) -> bool:

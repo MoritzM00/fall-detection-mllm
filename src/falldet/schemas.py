@@ -60,8 +60,6 @@ class PromptConfig(BaseConfig):
         task_variant: Which task instruction variant to use
         labels_variant: Which label formatting variant to use
         definitions_variant: Which definitions component variant to use (None = omit definitions)
-        fewshot_user_prompt: Text appended after the video in both exemplar and target user turns
-            in few-shot mode. Empty string (default) produces video-only turns.
     """
 
     system_instruction: str | None = None
@@ -76,7 +74,6 @@ class PromptConfig(BaseConfig):
     num_shots: int = 0
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
-    fewshot_user_prompt: str = ""
 
     @model_validator(mode="after")
     def validate_fewshot_cot(self) -> "PromptConfig":
