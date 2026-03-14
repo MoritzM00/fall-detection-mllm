@@ -109,7 +109,7 @@ class ConversationBuilder:
 
         # First text: preamble + opening section markers
         content.append(
-            {"type": "text", "text": f"{self._preamble}\n\n[DEMONSTRATIONS]\n\n[REQUEST]"}
+            {"type": "text", "text": f"{self._preamble}\n\n[DEMONSTRATIONS]\n\n[REQUEST]\n"}
         )
 
         for i, exemplar in enumerate(exemplars):
@@ -127,9 +127,9 @@ class ConversationBuilder:
             # Text: prompt + response + transition to next section
             answer = self._format_answer(exemplar["label_str"])
             if is_last:
-                text = f"{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[QUERY]\n\n[REQUEST]"
+                text = f"\n{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[QUERY]\n\n[REQUEST]\n"
             else:
-                text = f"{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[REQUEST]"
+                text = f"\n{EXEMPLAR_USER_PROMPT}\n\n[RESPONSE]\n{answer}\n\n[REQUEST]\n"
             content.append({"type": "text", "text": text})
 
         # Target video + final prompt
@@ -140,7 +140,7 @@ class ConversationBuilder:
                 metadata=self._build_video_metadata(target_video),
             )
         )
-        content.append({"type": "text", "text": EXEMPLAR_USER_PROMPT})
+        content.append({"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"})
 
         return content, videos
 
