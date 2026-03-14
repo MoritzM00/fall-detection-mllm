@@ -8,7 +8,6 @@ import torch
 from falldet.schemas import InferenceConfig, PromptConfig
 
 from .prompts import PromptBuilder
-from .prompts.components import EXEMPLAR_USER_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +60,36 @@ class ConversationBuilder:
         self.needs_video_metadata = needs_video_metadata
 
         self._prompt_builder = PromptBuilder(config, label2idx)
-        self._user_prompt: str = self._prompt_builder.build_prompt()
 
-        # Cache the system message (None when not needed)
-        self._system_msg: dict | None = self._prompt_builder.get_system_message()
+        if config.num_shots > 0:
+            self._user_prompt: str = ""
+            introduction = self._prompt_builder.build_fewshot_system_instruction()
+            self._system_msg: dict | None = self._compose_fewshot_system_message(introduction)
+        else:
+            self._user_prompt = self._prompt_builder.build_prompt()
+            self._system_msg = self._prompt_builder.get_system_message()
 
         logger.info(f"ConversationBuilder initialized: {self.num_videos} videos/request")
         self._log_conversation()
+
+    def _compose_fewshot_system_message(self, introduction: str) -> dict:
+        """Compose system message for few-shot mode.
+
+        Priority: explicit system_instruction > introduction (as-is).
+        R1 prefix is not applied since CoT is incompatible with few-shot.
+
+        Args:
+            introduction: System instruction built from prompt components.
+
+        Returns:
+            System message dict with role and content.
+        """
+        text = (
+            self.config.system_instruction
+            if self.config.system_instruction is not None
+            else introduction
+        )
+        return {"role": "system", "content": [{"type": "text", "text": text}]}
 
     def _build_video_metadata(self, frames: torch.Tensor) -> dict:
         """Build metadata dict for a video."""
@@ -92,15 +114,10 @@ class ConversationBuilder:
         videos: list[VideoWithMetadata] = []
 
         for exemplar in exemplars:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "video", "video": exemplar["video"]},
-                        {"type": "text", "text": EXEMPLAR_USER_PROMPT},
-                    ],
-                }
-            )
+            content: list[dict] = [{"type": "video", "video": exemplar["video"]}]
+            if self.config.fewshot_user_prompt:
+                content.append({"type": "text", "text": self.config.fewshot_user_prompt})
+            messages.append({"role": "user", "content": content})
             messages.append(
                 {
                     "role": "assistant",
@@ -149,15 +166,16 @@ class ConversationBuilder:
             videos.extend(ex_videos)
 
         # Target turn
-        messages.append(
-            {
-                "role": "user",
-                "content": [
-                    {"type": "video", "video": target_video},
-                    {"type": "text", "text": self._user_prompt},
-                ],
-            }
-        )
+        if self.config.num_shots > 0:
+            target_content: list[dict] = [{"type": "video", "video": target_video}]
+            if self.config.fewshot_user_prompt:
+                target_content.append({"type": "text", "text": self.config.fewshot_user_prompt})
+        else:
+            target_content = [
+                {"type": "video", "video": target_video},
+                {"type": "text", "text": self._user_prompt},
+            ]
+        messages.append({"role": "user", "content": target_content})
         target_with_meta = VideoWithMetadata(
             frames=target_video,
             metadata=self._build_video_metadata(target_video),
@@ -209,7 +227,7 @@ class ConversationBuilder:
             return f'{{"label": "{label}"}}'
         return f"The best answer is: {label}"
 
-    def _format_content_for_logging(self, content: list[dict], max_text_len: int = 200) -> str:
+    def _format_content_for_logging(self, content: list[dict], max_text_len: int = 2000) -> str:
         """Format message content for logging, replacing video tensors with shape info."""
         parts = []
         for item in content:
@@ -227,7 +245,7 @@ class ConversationBuilder:
                 parts.append(text)
         return " ".join(parts)
 
-    def _log_conversation(self) -> None:
+    def _log_conversation(self, max_text_len: int = 2000) -> None:
         """Log the conversation structure at initialization."""
         lines = ["Conversation structure:"]
 
@@ -236,8 +254,8 @@ class ConversationBuilder:
             for content_item in self._system_msg["content"]:
                 if content_item["type"] == "text":
                     text_preview = (
-                        content_item["text"][:200] + "..."
-                        if len(content_item["text"]) > 200
+                        content_item["text"][:max_text_len] + "..."
+                        if len(content_item["text"]) > max_text_len
                         else content_item["text"]
                     )
                     lines.append(f"  [{idx}] system: {text_preview}")
@@ -251,7 +269,9 @@ class ConversationBuilder:
             idx += 2 * self.config.num_shots
 
         target_prompt_preview = (
-            self._user_prompt[:200] + "..." if len(self._user_prompt) > 200 else self._user_prompt
+            self._user_prompt[:max_text_len] + "..."
+            if len(self._user_prompt) > max_text_len
+            else self._user_prompt
         )
         lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
 

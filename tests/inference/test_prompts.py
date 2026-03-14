@@ -184,6 +184,13 @@ class TestPromptConfig:
         error = exc_info.value
         assert "num_shots" in str(error)
 
+    def test_cot_with_fewshot_raises_validation_error(self):
+        """Test that cot=True with num_shots > 0 raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            PromptConfig(cot=True, num_shots=3)
+
+        assert "cot" in str(exc_info.value).lower() or "few" in str(exc_info.value).lower()
+
 
 class TestPromptBuilder:
     """Tests for PromptBuilder."""
@@ -342,6 +349,38 @@ class TestPromptBuilder:
     # ========================================================================
     # Variant Selection Tests
     # ========================================================================
+
+    def test_build_fewshot_system_instruction_contains_all_sections(self):
+        """Test that build_fewshot_system_instruction includes context + preamble + output."""
+        config = PromptConfig(
+            role_variant="standard", definitions_variant="standard", output_format="json"
+        )
+        builder = PromptBuilder(config, LABEL2IDX)
+        instr = builder.build_fewshot_system_instruction()
+
+        assert "Role:" in instr
+        assert "Task:" in instr
+        assert "Allowed Labels:" in instr
+        assert "Definitions" in instr
+        assert "example videos" in instr  # FEWSHOT_PREAMBLE
+        assert "Output Format:" in instr
+
+    def test_build_fewshot_system_instruction_excludes_cot(self):
+        """Test that CoT instruction is not included (CoT unsupported with few-shot)."""
+        config = PromptConfig(role_variant="standard", output_format="text")
+        builder = PromptBuilder(config, LABEL2IDX)
+        instr = builder.build_fewshot_system_instruction()
+
+        assert "reason step-by-step" not in instr
+
+    def test_build_fewshot_system_instruction_no_role(self):
+        """Test build_fewshot_system_instruction without role variant."""
+        config = PromptConfig(role_variant=None)
+        builder = PromptBuilder(config, LABEL2IDX)
+        instr = builder.build_fewshot_system_instruction()
+
+        assert "Role:" not in instr
+        assert "Task:" in instr
 
     def test_role_variant_standard(self):
         """Test standard role variant."""

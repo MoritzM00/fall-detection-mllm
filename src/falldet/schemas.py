@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class BaseConfig(BaseModel):
@@ -60,6 +60,8 @@ class PromptConfig(BaseConfig):
         task_variant: Which task instruction variant to use
         labels_variant: Which label formatting variant to use
         definitions_variant: Which definitions component variant to use (None = omit definitions)
+        fewshot_user_prompt: Text appended after the video in both exemplar and target user turns
+            in few-shot mode. Empty string (default) produces video-only turns.
     """
 
     system_instruction: str | None = None
@@ -74,6 +76,13 @@ class PromptConfig(BaseConfig):
     num_shots: int = 0
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
+    fewshot_user_prompt: str = ""
+
+    @model_validator(mode="after")
+    def validate_fewshot_cot(self) -> "PromptConfig":
+        if self.cot and self.num_shots > 0:
+            raise ValueError("cot=True is not supported with num_shots > 0")
+        return self
 
     # Variant selectors
     role_variant: RoleVariant | None = RoleVariant.STANDARD
