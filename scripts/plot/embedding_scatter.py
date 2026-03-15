@@ -79,25 +79,33 @@ def _extract_label_strs(samples: list[dict]) -> list[str]:
 
 
 def build_label_colormap(labels: list[str]) -> dict[str, tuple]:
-    """Assign colours to sorted unique labels.
+    """Assign colours to labels ordered by decreasing frequency.
 
     ``"fall"`` is anchored to ``COLORS["error"]`` (red-orange) and
     ``"fallen"`` to ``COLORS["secondary"]`` (orange) for semantic emphasis.
-    All other labels receive ``tab20`` colours in alphabetical order.
+    Remaining labels are sorted by decreasing count so the most frequent
+    classes receive the most visually distinct tab20 colours (even indices
+    first, then odd — maximally spread across the palette).
     """
-    unique_labels = sorted(set(labels))
+    from collections import Counter
+
+    counts = Counter(labels)
     anchored = {"fall": COLORS["error"], "fallen": COLORS["secondary"]}
 
+    free_labels = sorted(
+        (lb for lb in counts if lb not in anchored),
+        key=lambda lb: counts[lb],
+        reverse=True,
+    )
+
     cmap = plt.get_cmap("tab20")
-    free_labels = [lb for lb in unique_labels if lb not in anchored]
-    colormap: dict[str, tuple] = {}
-    tab20_idx = 0
-    for lb in unique_labels:
-        if lb in anchored:
-            colormap[lb] = anchored[lb]
-        else:
-            colormap[lb] = cmap(tab20_idx / max(len(free_labels), 1))
-            tab20_idx += 1
+    # Even indices (0,2,4,...) are the 10 most distinct tab20 colours;
+    # odd indices (1,3,5,...) are their lighter variants — use evens first.
+    spread_indices = list(range(0, 20, 2)) + list(range(1, 20, 2))
+
+    colormap: dict[str, tuple] = {**anchored}
+    for i, lb in enumerate(free_labels):
+        colormap[lb] = cmap.colors[spread_indices[i % len(spread_indices)]]
     return colormap
 
 
@@ -204,7 +212,6 @@ def _add_shared_legend(
     file_markers: dict[str, str] | None = None,
 ) -> None:
     """Attach class-colour legend (and optional per-file marker legend) below the figure."""
-    sorted_labels = sorted(colormap)
     class_handles = [
         plt.Line2D(
             [0],
@@ -215,7 +222,7 @@ def _add_shared_legend(
             markersize=5,
             label=lb,
         )
-        for lb in sorted_labels
+        for lb in colormap
     ]
     if file_markers:
         marker_handles = [
@@ -242,7 +249,7 @@ def _add_shared_legend(
         bbox_to_anchor=(0.5, 1.0),
         ncol=ncols,
         frameon=False,
-        fontsize=8,
+        fontsize=9,
     )
 
 
