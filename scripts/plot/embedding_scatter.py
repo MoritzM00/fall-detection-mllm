@@ -64,6 +64,7 @@ from falldet.plot import COLORS, set_publication_rc_defaults
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_DIR = Path("outputs/plots")
+MARKERS = ["o", "^", "s", "D", "v", "P"]
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +157,7 @@ def plot_embedding_scatter(
     *,
     alpha: float,
     point_size: float,
+    marker: str = "o",
 ) -> None:
     """Scatter embeddings on *ax* coloured by class label.
 
@@ -167,6 +169,7 @@ def plot_embedding_scatter(
         method_label: Axis label prefix (e.g. ``"t-SNE"`` or ``"PC"``).
         alpha: Point opacity.
         point_size: Scatter point size in points².
+        marker: Matplotlib marker style.
     """
     unique_labels = sorted(set(labels))
     label_array = np.asarray(labels)
@@ -180,6 +183,7 @@ def plot_embedding_scatter(
             label=lb,
             alpha=alpha,
             s=point_size,
+            marker=marker,
             linewidths=0,
             rasterized=True,
         )
@@ -199,10 +203,15 @@ def plot_embedding_scatter(
     )
 
 
-def _add_shared_legend(fig: plt.Figure, axes, colormap: dict[str, tuple]) -> None:
-    """Attach a single legend to the right of the figure."""
+def _add_shared_legend(
+    fig: plt.Figure,
+    axes,
+    colormap: dict[str, tuple],
+    file_markers: dict[str, str] | None = None,
+) -> None:
+    """Attach class-colour legend (and optional per-file marker legend) to the figure."""
     sorted_labels = sorted(colormap)
-    handles = [
+    class_handles = [
         plt.Line2D(
             [0],
             [0],
@@ -215,8 +224,8 @@ def _add_shared_legend(fig: plt.Figure, axes, colormap: dict[str, tuple]) -> Non
         for lb in sorted_labels
     ]
     last_ax = axes[-1] if hasattr(axes, "__len__") else axes
-    last_ax.legend(
-        handles=handles,
+    class_legend = last_ax.legend(
+        handles=class_handles,
         bbox_to_anchor=(1.02, 1.0),
         loc="upper left",
         ncol=1,
@@ -227,6 +236,33 @@ def _add_shared_legend(fig: plt.Figure, axes, colormap: dict[str, tuple]) -> Non
         title="Class",
         title_fontsize=8,
     )
+    if file_markers:
+        marker_handles = [
+            plt.Line2D(
+                [0],
+                [0],
+                marker=mk,
+                color="none",
+                markerfacecolor="0.3",
+                markeredgecolor="none",
+                markersize=5,
+                label=name,
+            )
+            for name, mk in file_markers.items()
+        ]
+        last_ax.add_artist(class_legend)
+        last_ax.legend(
+            handles=marker_handles,
+            bbox_to_anchor=(1.02, 0.0),
+            loc="lower left",
+            ncol=1,
+            frameon=True,
+            fancybox=False,
+            shadow=False,
+            fontsize=8,
+            title="Dataset",
+            title_fontsize=8,
+        )
 
 
 def _method_axis_label(method: str) -> str:
@@ -235,13 +271,14 @@ def _method_axis_label(method: str) -> str:
     )
 
 
-def _default_output_stem(input_paths: list[Path], method: str) -> str:
+def _default_output_stem(input_paths: list[Path], methods: list[str]) -> str:
+    method_str = "_".join(methods)
     if len(input_paths) == 1:
-        return f"embedding_scatter_{method}_{input_paths[0].stem}"
+        return f"embedding_scatter_{method_str}_{input_paths[0].stem}"
     stems = "_vs_".join(p.stem for p in input_paths[:3])
     if len(input_paths) > 3:
         stems += f"_and_{len(input_paths) - 3}_more"
-    return f"embedding_scatter_{method}_{stems}"
+    return f"embedding_scatter_{method_str}_{stems}"
 
 
 # ---------------------------------------------------------------------------
@@ -261,9 +298,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--method",
+        nargs="+",
         choices=["tsne", "umap", "hnne", "pca"],
-        default="tsne",
-        help="Dimensionality reduction method",
+        default=["tsne"],
+        metavar="METHOD",
+        help="Dimensionality reduction method(s). Multiple values produce side-by-side panels "
+        "(single input file only). Choices: tsne, umap, hnne, pca.",
     )
     parser.add_argument(
         "--perplexity",
@@ -342,6 +382,14 @@ def main() -> None:
     args = parse_args()
 
     input_paths = [Path(p) for p in args.input]
+    methods: list[str] = args.method
+    multi_method = len(methods) > 1
+
+    if multi_method:
+        if len(input_paths) != 1:
+            raise SystemExit("Multiple --method values require exactly one input file.")
+        if args.split:
+            raise SystemExit("--split is not compatible with multiple --method values.")
 
     if args.names is not None and len(args.names) != len(input_paths):
         raise SystemExit(
@@ -365,112 +413,169 @@ def main() -> None:
         all_labels.append(_extract_label_strs(samples))
         logger.info(f"Loaded {len(samples)} samples from {path.name}")
 
-    # ------------------------------------------------------------------
-    # Dimensionality reduction (fit on concatenated data)
-    # ------------------------------------------------------------------
-    concat_embeddings = np.concatenate(all_embeddings, axis=0)
-    logger.info(
-        f"Reducing {len(concat_embeddings)} embeddings "
-        f"(dim={concat_embeddings.shape[1]}) with {args.method.upper()} ..."
-    )
-    coords_2d = reduce_embeddings(
-        concat_embeddings,
-        method=args.method,
+    reduce_kwargs = dict(
         perplexity=args.perplexity,
         random_state=args.random_state,
         n_neighbors=args.n_neighbors,
         min_dist=args.min_dist,
     )
-    logger.info("Reduction complete.")
-
-    # Split back into per-file coordinate blocks
-    sizes = [len(e) for e in all_embeddings]
-    split_coords: list[np.ndarray] = []
-    offset = 0
-    for sz in sizes:
-        split_coords.append(coords_2d[offset : offset + sz])
-        offset += sz
 
     # ------------------------------------------------------------------
-    # Colour map
+    # Multi-method mode: one panel per method, single file
     # ------------------------------------------------------------------
-    combined_labels = [lb for lbls in all_labels for lb in lbls]
-    colormap = build_label_colormap(combined_labels)
-    method_label = _method_axis_label(args.method)
+    if multi_method:
+        embeddings = all_embeddings[0]
+        labels = all_labels[0]
+        colormap = build_label_colormap(labels)
 
-    # ------------------------------------------------------------------
-    # Figure layout
-    # ------------------------------------------------------------------
-    n_panels = len(input_paths) if args.split else 1
-    fig_width = max(6.0, 5.0 * n_panels)
-    fig_height = 5.0
-    fig, axes_raw = plt.subplots(
-        1,
-        n_panels,
-        figsize=(fig_width, fig_height),
-        squeeze=False,
-        sharey=args.split,
-        sharex=args.split,
-    )
-    axes = axes_raw.ravel()
+        n_panels = len(methods)
+        fig_width = max(6.0, 5.0 * n_panels)
+        fig, axes_raw = plt.subplots(
+            1,
+            n_panels,
+            figsize=(fig_width, 5.0),
+            squeeze=False,
+            sharey=True,
+            sharex=False,
+        )
+        axes = axes_raw.ravel()
+        panel_letters = [chr(ord("a") + i) for i in range(n_panels)]
 
-    panel_letters = [chr(ord("a") + i) for i in range(len(input_paths))]
-
-    if args.split:
-        for idx, (coords, labels, name, letter) in enumerate(
-            zip(split_coords, all_labels, display_names, panel_letters)
-        ):
+        for idx, method in enumerate(methods):
+            logger.info(
+                f"Reducing {len(embeddings)} embeddings "
+                f"(dim={embeddings.shape[1]}) with {method.upper()} ..."
+            )
+            coords = reduce_embeddings(embeddings, method=method, **reduce_kwargs)
+            logger.info(f"{method.upper()} complete.")
             plot_embedding_scatter(
                 axes[idx],
                 coords,
                 labels,
                 colormap,
-                method_label,
+                _method_axis_label(method),
                 alpha=args.alpha,
                 point_size=args.point_size,
             )
             axes[idx].text(
                 0.5,
                 -0.18,
-                f"({letter}) {name}",
+                f"({panel_letters[idx]}) {_method_axis_label(method)}",
                 transform=axes[idx].transAxes,
                 ha="center",
                 va="top",
                 fontweight="bold",
                 fontsize=11,
             )
+
+        if args.title:
+            fig.suptitle(args.title, fontweight="bold", fontsize=12)
+
+        _add_shared_legend(fig, axes, colormap)
+        fig.tight_layout()
+        fig.subplots_adjust(bottom=0.15)
+
+    # ------------------------------------------------------------------
+    # Single-method mode: panels per file (split) or overlay
+    # ------------------------------------------------------------------
     else:
-        for coords, labels in zip(split_coords, all_labels):
-            plot_embedding_scatter(
-                axes[0],
-                coords,
-                labels,
-                colormap,
-                method_label,
-                alpha=args.alpha,
-                point_size=args.point_size,
-            )
-        if len(input_paths) > 1:
-            overlay_label = "  ".join(
-                f"({letter}) {name}" for letter, name in zip(panel_letters, display_names)
-            )
-            axes[0].text(
-                0.5,
-                -0.18,
-                overlay_label,
-                transform=axes[0].transAxes,
-                ha="center",
-                va="top",
-                fontweight="bold",
-                fontsize=11,
-            )
+        method = methods[0]
+        concat_embeddings = np.concatenate(all_embeddings, axis=0)
+        logger.info(
+            f"Reducing {len(concat_embeddings)} embeddings "
+            f"(dim={concat_embeddings.shape[1]}) with {method.upper()} ..."
+        )
+        coords_2d = reduce_embeddings(concat_embeddings, method=method, **reduce_kwargs)
+        logger.info("Reduction complete.")
 
-    if args.title:
-        fig.suptitle(args.title, fontweight="bold", fontsize=12)
+        sizes = [len(e) for e in all_embeddings]
+        split_coords: list[np.ndarray] = []
+        offset = 0
+        for sz in sizes:
+            split_coords.append(coords_2d[offset : offset + sz])
+            offset += sz
 
-    _add_shared_legend(fig, axes, colormap)
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=0.15)
+        combined_labels = [lb for lbls in all_labels for lb in lbls]
+        colormap = build_label_colormap(combined_labels)
+        method_label = _method_axis_label(method)
+
+        n_panels = len(input_paths) if args.split else 1
+        fig_width = max(6.0, 5.0 * n_panels)
+        fig, axes_raw = plt.subplots(
+            1,
+            n_panels,
+            figsize=(fig_width, 5.0),
+            squeeze=False,
+            sharey=args.split,
+            sharex=args.split,
+        )
+        axes = axes_raw.ravel()
+        panel_letters = [chr(ord("a") + i) for i in range(len(input_paths))]
+
+        if args.split:
+            for idx, (coords, labels, name, letter) in enumerate(
+                zip(split_coords, all_labels, display_names, panel_letters)
+            ):
+                plot_embedding_scatter(
+                    axes[idx],
+                    coords,
+                    labels,
+                    colormap,
+                    method_label,
+                    alpha=args.alpha,
+                    point_size=args.point_size,
+                    marker=MARKERS[idx % len(MARKERS)],
+                )
+                axes[idx].text(
+                    0.5,
+                    -0.18,
+                    f"({letter}) {name}",
+                    transform=axes[idx].transAxes,
+                    ha="center",
+                    va="top",
+                    fontweight="bold",
+                    fontsize=11,
+                )
+            file_markers = None
+        else:
+            multi_file = len(input_paths) > 1
+            for idx, (coords, labels) in enumerate(zip(split_coords, all_labels)):
+                plot_embedding_scatter(
+                    axes[0],
+                    coords,
+                    labels,
+                    colormap,
+                    method_label,
+                    alpha=args.alpha,
+                    point_size=args.point_size,
+                    marker=MARKERS[idx % len(MARKERS)] if multi_file else "o",
+                )
+            if multi_file:
+                overlay_label = "  ".join(
+                    f"({letter}) {name}" for letter, name in zip(panel_letters, display_names)
+                )
+                axes[0].text(
+                    0.5,
+                    -0.18,
+                    overlay_label,
+                    transform=axes[0].transAxes,
+                    ha="center",
+                    va="top",
+                    fontweight="bold",
+                    fontsize=11,
+                )
+                file_markers = {
+                    name: MARKERS[i % len(MARKERS)] for i, name in enumerate(display_names)
+                }
+            else:
+                file_markers = None
+
+        if args.title:
+            fig.suptitle(args.title, fontweight="bold", fontsize=12)
+
+        _add_shared_legend(fig, axes, colormap, file_markers=file_markers)
+        fig.tight_layout()
+        fig.subplots_adjust(bottom=0.15)
 
     # ------------------------------------------------------------------
     # Save
@@ -479,7 +584,7 @@ def main() -> None:
         out_stem = Path(args.output)
     else:
         DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_stem = DEFAULT_OUTPUT_DIR / _default_output_stem(input_paths, args.method)
+        out_stem = DEFAULT_OUTPUT_DIR / _default_output_stem(input_paths, methods)
 
     out_stem.parent.mkdir(parents=True, exist_ok=True)
 
