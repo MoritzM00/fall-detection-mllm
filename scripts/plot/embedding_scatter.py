@@ -400,7 +400,9 @@ def main() -> None:
 
     display_names = args.names if args.names else [p.stem for p in input_paths]
 
-    set_publication_rc_defaults(use_tex=not args.no_tex, rc={"savefig.pad_inches": 0.1})
+    _, (base_fig_w, base_fig_h) = set_publication_rc_defaults(
+        use_tex=not args.no_tex, rc={"savefig.pad_inches": 0.1}
+    )
 
     # ------------------------------------------------------------------
     # Load embeddings
@@ -430,11 +432,11 @@ def main() -> None:
         colormap = build_label_colormap(labels)
 
         n_panels = len(methods)
-        fig_width = max(6.0, 5.0 * n_panels)
+        fig_width = base_fig_w * n_panels
         fig, axes_raw = plt.subplots(
             1,
             n_panels,
-            figsize=(fig_width, 5.0),
+            figsize=(fig_width, base_fig_h),
             squeeze=False,
             sharey=False,
             sharex=False,
@@ -501,11 +503,11 @@ def main() -> None:
         method_label = _method_axis_label(method)
 
         n_panels = len(input_paths) if args.split else 1
-        fig_width = max(6.0, 5.0 * n_panels)
+        fig_width = base_fig_w * n_panels
         fig, axes_raw = plt.subplots(
             1,
             n_panels,
-            figsize=(fig_width, 5.0),
+            figsize=(fig_width, base_fig_h),
             squeeze=False,
             sharey=args.split,
             sharex=args.split,
