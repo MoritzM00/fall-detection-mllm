@@ -176,6 +176,7 @@ def main(cfg: DictConfig):
             f"({match_pct:.1f}%) queries had at least one exemplar with a matching label"
         )
         run.summary["exemplar_label_match_pct"] = match_pct
+        sampler.log_cache_stats()
 
     if is_embed:
         from falldet.embeddings import save_embeddings

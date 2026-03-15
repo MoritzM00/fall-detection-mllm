@@ -49,6 +49,11 @@ class ExemplarSampler(ABC):
         with ThreadPoolExecutor(max_workers=len(indices)) as executor:
             return list(executor.map(self.corpus.__getitem__, indices))
 
+    def log_cache_stats(self) -> None:
+        """Log cache stats from the exemplar corpus, if available."""
+        if hasattr(self.corpus, "log_cache_stats"):
+            self.corpus.log_cache_stats()  # type: ignore[union-attr]
+
     def get_batch_exemplars(self, query_indices: list[int]) -> list[list[dict]]:
         """Load exemplars for multiple queries in a single thread pool.
 

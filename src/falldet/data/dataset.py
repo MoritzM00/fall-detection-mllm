@@ -53,6 +53,10 @@ class GenericVideoDataset(Dataset):
         self._disk_cache = disk_cache
         self._cache_in_memory = cache_in_memory
         self._memory_cache: dict[int, dict] = {}
+        self._stat_disk_hits = 0
+        self._stat_disk_misses = 0
+        self._stat_mem_hits = 0
+        self._stat_log_interval = 500  # log every N cache-layer accesses
 
     def enable_memory_cache(self) -> None:
         """Enable the lazy in-memory cache. Safe to call after construction."""
@@ -119,6 +123,8 @@ class GenericVideoDataset(Dataset):
 
         # Layer 1: in-memory uses idx directly — no hash computation on hit.
         if has_mem and idx in self._memory_cache:
+            self._stat_mem_hits += 1
+            self._maybe_log_cache_stats()
             return self._memory_cache[idx]
 
         # Layer 2: disk (hash computed only when needed).
@@ -126,9 +132,12 @@ class GenericVideoDataset(Dataset):
             disk_key = self._compute_cache_key(idx)
             cached = self._disk_cache.get(disk_key)
             if cached is not None:
+                self._stat_disk_hits += 1
+                self._maybe_log_cache_stats()
                 if has_mem:
                     self._memory_cache[idx] = cached
                 return cached
+            self._stat_disk_misses += 1
         else:
             disk_key = None
 
@@ -139,6 +148,24 @@ class GenericVideoDataset(Dataset):
         if has_mem:
             self._memory_cache[idx] = result
         return result
+
+    def _maybe_log_cache_stats(self) -> None:
+        total = self._stat_disk_hits + self._stat_disk_misses + self._stat_mem_hits
+        if total % self._stat_log_interval == 0:
+            self.log_cache_stats()
+
+    def log_cache_stats(self) -> None:
+        """Log a one-line cache hit-rate summary."""
+        disk_total = self._stat_disk_hits + self._stat_disk_misses
+        disk_rate = self._stat_disk_hits / disk_total if disk_total else 0.0
+        parts = []
+        if self._cache_in_memory:
+            parts.append(f"mem={self._stat_mem_hits}")
+        if self._disk_cache is not None:
+            parts.append(f"disk={self._stat_disk_hits}/{disk_total} ({disk_rate:.0%})")
+        if parts:
+            label = getattr(self, "dataset_name", type(self).__name__)
+            logger.info(f"Cache stats [{label}]: {', '.join(parts)}")
 
     def __getitem__(self, idx):
         original_idx = idx

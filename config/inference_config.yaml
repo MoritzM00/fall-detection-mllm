@@ -14,7 +14,7 @@ data:
   mode: test
   size: 448
   max_size: null
-  cache_dir: null          # Disk cache path, e.g., "outputs/tensor_cache"
+  cache_dir: null                            # Disk cache path, e.g., "outputs/tensor_cache"
   cache_read_only: true    # Do not write to cache during inference; use build_tensor_cache.py
   cache_in_memory: false   # In-memory cache (useful for few-shot exemplars)
 
