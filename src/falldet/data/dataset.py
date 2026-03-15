@@ -2,6 +2,7 @@ import csv
 import logging
 import random
 import time
+from typing import TYPE_CHECKING
 
 import av
 import numpy as np
@@ -9,6 +10,9 @@ import torch
 import torchvision.transforms.v2 as v2
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
+
+if TYPE_CHECKING:
+    from falldet.data.cache import TensorDiskCache
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,8 @@ class GenericVideoDataset(Dataset):
         size=None,
         max_size=None,
         seed=0,
+        disk_cache: "TensorDiskCache | None" = None,
+        cache_in_memory: bool = False,
     ):
         self.video_root = video_root
         self.slow_video_file = annotations_file.replace(".csv", "_slow.csv")
@@ -44,6 +50,13 @@ class GenericVideoDataset(Dataset):
         self.size = size
         self.max_size = max_size
         self.seed = seed
+        self._disk_cache = disk_cache
+        self._cache_in_memory = cache_in_memory
+        self._memory_cache: dict[int, dict] = {}
+
+    def enable_memory_cache(self) -> None:
+        """Enable the lazy in-memory cache. Safe to call after construction."""
+        self._cache_in_memory = True
 
     def load_annotations(self, annotations_file):
         # call manually after init if needed
@@ -89,12 +102,50 @@ class GenericVideoDataset(Dataset):
         )
         return inputs
 
+    def _compute_cache_key(self, idx: int) -> str:
+        """Compute a cache key for the item at idx. Override in subclasses for segment-aware keys."""
+        from falldet.data.cache import compute_cache_key
+
+        path, _ = self._id2label(idx)
+        return compute_cache_key(video_path=str(path), idx=idx)
+
+    def _load_item_cached(self, idx: int) -> dict:
+        """Load item with optional caching: memory → disk → decode."""
+        has_disk = self._disk_cache is not None
+        has_mem = self._cache_in_memory
+
+        if not has_disk and not has_mem:
+            return self.load_item(idx)
+
+        # Layer 1: in-memory uses idx directly — no hash computation on hit.
+        if has_mem and idx in self._memory_cache:
+            return self._memory_cache[idx]
+
+        # Layer 2: disk (hash computed only when needed).
+        if has_disk:
+            disk_key = self._compute_cache_key(idx)
+            cached = self._disk_cache.get(disk_key)
+            if cached is not None:
+                if has_mem:
+                    self._memory_cache[idx] = cached
+                return cached
+        else:
+            disk_key = None
+
+        # Cache miss: decode from video.
+        result = self.load_item(idx)
+        if has_disk:
+            self._disk_cache.put(disk_key, result)  # type: ignore[arg-type]
+        if has_mem:
+            self._memory_cache[idx] = result
+        return result
+
     def __getitem__(self, idx):
         original_idx = idx
         retries = 0
         while retries < self.max_retries:
             try:
-                return self.load_item(idx)
+                return self._load_item_cached(idx)
 
             except Exception as e:
                 retries += 1

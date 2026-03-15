@@ -7,13 +7,24 @@ configurations, handling multiple dataset types, splits, and evaluation groups.
 import logging
 from typing import Any
 
-from falldet.schemas import InferenceConfig
+from falldet.schemas import DatasetConfig, InferenceConfig
 
 from .multi_video_dataset import MultiVideoDataset
 from .video_dataset import OmnifallVideoDataset
 from .wanfall_video_dataset import WanfallVideoDataset
 
 logger = logging.getLogger(__name__)
+
+
+def _select_dataset_config(config: InferenceConfig, mode: str) -> DatasetConfig:
+    """Return the appropriate DatasetConfig for the given mode, falling back to default."""
+    if mode == "train" and config.dataset_train is not None:
+        return config.dataset_train
+    if mode == "val" and config.dataset_val is not None:
+        return config.dataset_val
+    if mode == "test" and config.dataset_test is not None:
+        return config.dataset_test
+    return config.dataset
 
 
 def get_video_datasets(
@@ -55,19 +66,28 @@ def get_video_datasets(
     dataset_groups = {}  # Track which datasets belong to which evaluation group
     logging.info(f"Creating video datasets for mode: {mode}, split: {split}")
 
+    # Build disk cache if configured (shared across all datasets in this call)
+    disk_cache = None
+    if config.data.cache_dir is not None:
+        from pathlib import Path
+
+        from falldet.data.cache import TensorDiskCache
+
+        _ds_cfg = _select_dataset_config(config, mode)
+        cache_params = {
+            "target_fps": _ds_cfg.target_fps,
+            "vid_frame_count": _ds_cfg.vid_frame_count,
+            "size": config.data.size,
+            "seed": config.data.seed,
+        }
+        disk_cache = TensorDiskCache(Path(config.data.cache_dir), cache_params)
+
     # Select the appropriate dataset configuration based on mode
     # CRITICAL #8: Different dataset configs for train/val/test
-    if mode == "train" and config.dataset_train is not None:
-        dataset_config = config.dataset_train
-        logger.info(f"Using specific {mode} dataset configuration")
-    elif mode == "val" and config.dataset_val is not None:
-        dataset_config = config.dataset_val
-        logger.info(f"Using specific {mode} dataset configuration")
-    elif mode == "test" and config.dataset_test is not None:
-        dataset_config = config.dataset_test
+    dataset_config = _select_dataset_config(config, mode)
+    if dataset_config is not config.dataset:
         logger.info(f"Using specific {mode} dataset configuration")
     else:
-        dataset_config = config.dataset
         logger.info(f"Using default dataset configuration for {mode}")
 
     for ds_item in dataset_config.video_datasets:
@@ -139,8 +159,12 @@ def get_video_datasets(
             else None,  # WanFall doesn't use split types
             data_fps=ds_item.dataset_fps,
             path_format=dataset_config.path_format,
+            disk_cache=disk_cache,
             **processing_kwargs,
         )
+
+        if disk_cache is not None:
+            disk_cache.log_estimated_disk_usage(len(dataset))
 
         if len(dataset) > 0:
             # CRITICAL #6: ALWAYS include split suffix in dataset key for consistency

@@ -211,6 +211,8 @@ class DataConfig(BaseConfig):
     mode: str = "test"
     size: int | None = 448
     max_size: int | None = None
+    cache_dir: str | None = None
+    cache_in_memory: bool = False
 
 
 class WandbConfig(BaseConfig):
