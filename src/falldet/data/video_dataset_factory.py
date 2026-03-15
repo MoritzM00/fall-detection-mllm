@@ -75,6 +75,7 @@ def get_video_datasets(
 
         _ds_cfg = _select_dataset_config(config, mode)
         cache_params = {
+            "mode": mode,
             "target_fps": _ds_cfg.target_fps,
             "vid_frame_count": _ds_cfg.vid_frame_count,
             "size": config.data.size,
