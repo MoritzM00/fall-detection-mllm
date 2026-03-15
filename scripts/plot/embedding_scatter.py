@@ -55,7 +55,7 @@ from hnne import HNNE
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import Normalizer
 from umap import UMAP
 
 from falldet.embeddings import load_embeddings
@@ -144,7 +144,7 @@ def reduce_embeddings(
         raise ValueError(
             f"Unknown reduction method: {method!r}. Choose 'tsne', 'umap', 'hnne', or 'pca'."
         )
-    pipeline = Pipeline([("scaler", StandardScaler()), ("reducer", reducer)])
+    pipeline = Pipeline([("normalizer", Normalizer(norm="l2")), ("reducer", reducer)])
     return pipeline.fit_transform(embeddings)
 
 
