@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(version_base=None, config_path="../config", config_name="inference_config")
 def main(cfg: DictConfig) -> None:
+    from omegaconf import OmegaConf
+
+    # Always write — this script's sole purpose is to populate the cache.
+    OmegaConf.update(cfg, "data.cache_read_only", False)
+
     setup_logging(log_file="build_tensor_cache.log", console_level=logging.INFO)
     config = from_dictconfig(cfg)
 

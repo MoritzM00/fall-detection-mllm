@@ -212,6 +212,7 @@ class DataConfig(BaseConfig):
     size: int | None = 448
     max_size: int | None = None
     cache_dir: str | None = None
+    cache_read_only: bool = True  # Only build_tensor_cache.py should write
     cache_in_memory: bool = False
 
 

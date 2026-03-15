@@ -26,7 +26,12 @@ def _make_item(label: int = 0) -> dict:
     return {"video": video, "label": label}
 
 
-def _make_dataset(tmp_path: Path, cache_dir: Path | None = None, cache_in_memory: bool = False):
+def _make_dataset(
+    tmp_path: Path,
+    cache_dir: Path | None = None,
+    cache_in_memory: bool = False,
+    read_only: bool = False,
+):
     """GenericVideoDataset with a 3-item CSV annotation file and optional cache."""
     ann_file = tmp_path / "annotations.csv"
     video_root = tmp_path / "videos"
@@ -34,7 +39,9 @@ def _make_dataset(tmp_path: Path, cache_dir: Path | None = None, cache_in_memory
     with open(ann_file, "w", newline="") as f:
         csv.writer(f).writerows([["vid_a", 0], ["vid_b", 1], ["vid_c", 2]])
 
-    disk_cache = TensorDiskCache(cache_dir, PARAMS) if cache_dir is not None else None
+    disk_cache = (
+        TensorDiskCache(cache_dir, PARAMS, read_only=read_only) if cache_dir is not None else None
+    )
     ds = GenericVideoDataset(
         video_root=str(video_root),
         annotations_file=str(ann_file),
@@ -54,13 +61,16 @@ def _make_dataset(tmp_path: Path, cache_dir: Path | None = None, cache_in_memory
 # ---------------------------------------------------------------------------
 
 
+def _writable(tmp_path, params=None) -> TensorDiskCache:
+    return TensorDiskCache(tmp_path, params or PARAMS, read_only=False)
+
+
 def test_get_returns_none_on_miss(tmp_path):
-    cache = TensorDiskCache(tmp_path, PARAMS)
-    assert cache.get("nonexistent_key") is None
+    assert _writable(tmp_path).get("nonexistent_key") is None
 
 
 def test_put_then_get_roundtrip(tmp_path):
-    cache = TensorDiskCache(tmp_path, PARAMS)
+    cache = _writable(tmp_path)
     item = _make_item(label=1)
     key = compute_cache_key("vid_a.mp4", 0)
 
@@ -73,33 +83,38 @@ def test_put_then_get_roundtrip(tmp_path):
 
 
 def test_put_preserves_uint8_dtype(tmp_path):
-    cache = TensorDiskCache(tmp_path, PARAMS)
-    item = _make_item()
+    cache = _writable(tmp_path)
     key = compute_cache_key("vid_a.mp4", 0)
-    cache.put(key, item)
-    loaded = cache.get(key)
-    assert loaded["video"].dtype == torch.uint8
+    cache.put(key, _make_item())
+    assert cache.get(key)["video"].dtype == torch.uint8
 
 
 def test_put_strips_tv_tensors_subclass(tmp_path):
     """Loaded tensor must be a plain torch.Tensor, not tv_tensors.Video."""
-    cache = TensorDiskCache(tmp_path, PARAMS)
+    cache = _writable(tmp_path)
     item = _make_item()
     assert isinstance(item["video"], tv_tensors.Video)
     key = compute_cache_key("vid_a.mp4", 0)
     cache.put(key, item)
-    loaded = cache.get(key)
-    assert type(loaded["video"]) is torch.Tensor
+    assert type(cache.get(key)["video"]) is torch.Tensor
+
+
+def test_read_only_put_is_noop(tmp_path):
+    """put() on a read-only cache must not write anything."""
+    cache = TensorDiskCache(tmp_path, PARAMS, read_only=True)
+    cache.put(compute_cache_key("vid_a.mp4", 0), _make_item())
+    assert list(tmp_path.rglob("*.pt")) == []
 
 
 def test_namespace_differs_for_different_params(tmp_path):
-    cache_a = TensorDiskCache(tmp_path, {**PARAMS, "size": 224})
-    cache_b = TensorDiskCache(tmp_path, {**PARAMS, "size": 448})
-    assert cache_a._root != cache_b._root
+    assert (
+        _writable(tmp_path, {**PARAMS, "size": 224})._root
+        != _writable(tmp_path, {**PARAMS, "size": 448})._root
+    )
 
 
 def test_namespace_stable_for_same_params(tmp_path):
-    assert TensorDiskCache(tmp_path, PARAMS)._root == TensorDiskCache(tmp_path, PARAMS)._root
+    assert _writable(tmp_path)._root == _writable(tmp_path)._root
 
 
 # ---------------------------------------------------------------------------
@@ -111,15 +126,15 @@ def test_disk_cache_equivalence(tmp_path):
     """Item loaded via disk cache must be tensor-equal to the original."""
     cache_dir = tmp_path / "cache"
 
-    # First pass: cold cache — capture synthetic items and write to disk.
-    ds_cold = _make_dataset(tmp_path, cache_dir=cache_dir)
+    # First pass: cold cache (read_only=False) — write synthetic items to disk.
+    ds_cold = _make_dataset(tmp_path, cache_dir=cache_dir, read_only=False)
     items_cold = {}
     with patch.object(ds_cold, "load_item", side_effect=lambda idx: _make_item(idx)):
         for i in range(len(ds_cold)):
             items_cold[i] = ds_cold[i]
 
-    # Second pass: warm cache — load_item must not be called.
-    ds_warm = _make_dataset(tmp_path, cache_dir=cache_dir)
+    # Second pass: warm cache (read_only=True) — load_item must not be called.
+    ds_warm = _make_dataset(tmp_path, cache_dir=cache_dir, read_only=True)
     load_called: list[int] = []
     with patch.object(
         ds_warm, "load_item", side_effect=lambda idx: load_called.append(idx) or _make_item(idx)
@@ -133,9 +148,9 @@ def test_disk_cache_equivalence(tmp_path):
 
 
 def test_disk_cache_load_item_called_once_per_idx(tmp_path):
-    """With disk cache, load_item fires exactly once per idx across multiple passes."""
+    """With disk cache (write mode), load_item fires exactly once per idx across multiple passes."""
     cache_dir = tmp_path / "cache"
-    ds = _make_dataset(tmp_path, cache_dir=cache_dir)
+    ds = _make_dataset(tmp_path, cache_dir=cache_dir, read_only=False)
     call_counts: dict[int, int] = {}
 
     with patch.object(

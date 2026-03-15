@@ -53,14 +53,18 @@ class TensorDiskCache:
     Writes are atomic (temp-file + os.rename) and thread-safe.
     """
 
-    def __init__(self, cache_dir: Path, dataset_params: dict) -> None:
+    def __init__(self, cache_dir: Path, dataset_params: dict, read_only: bool = True) -> None:
         self._base = Path(cache_dir)
         namespace = hashlib.sha256(json.dumps(dataset_params, sort_keys=True).encode()).hexdigest()[
             :16
         ]
         self._root = self._base / namespace
-        self._root.mkdir(parents=True, exist_ok=True)
-        logger.info(f"TensorDiskCache: root={self._root} params={dataset_params}")
+        self._read_only = read_only
+        if not read_only:
+            self._root.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"TensorDiskCache: root={self._root} read_only={read_only} params={dataset_params}"
+        )
 
     def _key_path(self, key: str) -> Path:
         return self._root / key[:2] / f"{key}.pt"
@@ -76,6 +80,8 @@ class TensorDiskCache:
             return None
 
     def put(self, key: str, item: dict) -> None:
+        if self._read_only:
+            return
         path = self._key_path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
 
