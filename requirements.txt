@@ -12,3 +12,4 @@ wandb[media]==0.25.0
 seaborn
 pydantic==2.12.5
 video-reader-rs-next
+hnne
