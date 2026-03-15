@@ -47,6 +47,7 @@ HNNE variant::
 
 import argparse
 import logging
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -59,7 +60,7 @@ from sklearn.preprocessing import Normalizer
 from umap import UMAP
 
 from falldet.embeddings import load_embeddings
-from falldet.plot import COLORS, set_publication_rc_defaults
+from falldet.plot import COLORS, compute_publication_figsize, set_publication_rc_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -189,28 +190,20 @@ def plot_embedding_scatter(
             rasterized=True,
         )
 
-    ax.set_xlabel(f"{method_label} 1", fontweight="bold")
-    ax.set_ylabel(f"{method_label} 2", fontweight="bold")
-
-    n = len(labels)
-    ax.annotate(
-        f"$n={n:,}$",
-        xy=(0.02, 0.97),
-        xycoords="axes fraction",
-        va="top",
-        ha="left",
-        fontsize=8,
-        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.8),
-    )
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
 
 
 def _add_shared_legend(
     fig: plt.Figure,
     axes,
     colormap: dict[str, tuple],
+    n_panels: int = 1,
     file_markers: dict[str, str] | None = None,
 ) -> None:
-    """Attach class-colour legend (and optional per-file marker legend) to the figure."""
+    """Attach class-colour legend (and optional per-file marker legend) below the figure."""
     sorted_labels = sorted(colormap)
     class_handles = [
         plt.Line2D(
@@ -224,19 +217,6 @@ def _add_shared_legend(
         )
         for lb in sorted_labels
     ]
-    last_ax = axes[-1] if hasattr(axes, "__len__") else axes
-    class_legend = last_ax.legend(
-        handles=class_handles,
-        bbox_to_anchor=(1.02, 1.0),
-        loc="upper left",
-        ncol=1,
-        frameon=True,
-        fancybox=False,
-        shadow=False,
-        fontsize=8,
-        title="Class",
-        title_fontsize=8,
-    )
     if file_markers:
         marker_handles = [
             plt.Line2D(
@@ -251,19 +231,19 @@ def _add_shared_legend(
             )
             for name, mk in file_markers.items()
         ]
-        last_ax.add_artist(class_legend)
-        last_ax.legend(
-            handles=marker_handles,
-            bbox_to_anchor=(1.02, 0.0),
-            loc="lower left",
-            ncol=1,
-            frameon=True,
-            fancybox=False,
-            shadow=False,
-            fontsize=8,
-            title="Dataset",
-            title_fontsize=8,
-        )
+        all_handles = class_handles + marker_handles
+    else:
+        all_handles = class_handles
+    n_rows = 2 if n_panels > 1 else 3
+    ncols = math.ceil(len(all_handles) / n_rows)
+    fig.legend(
+        handles=all_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.0),
+        ncol=ncols,
+        frameon=False,
+        fontsize=8,
+    )
 
 
 def _method_axis_label(method: str) -> str:
@@ -400,9 +380,7 @@ def main() -> None:
 
     display_names = args.names if args.names else [p.stem for p in input_paths]
 
-    _, (base_fig_w, base_fig_h) = set_publication_rc_defaults(
-        use_tex=not args.no_tex, rc={"savefig.pad_inches": 0.1}
-    )
+    set_publication_rc_defaults(use_tex=not args.no_tex, rc={"savefig.pad_inches": 0.1})
 
     # ------------------------------------------------------------------
     # Load embeddings
@@ -432,11 +410,11 @@ def main() -> None:
         colormap = build_label_colormap(labels)
 
         n_panels = len(methods)
-        fig_width = base_fig_w * n_panels
+        panel_w, panel_h = compute_publication_figsize(width_fraction=0.5, height_ratio=1)
         fig, axes_raw = plt.subplots(
             1,
             n_panels,
-            figsize=(fig_width, base_fig_h),
+            figsize=(panel_w * n_panels, panel_h),
             squeeze=False,
             sharey=False,
             sharex=False,
@@ -474,7 +452,7 @@ def main() -> None:
         if args.title:
             fig.suptitle(args.title, fontweight="bold", fontsize=12)
 
-        _add_shared_legend(fig, axes, colormap)
+        _add_shared_legend(fig, axes, colormap, n_panels=n_panels)
         fig.tight_layout()
         fig.subplots_adjust(bottom=0.15)
 
@@ -503,11 +481,14 @@ def main() -> None:
         method_label = _method_axis_label(method)
 
         n_panels = len(input_paths) if args.split else 1
-        fig_width = base_fig_w * n_panels
+        width_fraction = 0.5 if n_panels > 1 else 1.0
+        panel_w, panel_h = compute_publication_figsize(
+            width_fraction=width_fraction, height_ratio=1
+        )
         fig, axes_raw = plt.subplots(
             1,
             n_panels,
-            figsize=(fig_width, base_fig_h),
+            figsize=(panel_w * n_panels, panel_h),
             squeeze=False,
             sharey=args.split,
             sharex=args.split,
@@ -563,7 +544,7 @@ def main() -> None:
         if args.title:
             fig.suptitle(args.title, fontweight="bold", fontsize=12)
 
-        _add_shared_legend(fig, axes, colormap, file_markers=file_markers)
+        _add_shared_legend(fig, axes, colormap, n_panels=n_panels, file_markers=file_markers)
         fig.tight_layout()
         fig.subplots_adjust(bottom=0.15)
 
