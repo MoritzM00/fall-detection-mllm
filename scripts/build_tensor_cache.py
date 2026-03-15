@@ -32,7 +32,7 @@ def main(cfg: DictConfig) -> None:
     # Always write — this script's sole purpose is to populate the cache.
     OmegaConf.update(cfg, "data.cache_read_only", False)
 
-    setup_logging(log_file="build_tensor_cache.log", console_level=logging.INFO)
+    setup_logging(log_file="logs/build_tensor_cache.log", console_level=logging.INFO)
     config = from_dictconfig(cfg)
 
     if config.data.cache_dir is None:
