@@ -66,22 +66,21 @@ def get_video_datasets(
     dataset_groups = {}  # Track which datasets belong to which evaluation group
     logging.info(f"Creating video datasets for mode: {mode}, split: {split}")
 
-    # Build disk cache if configured (shared across all datasets in this call)
-    disk_cache = None
+    # Base cache params shared across datasets (dataset name added per-dataset below)
+    _disk_cache_base: dict | None = None
     if config.data.cache_dir is not None:
-        from pathlib import Path
+        from pathlib import Path  # noqa: PLC0415
 
-        from falldet.data.cache import TensorDiskCache
+        from falldet.data.cache import TensorDiskCache  # noqa: PLC0415
 
         _ds_cfg = _select_dataset_config(config, mode)
-        cache_params = {
+        _disk_cache_base = {
             "mode": mode,
             "target_fps": _ds_cfg.target_fps,
             "vid_frame_count": _ds_cfg.vid_frame_count,
             "size": config.data.size,
             "seed": config.data.seed,
         }
-        disk_cache = TensorDiskCache(Path(config.data.cache_dir), cache_params)
 
     # Select the appropriate dataset configuration based on mode
     # CRITICAL #8: Different dataset configs for train/val/test
@@ -146,6 +145,15 @@ def get_video_datasets(
             DatasetClass = WanfallVideoDataset
         else:
             DatasetClass = OmnifallVideoDataset
+
+        disk_cache = (
+            TensorDiskCache(
+                Path(config.data.cache_dir),
+                {**_disk_cache_base, "dataset": ds_item.name},
+            )
+            if _disk_cache_base is not None
+            else None
+        )
 
         dataset = DatasetClass(
             video_root=ds_item.video_root,
