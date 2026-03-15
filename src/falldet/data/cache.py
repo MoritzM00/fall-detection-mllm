@@ -49,6 +49,7 @@ class TensorDiskCache:
 
     The namespace is derived from dataset_params so that changing target_fps,
     vid_frame_count, size, or seed automatically invalidates old entries.
+    Tensors are stored in their original dtype (uint8 for video frames).
     Writes are atomic (temp-file + os.rename) and thread-safe.
     """
 
@@ -78,18 +79,11 @@ class TensorDiskCache:
         path = self._key_path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Convert float32/float64 tensors to float16; strip tv_tensors subclass.
-        save_item: dict = {}
-        for k, v in item.items():
-            if isinstance(v, torch.Tensor):
-                plain = v.as_subclass(torch.Tensor)
-                save_item[k] = (
-                    plain.to(torch.float16)
-                    if plain.dtype in (torch.float32, torch.float64)
-                    else plain
-                )
-            else:
-                save_item[k] = v
+        # Strip tv_tensors subclass (e.g. tv_tensors.Video) before pickling.
+        save_item = {
+            k: v.as_subclass(torch.Tensor) if isinstance(v, torch.Tensor) else v
+            for k, v in item.items()
+        }
 
         # Atomic write: save to a temp file then rename into place.
         tmp_fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
