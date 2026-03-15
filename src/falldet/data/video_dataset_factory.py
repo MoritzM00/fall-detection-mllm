@@ -149,7 +149,7 @@ def get_video_datasets(
         disk_cache = (
             TensorDiskCache(
                 Path(config.data.cache_dir),
-                {**_disk_cache_base, "dataset": ds_item.name},
+                {**_disk_cache_base, "dataset": ds_item.name, "split": dataset_split},
             )
             if _disk_cache_base is not None
             else None
