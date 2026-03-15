@@ -13,6 +13,9 @@ num_samples: null
 vllm:
   mm_processor_cache_gb: 4
 
+data:
+  cache_dir: "outputs/tensor_cache"
+
 batch_size: 16
 num_workers: 4
 

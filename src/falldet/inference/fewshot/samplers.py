@@ -49,6 +49,11 @@ class ExemplarSampler(ABC):
         with ThreadPoolExecutor(max_workers=len(indices)) as executor:
             return list(executor.map(self.corpus.__getitem__, indices))
 
+    def log_cache_stats(self) -> None:
+        """Log cache stats from the exemplar corpus, if available."""
+        if hasattr(self.corpus, "log_cache_stats"):
+            self.corpus.log_cache_stats()  # type: ignore[union-attr]
+
     def get_batch_exemplars(self, query_indices: list[int]) -> list[list[dict]]:
         """Load exemplars for multiple queries in a single thread pool.
 
@@ -284,6 +289,13 @@ def setup_fewshot_sampler(
     train_datasets = cast(dict[str, object], train_datasets)
     train_dataset = list(train_datasets["individual"].values())[0]  # type: ignore[union-attr]
     logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
+
+    # Enable in-memory caching for the exemplar corpus only (not the test dataset).
+    # ThreadPoolExecutor in get_batch_exemplars shares memory across threads, so
+    # repeated corpus accesses within a run hit O(1) dict lookup after the first load.
+    if config.data.cache_in_memory:
+        train_dataset.enable_memory_cache()
+        logger.info("In-memory cache enabled for exemplar corpus")
 
     # Load embeddings if needed for similarity-based retrieval
     query_embeddings: torch.Tensor | None = None
