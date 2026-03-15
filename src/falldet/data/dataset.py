@@ -138,6 +138,7 @@ class GenericVideoDataset(Dataset):
                     self._memory_cache[idx] = cached
                 return cached
             self._stat_disk_misses += 1
+            self._maybe_log_cache_stats()
         else:
             disk_key = None
 
