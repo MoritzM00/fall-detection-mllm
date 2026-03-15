@@ -97,19 +97,22 @@ class TensorDiskCache:
             raise
 
     def log_estimated_disk_usage(self, num_items: int) -> None:
-        """Log estimated total disk usage for num_items cached tensors."""
+        """Log disk usage: actual current size + projected total for num_items."""
         existing = list(self._root.rglob("*.pt"))
         if existing:
-            sample = existing[: min(10, len(existing))]
-            avg_bytes = sum(p.stat().st_size for p in sample) / len(sample)
-            estimated_gb = (avg_bytes * num_items) / (1024**3)
+            actual_bytes = sum(p.stat().st_size for p in existing)
+            avg_bytes = actual_bytes / len(existing)
+            projected_gb = (avg_bytes * num_items) / (1024**3)
+            actual_gb = actual_bytes / (1024**3)
             logger.info(
-                f"TensorDiskCache: {len(existing)} entries cached, "
-                f"estimated total for {num_items} items: {estimated_gb:.1f} GB"
+                f"TensorDiskCache: {len(existing)}/{num_items} entries cached "
+                f"({actual_gb:.1f} GB on disk), "
+                f"projected total: {projected_gb:.1f} GB"
             )
         else:
-            # Rough estimate: 16 frames × 448 × 448 × 3 channels × 1 byte (uint8)
-            rough_bytes = 16 * 448 * 448 * 3
+            # Rough estimate: 16 frames × size × size × 3 channels × 1 byte (uint8)
+            size = 448  # default; actual may differ
+            rough_bytes = 16 * size * size * 3
             estimated_gb = (rough_bytes * num_items) / (1024**3)
             logger.info(
                 f"TensorDiskCache: no cached entries yet. "
