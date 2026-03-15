@@ -35,6 +35,10 @@ To run CoT experiments with the default model, execute
 python scripts/vllm_inference.py experiment=zeroshot_cot
 ```
 
+Predictions and evaluation artifacts are saved under the configured `output_dir`,
+for example `output_dir/predictions/<wandb-project>/` and
+`output_dir/evaluation_results/<wandb-project>/`.
+
 #### Computing Embeddings
 
 Similarity-based few-shot requires precomputed embeddings. To compute them:

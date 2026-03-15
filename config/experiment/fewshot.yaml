@@ -21,6 +21,3 @@ wandb:
   project: "fall-detection-fewshot"
   name:
   tags: ["fewshot"]
-
-# Output settings
-output_dir: "outputs/fewshot"
