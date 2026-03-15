@@ -435,7 +435,7 @@ def main() -> None:
             n_panels,
             figsize=(fig_width, 5.0),
             squeeze=False,
-            sharey=True,
+            sharey=False,
             sharex=False,
         )
         axes = axes_raw.ravel()
