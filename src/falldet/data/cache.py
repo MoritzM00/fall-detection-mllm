@@ -55,6 +55,7 @@ class TensorDiskCache:
 
     def __init__(self, cache_dir: Path, dataset_params: dict, read_only: bool = True) -> None:
         self._base = Path(cache_dir)
+        self._dataset_params = dataset_params
         namespace = hashlib.sha256(json.dumps(dataset_params, sort_keys=True).encode()).hexdigest()[
             :16
         ]
@@ -116,9 +117,16 @@ class TensorDiskCache:
                 f"projected total: {projected_gb:.1f} GB"
             )
         else:
-            # Rough estimate: 16 frames × size × size × 3 channels × 1 byte (uint8)
-            size = 448  # default; actual may differ
-            rough_bytes = 16 * size * size * 3
+            # Rough estimate: frames × size × size × 3 channels × 1 byte (uint8)
+            size = self._dataset_params.get("size")
+            if size is None:
+                logger.info(
+                    f"TensorDiskCache: no cached entries yet and size param not set, "
+                    f"cannot estimate disk usage for {num_items} items"
+                )
+                return
+            num_frames = self._dataset_params.get("vid_frame_count", 16)
+            rough_bytes = num_frames * size * size * 3
             estimated_gb = (rough_bytes * num_items) / (1024**3)
             logger.info(
                 f"TensorDiskCache: no cached entries yet. "
