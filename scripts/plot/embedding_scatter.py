@@ -184,7 +184,8 @@ def plot_embedding_scatter(
             alpha=alpha,
             s=point_size,
             marker=marker,
-            linewidths=0,
+            linewidths=0.4,
+            edgecolors="white",
             rasterized=True,
         )
 
@@ -551,19 +552,6 @@ def main() -> None:
                     marker=MARKERS[idx % len(MARKERS)] if multi_file else "o",
                 )
             if multi_file:
-                overlay_label = "  ".join(
-                    f"({letter}) {name}" for letter, name in zip(panel_letters, display_names)
-                )
-                axes[0].text(
-                    0.5,
-                    -0.18,
-                    overlay_label,
-                    transform=axes[0].transAxes,
-                    ha="center",
-                    va="top",
-                    fontweight="bold",
-                    fontsize=11,
-                )
                 file_markers = {
                     name: MARKERS[i % len(MARKERS)] for i, name in enumerate(display_names)
                 }
