@@ -74,11 +74,21 @@ class PromptConfig(BaseConfig):
     num_shots: int = 0
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
+    exemplar_ordering: Literal["most_similar_first", "most_similar_last"] = "most_similar_first"
 
     @model_validator(mode="after")
     def validate_fewshot_cot(self) -> "PromptConfig":
         if self.cot and self.num_shots > 0:
             raise ValueError("cot=True is not supported with num_shots > 0")
+        return self
+
+    @model_validator(mode="after")
+    def validate_exemplar_ordering(self) -> "PromptConfig":
+        if self.exemplar_ordering != "most_similar_first" and self.shot_selection != "similarity":
+            raise ValueError(
+                f"exemplar_ordering={self.exemplar_ordering!r} is only supported "
+                f"with shot_selection='similarity', got {self.shot_selection!r}"
+            )
         return self
 
     # Variant selectors

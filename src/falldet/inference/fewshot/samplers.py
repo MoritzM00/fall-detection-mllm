@@ -165,6 +165,7 @@ class SimilaritySampler(ExemplarSampler):
         num_shots: int = 5,
         query_embeddings: torch.Tensor | None = None,
         corpus_embeddings: torch.Tensor | None = None,
+        exemplar_ordering: str = "most_similar_first",
     ):
         super().__init__(corpus, num_shots)
 
@@ -188,9 +189,13 @@ class SimilaritySampler(ExemplarSampler):
         self._retrievals: list[list[int]] = topk_indices.tolist()
         self._scores: list[list[float]] = topk_scores.tolist()
 
+        if exemplar_ordering == "most_similar_last":
+            self._retrievals = [r[::-1] for r in self._retrievals]
+            self._scores = [s[::-1] for s in self._scores]
+
         logger.info(
             f"SimilaritySampler: {len(query_embeddings)} queries, "
-            f"{len(corpus_embeddings)} corpus, top-{k}"
+            f"{len(corpus_embeddings)} corpus, top-{k}, ordering={exemplar_ordering}"
         )
 
     def sample(self, query_index: int) -> list[int]:
@@ -248,6 +253,7 @@ def create_sampler(
             num_shots=num_shots,
             query_embeddings=query_embeddings,
             corpus_embeddings=corpus_embeddings,
+            exemplar_ordering=config.prompt.exemplar_ordering,
         )
 
     return sampler_cls(corpus=corpus, num_shots=num_shots, seed=seed)

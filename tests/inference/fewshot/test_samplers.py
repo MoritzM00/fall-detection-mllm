@@ -277,6 +277,58 @@ class TestSimilaritySampler:
         with pytest.raises(ValueError, match="requires both"):
             SimilaritySampler(ds, num_shots=3, query_embeddings=None, corpus_embeddings=None)
 
+    def test_most_similar_first_is_descending(self, embeddings):
+        query, corpus = embeddings
+        ds = MockDataset(num_samples=20)
+        sampler = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering="most_similar_first",
+        )
+
+        for qi in range(len(query)):
+            scores = sampler.get_scores(qi)
+            assert scores == sorted(scores, reverse=True)
+
+    def test_most_similar_last_is_ascending(self, embeddings):
+        query, corpus = embeddings
+        ds = MockDataset(num_samples=20)
+        sampler = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering="most_similar_last",
+        )
+
+        for qi in range(len(query)):
+            scores = sampler.get_scores(qi)
+            assert scores == sorted(scores)
+
+    def test_most_similar_last_reverses_indices(self, embeddings):
+        query, corpus = embeddings
+        ds = MockDataset(num_samples=20)
+        sampler_first = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering="most_similar_first",
+        )
+        sampler_last = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering="most_similar_last",
+        )
+
+        for qi in range(len(query)):
+            assert sampler_first.sample(qi) == sampler_last.sample(qi)[::-1]
+            assert sampler_first.get_scores(qi) == sampler_last.get_scores(qi)[::-1]
+
 
 # ---------------------------------------------------------------------------
 # Utilities
