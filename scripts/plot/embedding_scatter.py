@@ -1,9 +1,8 @@
 """Visualise embedding spaces as 2-D scatter plots via t-SNE, UMAP, HNNE, or PCA.
 
 Each input is a .pt file produced by the embed task (keys: ``embeddings``,
-``samples``).  All files are projected into the *same* coordinate space by
-fitting the reduction on the concatenated embeddings, then splitting back for
-optional per-panel rendering.
+``samples``).  Each file's embeddings are reduced independently; coordinate
+spaces are not shared across files.
 
 Usage examples
 --------------
@@ -47,7 +46,6 @@ HNNE variant::
 
 import argparse
 import logging
-import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -208,7 +206,6 @@ def _add_shared_legend(
     fig: plt.Figure,
     axes,
     colormap: dict[str, tuple],
-    n_panels: int = 1,
     file_markers: dict[str, str] | None = None,
 ) -> None:
     """Attach class-colour legend (and optional per-file marker legend) below the figure."""
@@ -241,8 +238,7 @@ def _add_shared_legend(
         all_handles = class_handles + marker_handles
     else:
         all_handles = class_handles
-    n_rows = 2 if n_panels > 1 else 3
-    ncols = math.ceil(len(all_handles) / n_rows)
+    ncols = min(len(all_handles), 6)
     fig.legend(
         handles=all_handles,
         loc="lower center",
@@ -459,7 +455,7 @@ def main() -> None:
         if args.title:
             fig.suptitle(args.title, fontweight="bold", fontsize=12)
 
-        _add_shared_legend(fig, axes, colormap, n_panels=n_panels)
+        _add_shared_legend(fig, axes, colormap)
         fig.tight_layout()
         fig.subplots_adjust(bottom=0.15)
 
@@ -468,20 +464,15 @@ def main() -> None:
     # ------------------------------------------------------------------
     else:
         method = methods[0]
-        concat_embeddings = np.concatenate(all_embeddings, axis=0)
-        logger.info(
-            f"Reducing {len(concat_embeddings)} embeddings "
-            f"(dim={concat_embeddings.shape[1]}) with {method.upper()} ..."
-        )
-        coords_2d = reduce_embeddings(concat_embeddings, method=method, **reduce_kwargs)
-        logger.info("Reduction complete.")
-
-        sizes = [len(e) for e in all_embeddings]
         split_coords: list[np.ndarray] = []
-        offset = 0
-        for sz in sizes:
-            split_coords.append(coords_2d[offset : offset + sz])
-            offset += sz
+        for i, embeddings in enumerate(all_embeddings):
+            logger.info(
+                f"Reducing {len(embeddings)} embeddings "
+                f"(dim={embeddings.shape[1]}) with {method.upper()} "
+                f"[file {i + 1}/{len(all_embeddings)}] ..."
+            )
+            split_coords.append(reduce_embeddings(embeddings, method=method, **reduce_kwargs))
+        logger.info("Reduction complete.")
 
         combined_labels = [lb for lbls in all_labels for lb in lbls]
         colormap = build_label_colormap(combined_labels)
@@ -515,7 +506,7 @@ def main() -> None:
                     method_label,
                     alpha=args.alpha,
                     point_size=args.point_size,
-                    marker=MARKERS[idx % len(MARKERS)],
+                    marker="o",
                 )
                 axes[idx].text(
                     0.5,
@@ -551,7 +542,7 @@ def main() -> None:
         if args.title:
             fig.suptitle(args.title, fontweight="bold", fontsize=12)
 
-        _add_shared_legend(fig, axes, colormap, n_panels=n_panels, file_markers=file_markers)
+        _add_shared_legend(fig, axes, colormap, file_markers=file_markers)
         fig.tight_layout()
         fig.subplots_adjust(bottom=0.15)
 
