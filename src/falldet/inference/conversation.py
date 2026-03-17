@@ -166,18 +166,18 @@ class ConversationBuilder:
         if self._system_msg is not None:
             messages.append(self._system_msg)
 
+        if exemplars is None:
+            exemplars = []
+
         if self.config.num_shots > 0:
-            if exemplars:
-                fewshot_messages, fewshot_videos = self._build_fewshot_messages(
-                    exemplars, target_video
+            if len(exemplars) != self.config.num_shots:
+                raise ValueError(
+                    f"Expected {self.config.num_shots} exemplars, but got {len(exemplars)}"
                 )
-                messages.extend(fewshot_messages)
-                videos.extend(fewshot_videos)
-            else:
-                # Fallback: few-shot mode but no exemplars provided
-                target_content: list[dict] = [{"type": "video", "video": target_video}]
-                messages.append({"role": "user", "content": target_content})
-                videos.append(self._make_video(target_video))
+            fewshot_messages, fewshot_videos = self._build_fewshot_messages(exemplars, target_video)
+            messages.extend(fewshot_messages)
+            videos.extend(fewshot_videos)
+
         else:
             # Zero-shot target turn
             target_content = [
