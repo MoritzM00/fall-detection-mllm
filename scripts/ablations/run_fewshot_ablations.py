@@ -17,6 +17,7 @@ import subprocess
 DEFAULT_SHOT_VALUES = [1, 2, 3, 5]
 SELECTION_STRATEGIES = ["random", "balanced", "similarity"]
 DELIMITER_VALUES = ["true", "false"]
+ORDERING_VALUES = ["ascending", "descending", "random"]
 
 
 # ---------------------------------------------------------------------------
@@ -33,10 +34,11 @@ def generate_experiment_configs(
     shot_values: list[int],
     selection_values: list[str],
     delimiter_values: list[str],
+    ordering_values: list[str],
 ) -> list[dict]:
     """Generate deduplicated experiment configs.
 
-    Produces the cross-product of shot_values x selection_values x delimiter_values.
+    Produces the cross-product of shot_values x selection_values x delimiter_values x ordering_values.
     """
     seen: set[tuple] = set()
     configs: list[dict] = []
@@ -44,15 +46,17 @@ def generate_experiment_configs(
     for num_shots in shot_values:
         for selection in selection_values:
             for use_delimiters in delimiter_values:
-                config = {
-                    "prompt.num_shots": num_shots,
-                    "prompt.shot_selection": selection,
-                    "prompt.use_delimiters": use_delimiters,
-                }
-                key = _config_key(config)
-                if key not in seen:
-                    seen.add(key)
-                    configs.append(config)
+                for ordering in ordering_values:
+                    config = {
+                        "prompt.num_shots": num_shots,
+                        "prompt.shot_selection": selection,
+                        "prompt.use_delimiters": use_delimiters,
+                        "prompt.exemplar_ordering": ordering,
+                    }
+                    key = _config_key(config)
+                    if key not in seen:
+                        seen.add(key)
+                        configs.append(config)
 
     return configs
 
@@ -67,12 +71,14 @@ def build_tags(config: dict) -> list[str]:
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
     use_delimiters = config["prompt.use_delimiters"]
+    ordering = config["prompt.exemplar_ordering"]
     return [
         "ablation",
         "fewshot",
         f"shots-{num_shots}",
         f"selection-{selection}",
         f"delimiters-{use_delimiters}",
+        f"ordering-{ordering}",
     ]
 
 
@@ -93,6 +99,7 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         f"prompt.num_shots={config['prompt.num_shots']}",
         f"prompt.shot_selection={config['prompt.shot_selection']}",
         f"prompt.use_delimiters={config['prompt.use_delimiters']}",
+        f"prompt.exemplar_ordering={config['prompt.exemplar_ordering']}",
         f"model={model}",
         f"model.params={params}",
     ]
@@ -140,7 +147,8 @@ def _describe_config(config: dict) -> str:
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
     use_delimiters = config["prompt.use_delimiters"]
-    return f"shots={num_shots}, selection={selection}, delimiters={use_delimiters}"
+    ordering = config["prompt.exemplar_ordering"]
+    return f"shots={num_shots}, selection={selection}, delimiters={use_delimiters}, ordering={ordering}"
 
 
 def main():
@@ -167,14 +175,14 @@ def main():
         help="Model parameters for experiments (default: 8B)",
     )
     parser.add_argument(
-        "--shot-values",
+        "--shots",
         type=int,
         nargs="+",
         default=DEFAULT_SHOT_VALUES,
         help=f"num_shots values to sweep (default: {DEFAULT_SHOT_VALUES})",
     )
     parser.add_argument(
-        "--selection-values",
+        "--selection",
         type=str,
         nargs="+",
         default=["balanced"],
@@ -182,19 +190,28 @@ def main():
         help="shot_selection strategies to sweep (default: balanced)",
     )
     parser.add_argument(
-        "--delimiter-values",
+        "--delim",
         type=str,
         nargs="+",
         default=["true"],
         choices=DELIMITER_VALUES,
         help="use_delimiters values to sweep (default: true)",
     )
+    parser.add_argument(
+        "--order",
+        type=str,
+        nargs="+",
+        default=["ascending"],
+        choices=ORDERING_VALUES,
+        help="exemplar_ordering values to sweep (default: ascending)",
+    )
     args = parser.parse_args()
 
     configs = generate_experiment_configs(
-        shot_values=args.shot_values,
-        selection_values=args.selection_values,
-        delimiter_values=args.delimiter_values,
+        shot_values=args.shots,
+        selection_values=args.selection,
+        delimiter_values=args.delim,
+        ordering_values=args.order,
     )
     print(f"Total unique experiments: {len(configs)}")
     print()
