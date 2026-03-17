@@ -73,18 +73,21 @@ class ConversationBuilder:
 
         if config.num_shots > 0:
             self._preamble: str = self._prompt_builder.build_fewshot_system_instruction()
-            # System message only when explicitly overridden; preamble goes into user message
-            if config.system_instruction is not None:
-                self._system_msg: dict | None = {
-                    "role": "system",
-                    "content": [{"type": "text", "text": config.system_instruction}],
-                }
-            else:
-                self._system_msg = None
+            # System message: explicit override takes priority, otherwise auto-generated preamble
+            system_text = (
+                config.system_instruction
+                if config.system_instruction is not None
+                else self._preamble
+            )
+            self._system_msg: dict = {
+                "role": "system",
+                "content": [{"type": "text", "text": system_text}],
+            }
         else:
             self._preamble = ""
             self._user_prompt: str = self._prompt_builder.build_prompt()
-            self._system_msg = self._prompt_builder.get_system_message()
+            system_msg = self._prompt_builder.get_system_message()
+            self._system_msg = system_msg  # type: ignore[assignment]
 
         logger.info(f"ConversationBuilder initialized: {self.num_videos} videos/request")
         self._log_conversation()
@@ -98,51 +101,72 @@ class ConversationBuilder:
         """Wrap frames with computed metadata."""
         return VideoWithMetadata(frames=frames, metadata=self._build_video_metadata(frames))
 
-    def _build_fewshot_content(
+    def _build_fewshot_messages(
         self, exemplars: list[dict], target_video: torch.Tensor
     ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Build content items and video list for a single-message few-shot conversation.
+        """Build per-exemplar user messages and video list for a few-shot conversation.
 
-        Produces interleaved text/video items with section markers:
-          [DEMONSTRATIONS] -> exemplar pairs ([REQUEST] / video / text+[RESPONSE]) -> [QUERY] -> target
+        Each exemplar and the target become their own user message. With delimiters:
+          [system: preamble]
+          [user: [DEMONSTRATIONS] [REQUEST] <video> prompt [RESPONSE] answer]  ← first
+          [user: [REQUEST] <video> prompt [RESPONSE] answer]                   ← subsequent
+          [user: [QUERY] [REQUEST] <video> prompt]                             ← target
+
+        Without delimiters:
+          [system: preamble]
+          [user: <video> prompt answer]  * N
+          [user: <video> prompt]
 
         Args:
             exemplars: List of exemplar dicts, each with 'video' and 'label_str'.
             target_video: Target video frames.
 
         Returns:
-            Tuple of (content_items, videos).
+            Tuple of (messages, videos).
         """
-        content: list[dict] = []
+        messages: list[dict] = []
         videos: list[VideoWithMetadata] = []
 
-        # First text: preamble + opening section markers
-        content.append(
-            {
-                "type": "text",
-                "text": f"{self._preamble}\n\n{SECTION_DEMONSTRATIONS}\n\n{SECTION_REQUEST}\n",
-            }
-        )
+        use_delimiters = self.config.use_delimiters
 
         for i, exemplar in enumerate(exemplars):
-            is_last = i == len(exemplars) - 1
-
-            # Exemplar video
-            content.append({"type": "video", "video": exemplar["video"]})
+            answer = self._format_answer(exemplar["label_str"])
+            if use_delimiters:
+                prefix = (
+                    f"{SECTION_DEMONSTRATIONS}\n\n{SECTION_REQUEST}" if i == 0 else SECTION_REQUEST
+                )
+                content = [
+                    {"type": "text", "text": prefix},
+                    {"type": "video", "video": exemplar["video"]},
+                    {
+                        "type": "text",
+                        "text": f"\n{EXEMPLAR_USER_PROMPT}\n\n{SECTION_RESPONSE}\n{answer}",
+                    },
+                ]
+            else:
+                content = [
+                    {"type": "video", "video": exemplar["video"]},
+                    {"type": "text", "text": f"{EXEMPLAR_USER_PROMPT}\n{answer}"},
+                ]
+            messages.append({"role": "user", "content": content})
             videos.append(self._make_video(exemplar["video"]))
 
-            # Text: prompt + response + transition to next section
-            answer = self._format_answer(exemplar["label_str"])
-            next_marker = f"{SECTION_QUERY}\n\n{SECTION_REQUEST}" if is_last else SECTION_REQUEST
-            text = f"\n{EXEMPLAR_USER_PROMPT}\n\n{SECTION_RESPONSE}\n{answer}\n\n{next_marker}\n"
-            content.append({"type": "text", "text": text})
-
-        # Target video + final prompt
-        content.append({"type": "video", "video": target_video})
+        # Target message (no answer)
+        if use_delimiters:
+            target_content = [
+                {"type": "text", "text": f"{SECTION_QUERY}\n\n{SECTION_REQUEST}"},
+                {"type": "video", "video": target_video},
+                {"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"},
+            ]
+        else:
+            target_content = [
+                {"type": "video", "video": target_video},
+                {"type": "text", "text": EXEMPLAR_USER_PROMPT},
+            ]
+        messages.append({"role": "user", "content": target_content})
         videos.append(self._make_video(target_video))
-        content.append({"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"})
 
-        return content, videos
+        return messages, videos
 
     def build(
         self,
@@ -161,14 +185,15 @@ class ConversationBuilder:
         messages: list[dict] = []
         videos: list[VideoWithMetadata] = []
 
-        # System message (only when explicitly set via system_instruction)
         if self._system_msg is not None:
             messages.append(self._system_msg)
 
         if self.config.num_shots > 0:
             if exemplars:
-                content, fewshot_videos = self._build_fewshot_content(exemplars, target_video)
-                messages.append({"role": "user", "content": content})
+                fewshot_messages, fewshot_videos = self._build_fewshot_messages(
+                    exemplars, target_video
+                )
+                messages.extend(fewshot_messages)
                 videos.extend(fewshot_videos)
             else:
                 # Fallback: few-shot mode but no exemplars provided
@@ -251,8 +276,8 @@ class ConversationBuilder:
 
         if self.config.num_shots > 0:
             lines.append(
-                f"  [{idx}] user: single message with preamble + "
-                f"{self.config.num_shots} exemplar(s) + target (dynamic per query)"
+                f"  [{idx}+] user: {self.config.num_shots} exemplar message(s) + "
+                f"1 target message (dynamic per query)"
             )
         else:
             target_prompt_preview = (

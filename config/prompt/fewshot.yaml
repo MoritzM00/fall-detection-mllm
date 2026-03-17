@@ -15,3 +15,4 @@ num_shots: 3
 shot_selection: random
 exemplar_seed: 0
 exemplar_ordering: most_similar_last
+use_delimiters: true
