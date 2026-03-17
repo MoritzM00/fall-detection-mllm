@@ -71,6 +71,7 @@ class ConversationBuilder:
         self._prompt_builder = PromptBuilder(config, label2idx)
         self._sample_logged = False
 
+        self._system_msg: dict | None
         if config.num_shots > 0:
             self._preamble: str = self._prompt_builder.build_fewshot_system_instruction()
             # System message: explicit override takes priority, otherwise auto-generated preamble
@@ -79,15 +80,13 @@ class ConversationBuilder:
                 if config.system_instruction is not None
                 else self._preamble
             )
-            self._system_msg: dict = {
+            self._system_msg = {
                 "role": "system",
                 "content": [{"type": "text", "text": system_text}],
             }
         else:
-            self._preamble = ""
             self._user_prompt: str = self._prompt_builder.build_prompt()
-            system_msg = self._prompt_builder.get_system_message()
-            self._system_msg = system_msg  # type: ignore[assignment]
+            self._system_msg = self._prompt_builder.get_system_message()
 
         logger.info(f"ConversationBuilder initialized: {self.num_videos} videos/request")
         self._log_conversation()
@@ -258,6 +257,11 @@ class ConversationBuilder:
             return f'{{"label": "{label}"}}'
         return f"The best answer is: {label}"
 
+    @staticmethod
+    def _truncate_preview(text: str) -> str:
+        """Truncate text for logging, appending ellipsis if trimmed."""
+        return text[:_MAX_LOG_TEXT_LEN] + "..." if len(text) > _MAX_LOG_TEXT_LEN else text
+
     def _log_conversation(self) -> None:
         """Log the conversation structure at initialization."""
         lines = ["Conversation structure:"]
@@ -266,12 +270,9 @@ class ConversationBuilder:
         if self._system_msg is not None:
             for content_item in self._system_msg["content"]:
                 if content_item["type"] == "text":
-                    text_preview = (
-                        content_item["text"][:_MAX_LOG_TEXT_LEN] + "..."
-                        if len(content_item["text"]) > _MAX_LOG_TEXT_LEN
-                        else content_item["text"]
+                    lines.append(
+                        f"  [{idx}] system: {self._truncate_preview(content_item['text'])}"
                     )
-                    lines.append(f"  [{idx}] system: {text_preview}")
                     idx += 1
 
         if self.config.num_shots > 0:
@@ -280,12 +281,9 @@ class ConversationBuilder:
                 f"1 target message (dynamic per query)"
             )
         else:
-            target_prompt_preview = (
-                self._user_prompt[:_MAX_LOG_TEXT_LEN] + "..."
-                if len(self._user_prompt) > _MAX_LOG_TEXT_LEN
-                else self._user_prompt
+            lines.append(
+                f"  [{idx}] user: <video: [target]> {self._truncate_preview(self._user_prompt)}"
             )
-            lines.append(f"  [{idx}] user: <video: [target]> {target_prompt_preview}")
 
         logger.info("\n".join(lines))
 
