@@ -81,7 +81,6 @@ class PromptConfig(BaseConfig):
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
     exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
-    use_delimiters: bool = True
 
     @model_validator(mode="after")
     def validate_fewshot_cot(self) -> "PromptConfig":

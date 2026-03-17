@@ -103,18 +103,13 @@ class ConversationBuilder:
     def _build_fewshot_messages(
         self, exemplars: list[dict], target_video: torch.Tensor
     ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Build per-exemplar user messages and video list for a few-shot conversation.
+        """Build a single user message containing all exemplars and the target query.
 
-        Each exemplar and the target become their own user message. With delimiters:
+        Structure:
           [system: preamble]
-          [user: [DEMONSTRATIONS] [REQUEST] <video> prompt [RESPONSE] answer]  ← first
-          [user: [REQUEST] <video> prompt [RESPONSE] answer]                   ← subsequent
-          [user: [QUERY] [REQUEST] <video> prompt]                             ← target
-
-        Without delimiters:
-          [system: preamble]
-          [user: <video> prompt answer]  * N
-          [user: <video> prompt]
+          [user: [DEMONSTRATIONS] [REQUEST] <video> prompt [RESPONSE] answer
+                 [REQUEST] <video> prompt [RESPONSE] answer  (repeated for each exemplar)
+                 [QUERY] [REQUEST] <video> prompt]           (target)
 
         Args:
             exemplars: List of exemplar dicts, each with 'video' and 'label_str'.
@@ -123,48 +118,32 @@ class ConversationBuilder:
         Returns:
             Tuple of (messages, videos).
         """
-        messages: list[dict] = []
+        content: list[dict] = []
         videos: list[VideoWithMetadata] = []
-
-        use_delimiters = self.config.use_delimiters
 
         for i, exemplar in enumerate(exemplars):
             answer = self._format_answer(exemplar["label_str"])
-            if use_delimiters:
-                prefix = (
-                    f"{SECTION_DEMONSTRATIONS}\n\n{SECTION_REQUEST}" if i == 0 else SECTION_REQUEST
-                )
-                content = [
-                    {"type": "text", "text": prefix},
-                    {"type": "video", "video": exemplar["video"]},
-                    {
-                        "type": "text",
-                        "text": f"\n{EXEMPLAR_USER_PROMPT}\n\n{SECTION_RESPONSE}\n{answer}",
-                    },
-                ]
+            if i == 0:
+                prefix = f"{SECTION_DEMONSTRATIONS}\n{SECTION_REQUEST}\n"
             else:
-                content = [
-                    {"type": "video", "video": exemplar["video"]},
-                    {"type": "text", "text": f"{EXEMPLAR_USER_PROMPT}\n{answer}"},
-                ]
-            messages.append({"role": "user", "content": content})
+                prefix = f"{SECTION_REQUEST}\n"
+            content.append({"type": "text", "text": prefix})
+            content.append({"type": "video", "video": exemplar["video"]})
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"\n{EXEMPLAR_USER_PROMPT}\n{SECTION_RESPONSE}\n{answer}\n\n",
+                }
+            )
             videos.append(self._make_video(exemplar["video"]))
 
-        # Target message (no answer)
-        if use_delimiters:
-            target_content = [
-                {"type": "text", "text": f"{SECTION_QUERY}\n\n{SECTION_REQUEST}"},
-                {"type": "video", "video": target_video},
-                {"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"},
-            ]
-        else:
-            target_content = [
-                {"type": "video", "video": target_video},
-                {"type": "text", "text": EXEMPLAR_USER_PROMPT},
-            ]
-        messages.append({"role": "user", "content": target_content})
+        # Target query
+        content.append({"type": "text", "text": f"{SECTION_QUERY}\n{SECTION_REQUEST}"})
+        content.append({"type": "video", "video": target_video})
+        content.append({"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"})
         videos.append(self._make_video(target_video))
 
+        messages = [{"role": "user", "content": content}]
         return messages, videos
 
     def build(
@@ -277,8 +256,8 @@ class ConversationBuilder:
 
         if self.config.num_shots > 0:
             lines.append(
-                f"  [{idx}+] user: {self.config.num_shots} exemplar message(s) + "
-                f"1 target message (dynamic per query)"
+                f"  [{idx}] user: 1 message with {self.config.num_shots} exemplar(s) + "
+                f"target (dynamic per query)"
             )
         else:
             lines.append(

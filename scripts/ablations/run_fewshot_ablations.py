@@ -16,7 +16,6 @@ import subprocess
 
 DEFAULT_SHOT_VALUES = [1, 2, 3, 5]
 SELECTION_STRATEGIES = ["random", "balanced", "similarity"]
-DELIMITER_VALUES = ["true", "false"]
 ORDERING_VALUES = ["ascending", "descending", "random"]
 
 
@@ -33,30 +32,27 @@ def _config_key(config: dict) -> tuple:
 def generate_experiment_configs(
     shot_values: list[int],
     selection_values: list[str],
-    delimiter_values: list[str],
     ordering_values: list[str],
 ) -> list[dict]:
     """Generate deduplicated experiment configs.
 
-    Produces the cross-product of shot_values x selection_values x delimiter_values x ordering_values.
+    Produces the cross-product of shot_values x selection_values x ordering_values.
     """
     seen: set[tuple] = set()
     configs: list[dict] = []
 
     for num_shots in shot_values:
         for selection in selection_values:
-            for use_delimiters in delimiter_values:
-                for ordering in ordering_values:
-                    config = {
-                        "prompt.num_shots": num_shots,
-                        "prompt.shot_selection": selection,
-                        "prompt.use_delimiters": use_delimiters,
-                        "prompt.exemplar_ordering": ordering,
-                    }
-                    key = _config_key(config)
-                    if key not in seen:
-                        seen.add(key)
-                        configs.append(config)
+            for ordering in ordering_values:
+                config = {
+                    "prompt.num_shots": num_shots,
+                    "prompt.shot_selection": selection,
+                    "prompt.exemplar_ordering": ordering,
+                }
+                key = _config_key(config)
+                if key not in seen:
+                    seen.add(key)
+                    configs.append(config)
 
     return configs
 
@@ -70,14 +66,12 @@ def build_tags(config: dict) -> list[str]:
     """Build descriptive W&B tags from a config dict."""
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
-    use_delimiters = config["prompt.use_delimiters"]
     ordering = config["prompt.exemplar_ordering"]
     return [
         "ablation",
         "fewshot",
         f"shots-{num_shots}",
         f"selection-{selection}",
-        f"delimiters-{use_delimiters}",
         f"ordering-{ordering}",
     ]
 
@@ -98,7 +92,6 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         f"experiment={experiment}",
         f"prompt.num_shots={config['prompt.num_shots']}",
         f"prompt.shot_selection={config['prompt.shot_selection']}",
-        f"prompt.use_delimiters={config['prompt.use_delimiters']}",
         f"prompt.exemplar_ordering={config['prompt.exemplar_ordering']}",
         f"model={model}",
         f"model.params={params}",
@@ -142,13 +135,12 @@ def run_experiment(config: dict, dry_run: bool = False, model: str = "qwenvl", p
         raise
 
 
-def _describe_config(config: dict) -> str:
+def _describe_config(config: dict, model: str) -> str:
     """Return a short human-readable description of the config."""
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
-    use_delimiters = config["prompt.use_delimiters"]
     ordering = config["prompt.exemplar_ordering"]
-    return f"shots={num_shots}, selection={selection}, delimiters={use_delimiters}, ordering={ordering}"
+    return f"model={model}, shots={num_shots}, selection={selection}, ordering={ordering}"
 
 
 def main():
@@ -165,14 +157,15 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="qwenvl",
-        help="Model name for experiments (default: qwenvl)",
+        nargs="+",
+        default=["qwenvl"],
+        help="Model name(s) for experiments (default: qwenvl)",
     )
     parser.add_argument(
         "--params",
         type=str,
         default="8B",
-        help="Model parameters for experiments (default: 8B)",
+        help="Model parameters for experiments, single value applied to all models (default: 8B)",
     )
     parser.add_argument(
         "--shots",
@@ -190,14 +183,6 @@ def main():
         help="shot_selection strategies to sweep (default: balanced)",
     )
     parser.add_argument(
-        "--delim",
-        type=str,
-        nargs="+",
-        default=["true"],
-        choices=DELIMITER_VALUES,
-        help="use_delimiters values to sweep (default: true)",
-    )
-    parser.add_argument(
         "--order",
         type=str,
         nargs="+",
@@ -210,27 +195,34 @@ def main():
     configs = generate_experiment_configs(
         shot_values=args.shots,
         selection_values=args.selection,
-        delimiter_values=args.delim,
         ordering_values=args.order,
     )
-    print(f"Total unique experiments: {len(configs)}")
+
+    # Flat list of (model, config) pairs — models vary slowest
+    experiments: list[tuple[str, dict]] = [
+        (model, config) for model in args.model for config in configs
+    ]
+
+    print(
+        f"Total unique experiments: {len(experiments)} ({len(args.model)} model(s) × {len(configs)} config(s))"
+    )
     print()
 
     print("Experiment plan:")
-    for i, config in enumerate(configs):
+    for i, (model, config) in enumerate(experiments):
         marker = "(skip)" if i < args.start_from else ""
-        print(f"  {i + 1:>3}. {_describe_config(config):40s} {marker}")
+        print(f"  {i + 1:>3}. {_describe_config(config, model):60s} {marker}")
     print()
 
     if args.start_from > 0:
         print(f"Resuming from experiment {args.start_from + 1}")
 
-    for i, config in enumerate(configs[args.start_from :], start=args.start_from):
+    for i, (model, config) in enumerate(experiments[args.start_from :], start=args.start_from):
         print(f"\n{'=' * 60}")
-        print(f"Experiment {i + 1}/{len(configs)}: {_describe_config(config)}")
+        print(f"Experiment {i + 1}/{len(experiments)}: {_describe_config(config, model)}")
         print(f"Config: {config}")
         print(f"{'=' * 60}")
-        run_experiment(config, args.dry_run, model=args.model, params=args.params)
+        run_experiment(config, args.dry_run, model=model, params=args.params)
 
     if not args.dry_run:
         print(f"\n{'=' * 60}")
