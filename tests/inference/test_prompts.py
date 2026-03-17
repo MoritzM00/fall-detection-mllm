@@ -601,6 +601,96 @@ class TestKeywordOutputParser:
             result = parser.parse(label)
             assert result.label == label
 
+    # ========================================================================
+    # "The best answer is:" phrase priority tests
+    # ========================================================================
+
+    def test_parse_uses_best_answer_phrase_when_present(self):
+        """When 'The best answer is: <label>' is present, use only that portion."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The person appears to be walking. The best answer is: fall"
+        result = parser.parse(text)
+
+        # Should pick "fall" from the phrase, not "walk" from the rest of the text
+        assert result.label == "fall"
+
+    def test_parse_ignores_misleading_labels_before_phrase(self):
+        """Labels mentioned in analysis before the phrase should be ignored."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = (
+            "The person is standing and walking around, but then falls. The best answer is: fallen"
+        )
+        result = parser.parse(text)
+
+        assert result.label == "fallen"
+
+    def test_parse_best_answer_phrase_case_insensitive(self):
+        """'The best answer is:' phrase detection is case-insensitive."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "THE BEST ANSWER IS: walk"
+        result = parser.parse(text)
+
+        assert result.label == "walk"
+
+    def test_parse_best_answer_phrase_with_dash_separator(self):
+        """'The best answer is -' (dash instead of colon) is also accepted."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "Some analysis. The best answer is - fall"
+        result = parser.parse(text)
+
+        assert result.label == "fall"
+
+    def test_parse_best_answer_phrase_no_separator(self):
+        """'The best answer is fall' (no separator) is also accepted."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The best answer is fall"
+        result = parser.parse(text)
+
+        assert result.label == "fall"
+
+    def test_parse_fallback_to_full_text_when_no_phrase(self):
+        """When phrase is absent, falls back to searching the full text."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The person clearly falls down."
+        result = parser.parse(text)
+
+        assert result.label == "fall"
+
+    def test_parse_best_answer_phrase_with_compound_label(self):
+        """Phrase works with compound labels like 'sit down'."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The best answer is: sit_down"
+        result = parser.parse(text)
+
+        assert result.label == "sit_down"
+
+    def test_extract_best_answer_phrase_returns_none_when_absent(self):
+        """_extract_best_answer_phrase returns None when phrase is not in text."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        assert parser._extract_best_answer_phrase("no phrase here") is None
+
+    def test_extract_best_answer_phrase_returns_answer_text(self):
+        """_extract_best_answer_phrase returns the answer portion of the phrase."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        result = parser._extract_best_answer_phrase("The best answer is: fall")
+        assert result == "fall"
+
+    def test_parse_best_answer_phrase_unknown_label_defaults_to_other(self):
+        """If phrase contains an unrecognised label, defaults to 'other'."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The best answer is: flying"
+        result = parser.parse(text)
+
+        assert result.label == "other"
+
+    def test_parse_raw_text_always_contains_full_input(self):
+        """raw_text on the result is always the full original text."""
+        parser = KeywordOutputParser(LABEL2IDX)
+        text = "The person is walking. The best answer is: fall"
+        result = parser.parse(text)
+
+        assert result.raw_text == text
+
 
 class TestCoTOutputParser:
     """Tests for CoTOutputParser."""
