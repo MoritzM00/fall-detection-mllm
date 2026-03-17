@@ -43,7 +43,9 @@ def generate_experiment_configs(
 
     for num_shots in shot_values:
         for selection in selection_values:
-            for ordering in ordering_values:
+            # Random selection has no meaningful ordering — collapse to one config
+            effective_orderings = [None] if selection == "random" else ordering_values
+            for ordering in effective_orderings:
                 config = {
                     "prompt.num_shots": num_shots,
                     "prompt.shot_selection": selection,
@@ -67,13 +69,10 @@ def build_tags(config: dict) -> list[str]:
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
     ordering = config["prompt.exemplar_ordering"]
-    return [
-        "ablation",
-        "fewshot",
-        f"shots-{num_shots}",
-        f"selection-{selection}",
-        f"ordering-{ordering}",
-    ]
+    tags = ["ablation", "fewshot", f"shots-{num_shots}", f"selection-{selection}"]
+    if ordering is not None:
+        tags.append(f"ordering-{ordering}")
+    return tags
 
 
 def _experiment_name(config: dict) -> str:
@@ -92,10 +91,11 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         f"experiment={experiment}",
         f"prompt.num_shots={config['prompt.num_shots']}",
         f"prompt.shot_selection={config['prompt.shot_selection']}",
-        f"prompt.exemplar_ordering={config['prompt.exemplar_ordering']}",
         f"model={model}",
         f"model.params={params}",
     ]
+    if config["prompt.exemplar_ordering"] is not None:
+        cmd.insert(-2, f"prompt.exemplar_ordering={config['prompt.exemplar_ordering']}")
 
     tags = build_tags(config)
     cmd.append(f"wandb.tags={tags}")
@@ -140,7 +140,10 @@ def _describe_config(config: dict, model: str) -> str:
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
     ordering = config["prompt.exemplar_ordering"]
-    return f"model={model}, shots={num_shots}, selection={selection}, ordering={ordering}"
+    desc = f"model={model}, shots={num_shots}, selection={selection}"
+    if ordering is not None:
+        desc += f", ordering={ordering}"
+    return desc
 
 
 def main():
