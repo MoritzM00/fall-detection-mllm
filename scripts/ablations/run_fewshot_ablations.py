@@ -16,6 +16,7 @@ import subprocess
 
 DEFAULT_SHOT_VALUES = [1, 2, 3, 5]
 SELECTION_STRATEGIES = ["random", "balanced", "similarity"]
+DELIMITER_VALUES = ["true", "false"]
 
 
 # ---------------------------------------------------------------------------
@@ -31,24 +32,27 @@ def _config_key(config: dict) -> tuple:
 def generate_experiment_configs(
     shot_values: list[int],
     selection_values: list[str],
+    delimiter_values: list[str],
 ) -> list[dict]:
     """Generate deduplicated experiment configs.
 
-    Produces the cross-product of shot_values x selection_values.
+    Produces the cross-product of shot_values x selection_values x delimiter_values.
     """
     seen: set[tuple] = set()
     configs: list[dict] = []
 
     for num_shots in shot_values:
         for selection in selection_values:
-            config = {
-                "prompt.num_shots": num_shots,
-                "prompt.shot_selection": selection,
-            }
-            key = _config_key(config)
-            if key not in seen:
-                seen.add(key)
-                configs.append(config)
+            for use_delimiters in delimiter_values:
+                config = {
+                    "prompt.num_shots": num_shots,
+                    "prompt.shot_selection": selection,
+                    "prompt.use_delimiters": use_delimiters,
+                }
+                key = _config_key(config)
+                if key not in seen:
+                    seen.add(key)
+                    configs.append(config)
 
     return configs
 
@@ -62,7 +66,14 @@ def build_tags(config: dict) -> list[str]:
     """Build descriptive W&B tags from a config dict."""
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
-    return ["ablation", "fewshot", f"shots-{num_shots}", f"selection-{selection}"]
+    use_delimiters = config["prompt.use_delimiters"]
+    return [
+        "ablation",
+        "fewshot",
+        f"shots-{num_shots}",
+        f"selection-{selection}",
+        f"delimiters-{use_delimiters}",
+    ]
 
 
 def _experiment_name(config: dict) -> str:
@@ -81,6 +92,7 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         f"experiment={experiment}",
         f"prompt.num_shots={config['prompt.num_shots']}",
         f"prompt.shot_selection={config['prompt.shot_selection']}",
+        f"prompt.use_delimiters={config['prompt.use_delimiters']}",
         f"model={model}",
         f"model.params={params}",
     ]
@@ -127,7 +139,8 @@ def _describe_config(config: dict) -> str:
     """Return a short human-readable description of the config."""
     num_shots = config["prompt.num_shots"]
     selection = config["prompt.shot_selection"]
-    return f"shots={num_shots}, selection={selection}"
+    use_delimiters = config["prompt.use_delimiters"]
+    return f"shots={num_shots}, selection={selection}, delimiters={use_delimiters}"
 
 
 def main():
@@ -168,11 +181,20 @@ def main():
         choices=SELECTION_STRATEGIES,
         help="shot_selection strategies to sweep (default: balanced)",
     )
+    parser.add_argument(
+        "--delimiter-values",
+        type=str,
+        nargs="+",
+        default=["true"],
+        choices=DELIMITER_VALUES,
+        help="use_delimiters values to sweep (default: true)",
+    )
     args = parser.parse_args()
 
     configs = generate_experiment_configs(
         shot_values=args.shot_values,
         selection_values=args.selection_values,
+        delimiter_values=args.delimiter_values,
     )
     print(f"Total unique experiments: {len(configs)}")
     print()
