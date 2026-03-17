@@ -58,12 +58,58 @@ from sklearn.preprocessing import Normalizer
 from umap import UMAP
 
 from falldet.embeddings import load_embeddings
-from falldet.plot import COLORS, compute_publication_figsize, set_publication_rc_defaults
+from falldet.plot import compute_publication_figsize, set_publication_rc_defaults
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_DIR = Path("outputs/plots")
 MARKERS = ["o", "^", "s", "D", "v", "P"]
+PLOT_LABELS: frozenset[str] = frozenset(
+    {
+        "other",
+        "fall",
+        "walk",
+        "fallen",
+        "standing",
+        "stand_up",
+        "jump",
+        "sitting",
+        "kneeling",
+        "lying",
+        "squat_down",
+        "lie_down",
+        "sit_down",
+        "squatting",
+        "kneel_down",
+        "crawl",
+    }
+)
+LABEL_COLORS: dict[str, str] = {
+    # --- fall family ---
+    "fall": "#d62728",  # red
+    "fallen": "#ff7f0e",  # orange
+    # --- locomotion ---
+    "walk": "#2ca02c",  # green
+    "crawl": "#637939",  # dark olive-green
+    "jump": "#e377c2",  # pink
+    # --- upright postures ---
+    "standing": "#9467bd",  # purple
+    "stand_up": "#17becf",  # cyan
+    # --- seated postures ---
+    "sitting": "#1f77b4",  # blue
+    "sit_down": "#aec7e8",  # light blue
+    # --- kneeling postures ---
+    "kneeling": "#8c564b",  # brown
+    "kneel_down": "#c49c94",  # light brown
+    # --- squatting postures ---
+    "squatting": "#bcbd22",  # olive / yellow-green
+    "squat_down": "#dbdb8d",  # light olive
+    # --- lying postures ---
+    "lying": "#393b79",  # dark indigo
+    "lie_down": "#6b6ecf",  # medium indigo
+    # --- catch-all ---
+    "other": "#7f7f7f",  # grey
+}
 
 
 # ---------------------------------------------------------------------------
@@ -74,37 +120,6 @@ MARKERS = ["o", "^", "s", "D", "v", "P"]
 def _extract_label_strs(samples: list[dict]) -> list[str]:
     """Return string labels from a list of sample metadata dicts."""
     return [s.get("label_str") or str(s.get("label", "unknown")) for s in samples]
-
-
-def build_label_colormap(labels: list[str]) -> dict[str, tuple]:
-    """Assign colours to labels ordered by decreasing frequency.
-
-    ``"fall"`` is anchored to ``COLORS["error"]`` (red-orange) and
-    ``"fallen"`` to ``COLORS["secondary"]`` (orange) for semantic emphasis.
-    Remaining labels are sorted by decreasing count so the most frequent
-    classes receive the most visually distinct tab20 colours (even indices
-    first, then odd — maximally spread across the palette).
-    """
-    from collections import Counter
-
-    counts = Counter(labels)
-    anchored = {"fall": COLORS["error"], "fallen": COLORS["secondary"]}
-
-    free_labels = sorted(
-        (lb for lb in counts if lb not in anchored),
-        key=lambda lb: counts[lb],
-        reverse=True,
-    )
-
-    cmap = plt.get_cmap("tab20")
-    # Even indices (0,2,4,...) are the 10 most distinct tab20 colours;
-    # odd indices (1,3,5,...) are their lighter variants — use evens first.
-    spread_indices = list(range(0, 20, 2)) + list(range(1, 20, 2))
-
-    colormap: dict[str, tuple] = {**anchored}
-    for i, lb in enumerate(free_labels):
-        colormap[lb] = cmap.colors[spread_indices[i % len(spread_indices)]]
-    return colormap
 
 
 def reduce_embeddings(
@@ -205,10 +220,17 @@ def plot_embedding_scatter(
 def _add_shared_legend(
     fig: plt.Figure,
     axes,
-    colormap: dict[str, tuple],
+    colormap: dict[str, str],
     file_markers: dict[str, str] | None = None,
 ) -> None:
     """Attach class-colour legend (and optional per-file marker legend) below the figure."""
+    all_present: set[str] = set()
+    for ax in np.asarray(axes).ravel():
+        for coll in ax.collections:
+            lbl = coll.get_label()
+            if lbl and not lbl.startswith("_"):
+                all_present.add(lbl)
+    present = [lb for lb in colormap if lb in all_present]
     class_handles = [
         plt.Line2D(
             [0],
@@ -219,7 +241,7 @@ def _add_shared_legend(
             markersize=5,
             label=lb,
         )
-        for lb in colormap
+        for lb in present
     ]
     if file_markers:
         marker_handles = [
@@ -241,8 +263,8 @@ def _add_shared_legend(
     ncols = min(len(all_handles), 6)
     fig.legend(
         handles=all_handles,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.0),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.98),
         ncol=ncols,
         frameon=False,
         fontsize=9,
@@ -393,9 +415,15 @@ def main() -> None:
 
     for path in input_paths:
         emb_tensor, samples = load_embeddings(path)
-        all_embeddings.append(emb_tensor.float().numpy())
-        all_labels.append(_extract_label_strs(samples))
-        logger.info(f"Loaded {len(samples)} samples from {path.name}")
+        emb_np = emb_tensor.float().numpy()
+        labels_raw = _extract_label_strs(samples)
+        mask = np.array([lb in PLOT_LABELS for lb in labels_raw])
+        n_filtered = (~mask).sum()
+        if n_filtered:
+            logger.info(f"Filtered {n_filtered} samples with unknown labels from {path.name}")
+        all_embeddings.append(emb_np[mask])
+        all_labels.append([lb for lb, keep in zip(labels_raw, mask) if keep])
+        logger.info(f"Loaded {mask.sum()} samples from {path.name}")
 
     reduce_kwargs = dict(
         perplexity=args.perplexity,
@@ -410,7 +438,7 @@ def main() -> None:
     if multi_method:
         embeddings = all_embeddings[0]
         labels = all_labels[0]
-        colormap = build_label_colormap(labels)
+        colormap = LABEL_COLORS
 
         n_panels = len(methods)
         panel_w, panel_h = compute_publication_figsize(width_fraction=0.5, height_ratio=1)
@@ -474,14 +502,14 @@ def main() -> None:
             split_coords.append(reduce_embeddings(embeddings, method=method, **reduce_kwargs))
         logger.info("Reduction complete.")
 
-        combined_labels = [lb for lbls in all_labels for lb in lbls]
-        colormap = build_label_colormap(combined_labels)
+        colormap = LABEL_COLORS
         method_label = _method_axis_label(method)
 
         n_panels = len(input_paths) if args.split else 1
         width_fraction = 0.5 if n_panels > 1 else 1.0
+        height_ratio = 1.3 if n_panels > 1 else 1.0
         panel_w, panel_h = compute_publication_figsize(
-            width_fraction=width_fraction, height_ratio=1
+            width_fraction=width_fraction, height_ratio=height_ratio
         )
         fig, axes_raw = plt.subplots(
             1,
@@ -544,7 +572,7 @@ def main() -> None:
 
         _add_shared_legend(fig, axes, colormap, file_markers=file_markers)
         fig.tight_layout()
-        fig.subplots_adjust(bottom=0.15)
+        fig.subplots_adjust(top=0.80, bottom=0.15)
 
     # ------------------------------------------------------------------
     # Save
