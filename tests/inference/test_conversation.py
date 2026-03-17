@@ -7,7 +7,7 @@ from falldet.inference.conversation import (
     ConversationData,
     VideoWithMetadata,
 )
-from falldet.inference.prompts.components import EXEMPLAR_USER_PROMPT
+from falldet.inference.prompts.components import FEWSHOT_SHORT_INSTRUCTION
 from falldet.inference.prompts.parsers import JSONOutputParser, KeywordOutputParser
 from falldet.schemas import PromptConfig
 
@@ -342,7 +342,7 @@ class TestConversationBuilder:
         user_msg = conv_data.messages[1]
         text_items = [item["text"] for item in user_msg["content"] if item["type"] == "text"]
         combined = "\n".join(text_items)
-        assert EXEMPLAR_USER_PROMPT in combined
+        assert FEWSHOT_SHORT_INSTRUCTION in combined
 
     def test_exemplar_assistant_message_content(self):
         """Test that the user message contains [RESPONSE] and the formatted answer."""

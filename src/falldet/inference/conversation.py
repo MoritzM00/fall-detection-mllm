@@ -9,11 +9,11 @@ from falldet.schemas import InferenceConfig, PromptConfig
 
 from .prompts import PromptBuilder
 from .prompts.components import (
-    EXEMPLAR_USER_PROMPT,
-    SECTION_DEMONSTRATIONS,
-    SECTION_QUERY,
-    SECTION_REQUEST,
-    SECTION_RESPONSE,
+    DEMONSTRATION_DELIMITER,
+    FEWSHOT_SHORT_INSTRUCTION,
+    QUERY_DELIMITER,
+    REQUEST_DELIMITER,
+    RESPONSE_DELIMITER,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,23 +124,23 @@ class ConversationBuilder:
         for i, exemplar in enumerate(exemplars):
             answer = self._format_answer(exemplar["label_str"])
             if i == 0:
-                prefix = f"{SECTION_DEMONSTRATIONS}\n{SECTION_REQUEST}\n"
+                prefix = f"{DEMONSTRATION_DELIMITER}\n{REQUEST_DELIMITER}\n"
             else:
-                prefix = f"{SECTION_REQUEST}\n"
+                prefix = f"{REQUEST_DELIMITER}\n"
             content.append({"type": "text", "text": prefix})
             content.append({"type": "video", "video": exemplar["video"]})
             content.append(
                 {
                     "type": "text",
-                    "text": f"\n{EXEMPLAR_USER_PROMPT}\n{SECTION_RESPONSE}\n{answer}\n\n",
+                    "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}\n{RESPONSE_DELIMITER}\n{answer}\n\n",
                 }
             )
             videos.append(self._make_video(exemplar["video"]))
 
         # Target query
-        content.append({"type": "text", "text": f"{SECTION_QUERY}\n{SECTION_REQUEST}"})
+        content.append({"type": "text", "text": f"{QUERY_DELIMITER}\n{REQUEST_DELIMITER}"})
         content.append({"type": "video", "video": target_video})
-        content.append({"type": "text", "text": f"\n{EXEMPLAR_USER_PROMPT}"})
+        content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
         videos.append(self._make_video(target_video))
 
         messages = [{"role": "user", "content": content}]

@@ -121,13 +121,13 @@ FEWSHOT_PREAMBLE = textwrap.dedent("""
 """).strip()
 
 # Few-shot exemplar prompt (used for exemplar user turns)
-EXEMPLAR_USER_PROMPT = "Classify the action shown in this video."
+FEWSHOT_SHORT_INSTRUCTION = "Classify the action shown in this video."
 
 # Few-shot section markers
-SECTION_DEMONSTRATIONS = "[DEMONSTRATIONS]"
-SECTION_REQUEST = "[REQUEST]"
-SECTION_RESPONSE = "[RESPONSE]"
-SECTION_QUERY = "[QUERY]"
+DEMONSTRATION_DELIMITER = "[DEMONSTRATIONS]"
+REQUEST_DELIMITER = "[REQUEST]"
+RESPONSE_DELIMITER = "[RESPONSE]"
+QUERY_DELIMITER = "[QUERY]"
 
 
 # ============================================================================
