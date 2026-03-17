@@ -40,6 +40,12 @@ class DefinitionsVariant(StrEnum):
     EXTENDED = "extended"
 
 
+class ExemplarOrdering(StrEnum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+    RANDOM = "random"
+
+
 class PromptConfig(BaseConfig):
     """Configuration for prompt building.
 
@@ -74,7 +80,7 @@ class PromptConfig(BaseConfig):
     num_shots: int = 0
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
-    exemplar_ordering: Literal["most_similar_first", "most_similar_last"] = "most_similar_first"
+    exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
     use_delimiters: bool = True
 
     @model_validator(mode="after")

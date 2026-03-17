@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset
 
 from falldet.embeddings import compute_similarity_scores
-from falldet.schemas import InferenceConfig
+from falldet.schemas import ExemplarOrdering, InferenceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +105,16 @@ class BalancedRandomSampler(ExemplarSampler):
     ``video_segments`` attribute of the corpus dataset to read labels.
     """
 
-    def __init__(self, corpus: Dataset, num_shots: int = 5, seed: int = 0):
+    def __init__(
+        self,
+        corpus: Dataset,
+        num_shots: int = 5,
+        seed: int = 0,
+        exemplar_ordering: ExemplarOrdering = ExemplarOrdering.RANDOM,
+    ):
         super().__init__(corpus, num_shots)
         self.rng = np.random.default_rng(seed)
+        self.exemplar_ordering = exemplar_ordering
         self._class_to_indices: dict[str, list[int]] | None = None
 
     def _build_class_index(self) -> dict[str, list[int]]:
@@ -147,7 +154,19 @@ class BalancedRandomSampler(ExemplarSampler):
                 sampled = self.rng.choice(available, n, replace=False).tolist()
                 indices.extend(sampled)
 
-        self.rng.shuffle(indices)
+        if self.exemplar_ordering == ExemplarOrdering.RANDOM:
+            self.rng.shuffle(indices)
+        elif self.exemplar_ordering in (ExemplarOrdering.ASCENDING, ExemplarOrdering.DESCENDING):
+            freq = {cls: len(idxs) for cls, idxs in class_to_indices.items()}
+            label_of = {
+                idx: self.corpus.video_segments[idx]["label_str"]  # type: ignore[union-attr]
+                for idx in indices
+            }
+            indices.sort(
+                key=lambda i: freq[label_of[i]],
+                reverse=(self.exemplar_ordering == ExemplarOrdering.DESCENDING),
+            )
+
         return indices
 
 
@@ -165,7 +184,8 @@ class SimilaritySampler(ExemplarSampler):
         num_shots: int = 5,
         query_embeddings: torch.Tensor | None = None,
         corpus_embeddings: torch.Tensor | None = None,
-        exemplar_ordering: str = "most_similar_first",
+        exemplar_ordering: ExemplarOrdering = ExemplarOrdering.DESCENDING,
+        seed: int = 0,
     ):
         super().__init__(corpus, num_shots)
 
@@ -189,9 +209,15 @@ class SimilaritySampler(ExemplarSampler):
         self._retrievals: list[list[int]] = topk_indices.tolist()
         self._scores: list[list[float]] = topk_scores.tolist()
 
-        if exemplar_ordering == "most_similar_last":
+        if exemplar_ordering == ExemplarOrdering.ASCENDING:
             self._retrievals = [r[::-1] for r in self._retrievals]
             self._scores = [s[::-1] for s in self._scores]
+        elif exemplar_ordering == ExemplarOrdering.RANDOM:
+            rng = np.random.default_rng(seed)
+            for i in range(len(self._retrievals)):
+                perm = rng.permutation(len(self._retrievals[i]))
+                self._retrievals[i] = [self._retrievals[i][j] for j in perm]
+                self._scores[i] = [self._scores[i][j] for j in perm]
 
         logger.info(
             f"SimilaritySampler: {len(query_embeddings)} queries, "
@@ -253,6 +279,15 @@ def create_sampler(
             num_shots=num_shots,
             query_embeddings=query_embeddings,
             corpus_embeddings=corpus_embeddings,
+            exemplar_ordering=config.prompt.exemplar_ordering,
+            seed=seed,
+        )
+
+    if sampler_cls is BalancedRandomSampler:
+        return sampler_cls(
+            corpus=corpus,
+            num_shots=num_shots,
+            seed=seed,
             exemplar_ordering=config.prompt.exemplar_ordering,
         )
 

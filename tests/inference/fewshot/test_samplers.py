@@ -9,6 +9,7 @@ from falldet.inference.fewshot.samplers import (
     RandomSampler,
     SimilaritySampler,
 )
+from falldet.schemas import ExemplarOrdering
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -182,6 +183,43 @@ class TestBalancedRandomSampler:
 
         assert idx1 is idx2  # Same object (cached)
 
+    def test_ascending_ordering_by_class_frequency(self):
+        """ascending: rarest class first, most frequent class last."""
+        num_samples = 60
+        # action_0: 10 samples (rare), action_1: 20, action_2: 30 (frequent)
+        labels = ["action_0"] * 10 + ["action_1"] * 20 + ["action_2"] * 30
+        ds = MockDataset(num_samples=num_samples, num_classes=3)
+        ds.labels = labels
+        ds.video_segments = [{"label_str": labels[i]} for i in range(num_samples)]
+
+        sampler = BalancedRandomSampler(
+            ds, num_shots=3, seed=0, exemplar_ordering=ExemplarOrdering.ASCENDING
+        )
+        indices = sampler.sample(query_index=0)
+        assert len(indices) == 3
+
+        freq = {"action_0": 10, "action_1": 20, "action_2": 30}
+        freqs = [freq[ds.video_segments[i]["label_str"]] for i in indices]
+        assert freqs == sorted(freqs)
+
+    def test_descending_ordering_by_class_frequency(self):
+        """descending: most frequent class first, rarest class last."""
+        num_samples = 60
+        labels = ["action_0"] * 10 + ["action_1"] * 20 + ["action_2"] * 30
+        ds = MockDataset(num_samples=num_samples, num_classes=3)
+        ds.labels = labels
+        ds.video_segments = [{"label_str": labels[i]} for i in range(num_samples)]
+
+        sampler = BalancedRandomSampler(
+            ds, num_shots=3, seed=0, exemplar_ordering=ExemplarOrdering.DESCENDING
+        )
+        indices = sampler.sample(query_index=0)
+        assert len(indices) == 3
+
+        freq = {"action_0": 10, "action_1": 20, "action_2": 30}
+        freqs = [freq[ds.video_segments[i]["label_str"]] for i in indices]
+        assert freqs == sorted(freqs, reverse=True)
+
 
 # ---------------------------------------------------------------------------
 # SimilaritySampler
@@ -277,7 +315,7 @@ class TestSimilaritySampler:
         with pytest.raises(ValueError, match="requires both"):
             SimilaritySampler(ds, num_shots=3, query_embeddings=None, corpus_embeddings=None)
 
-    def test_most_similar_first_is_descending(self, embeddings):
+    def test_descending_ordering_is_descending(self, embeddings):
         query, corpus = embeddings
         ds = MockDataset(num_samples=20)
         sampler = SimilaritySampler(
@@ -285,14 +323,14 @@ class TestSimilaritySampler:
             num_shots=5,
             query_embeddings=query,
             corpus_embeddings=corpus,
-            exemplar_ordering="most_similar_first",
+            exemplar_ordering=ExemplarOrdering.DESCENDING,
         )
 
         for qi in range(len(query)):
             scores = sampler.get_scores(qi)
             assert scores == sorted(scores, reverse=True)
 
-    def test_most_similar_last_is_ascending(self, embeddings):
+    def test_ascending_ordering_is_ascending(self, embeddings):
         query, corpus = embeddings
         ds = MockDataset(num_samples=20)
         sampler = SimilaritySampler(
@@ -300,34 +338,58 @@ class TestSimilaritySampler:
             num_shots=5,
             query_embeddings=query,
             corpus_embeddings=corpus,
-            exemplar_ordering="most_similar_last",
+            exemplar_ordering=ExemplarOrdering.ASCENDING,
         )
 
         for qi in range(len(query)):
             scores = sampler.get_scores(qi)
             assert scores == sorted(scores)
 
-    def test_most_similar_last_reverses_indices(self, embeddings):
+    def test_ascending_reverses_descending_indices(self, embeddings):
         query, corpus = embeddings
         ds = MockDataset(num_samples=20)
-        sampler_first = SimilaritySampler(
+        sampler_desc = SimilaritySampler(
             ds,
             num_shots=5,
             query_embeddings=query,
             corpus_embeddings=corpus,
-            exemplar_ordering="most_similar_first",
+            exemplar_ordering=ExemplarOrdering.DESCENDING,
         )
-        sampler_last = SimilaritySampler(
+        sampler_asc = SimilaritySampler(
             ds,
             num_shots=5,
             query_embeddings=query,
             corpus_embeddings=corpus,
-            exemplar_ordering="most_similar_last",
+            exemplar_ordering=ExemplarOrdering.ASCENDING,
         )
 
         for qi in range(len(query)):
-            assert sampler_first.sample(qi) == sampler_last.sample(qi)[::-1]
-            assert sampler_first.get_scores(qi) == sampler_last.get_scores(qi)[::-1]
+            assert sampler_desc.sample(qi) == sampler_asc.sample(qi)[::-1]
+            assert sampler_desc.get_scores(qi) == sampler_asc.get_scores(qi)[::-1]
+
+    def test_random_ordering_same_set_different_order(self, embeddings):
+        query, corpus = embeddings
+        ds = MockDataset(num_samples=20)
+        sampler_desc = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering=ExemplarOrdering.DESCENDING,
+        )
+        sampler_rand = SimilaritySampler(
+            ds,
+            num_shots=5,
+            query_embeddings=query,
+            corpus_embeddings=corpus,
+            exemplar_ordering=ExemplarOrdering.RANDOM,
+            seed=7,
+        )
+
+        for qi in range(len(query)):
+            assert sorted(sampler_desc.sample(qi)) == sorted(sampler_rand.sample(qi))
+        # At least one query should have a different order
+        assert any(sampler_desc.sample(qi) != sampler_rand.sample(qi) for qi in range(len(query)))
 
 
 # ---------------------------------------------------------------------------
