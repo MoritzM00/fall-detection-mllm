@@ -50,12 +50,10 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from hnne import HNNE
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer
-from umap import UMAP
 
 from falldet.embeddings import load_embeddings
 from falldet.plot import compute_publication_figsize, set_publication_rc_defaults
@@ -152,6 +150,8 @@ def reduce_embeddings(
             n_jobs=-1,
         )
     elif method == "umap":
+        from umap import UMAP
+
         reducer = UMAP(
             n_components=2,
             n_neighbors=n_neighbors,
@@ -159,6 +159,8 @@ def reduce_embeddings(
             random_state=random_state,
         )
     elif method == "hnne":
+        from hnne import HNNE
+
         reducer = HNNE(n_components=2, metric="cosine", random_state=random_state)
     elif method == "pca":
         reducer = PCA(n_components=2, random_state=random_state)
