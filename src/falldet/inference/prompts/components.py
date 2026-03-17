@@ -21,7 +21,6 @@ ROLE_COMPONENT_VIDEO_SPECIALIZED = textwrap.dedent("""
     You are an expert video analyst specializing in Human Activity Recognition (HAR) focused on fall detection and post-fall assessment.
 """).strip()
 
-
 TASK_INSTRUCTION = textwrap.dedent("""
     Task:
     Analyze the video clip and classify the primary action being performed.
@@ -116,8 +115,19 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
     You are a helpful assistant. Before providing your final answer, conduct a detailed analysis of the question. Enclose your entire thinking process within <think> and </think> tags. After your analysis, provide your final answer separately.
 """).strip()
 
+# Few-shot: explanation added to the system instruction to set up the ICL format
+FEWSHOT_PREAMBLE = textwrap.dedent("""
+    You will be shown example videos paired with correct responses. After the examples, classify the action in the final video using only the allowed labels. Match the exact output format used in the examples.
+""").strip()
+
 # Few-shot exemplar prompt (used for exemplar user turns)
-EXEMPLAR_USER_PROMPT = "Classify the action shown in this video."
+FEWSHOT_SHORT_INSTRUCTION = "Classify the action shown in this video."
+
+# Few-shot section markers
+DEMONSTRATION_DELIMITER = "[DEMONSTRATIONS]"
+REQUEST_DELIMITER = "[REQUEST]"
+RESPONSE_DELIMITER = "[RESPONSE]"
+QUERY_DELIMITER = "[QUERY]"
 
 
 # ============================================================================

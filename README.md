@@ -35,6 +35,44 @@ To run CoT experiments with the default model, execute
 python scripts/vllm_inference.py experiment=zeroshot_cot
 ```
 
+Predictions and evaluation artifacts are saved under the configured `output_dir`,
+for example `output_dir/predictions/<wandb-project>/` and
+`output_dir/evaluation_results/<wandb-project>/`.
+
+#### Video Tensor Caching
+
+Preprocessing videos (PyAV decode + resize/crop) is deterministic and can be cached to avoid
+repeating work across runs.  Two independent cache layers are available:
+
+**Disk cache** — preprocessed tensors saved as `.pt` files, persistent across runs.
+
+```shell
+# Pre-build the cache (must run before inference with cache_read_only=true)
+python scripts/build_tensor_cache.py experiment=zeroshot data.cache_dir=outputs/tensor_cache
+
+# Run inference using the cache (reads only, never writes)
+python scripts/vllm_inference.py experiment=zeroshot data.cache_dir=outputs/tensor_cache
+```
+
+Each dataset × split × mode combination is stored in an isolated namespace, so changing
+`num_frames`, `model_fps`, or `data.size` automatically uses a new namespace and ignores stale
+entries.  `cache_read_only=true` (the default) ensures inference never accidentally populates
+the cache; only `build_tensor_cache.py` writes.
+
+**In-memory cache** — lazy dict populated on first access, useful for the few-shot exemplar
+corpus where the same train videos are loaded repeatedly across batches.
+
+```shell
+python scripts/vllm_inference.py experiment=fewshot data.cache_in_memory=true
+```
+
+Only the exemplar corpus gets in-memory caching (not the test dataloader, which accesses each
+video once and uses forked worker processes anyway).  Cache hit/miss stats are logged every
+500 accesses and as a final summary after inference.
+
+Both layers can be combined: the exemplar corpus will hit memory first, then fall back to disk,
+then decode from video.
+
 #### Computing Embeddings
 
 Similarity-based few-shot requires precomputed embeddings. To compute them:

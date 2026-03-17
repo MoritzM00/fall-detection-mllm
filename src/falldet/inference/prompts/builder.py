@@ -5,6 +5,7 @@ from falldet.schemas import PromptConfig
 from .components import (
     COT_INSTRUCTION,
     DEFINITIONS_VARIANTS,
+    FEWSHOT_PREAMBLE,
     LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
     OUTPUT_FORMAT_VARIANTS,
@@ -57,6 +58,31 @@ class PromptBuilder:
         # 6. Output format instruction (skip for embed mode)
         if self.config.output_format is not None:
             sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
+
+        return "\n\n".join(sections)
+
+    def build_fewshot_system_instruction(self) -> str:
+        """Assemble the system instruction for few-shot mode.
+
+        Includes all context-setting components (role, task, labels, definitions)
+        plus an exemplar preamble explaining the ICL format and the output format.
+        CoT is intentionally excluded (not supported with few-shot).
+
+        Returns:
+            Complete system instruction string for few-shot conversations.
+        """
+        sections = []
+
+        if self.config.role_variant:
+            sections.append(ROLE_VARIANTS[self.config.role_variant])
+
+        sections.append(TASK_VARIANTS[self.config.task_variant])
+        sections.append(self._build_labels_section())
+
+        if self.config.definitions_variant:
+            sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
+
+        sections.append(FEWSHOT_PREAMBLE)
 
         return "\n\n".join(sections)
 

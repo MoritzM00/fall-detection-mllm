@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class BaseConfig(BaseModel):
@@ -38,6 +38,12 @@ class LabelsVariant(StrEnum):
 class DefinitionsVariant(StrEnum):
     STANDARD = "standard"
     EXTENDED = "extended"
+
+
+class ExemplarOrdering(StrEnum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+    RANDOM = "random"
 
 
 class PromptConfig(BaseConfig):
@@ -74,6 +80,13 @@ class PromptConfig(BaseConfig):
     num_shots: int = 0
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
+    exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
+
+    @model_validator(mode="after")
+    def validate_fewshot_cot(self) -> "PromptConfig":
+        if self.cot and self.num_shots > 0:
+            raise ValueError("cot=True is not supported with num_shots > 0")
+        return self
 
     # Variant selectors
     role_variant: RoleVariant | None = RoleVariant.STANDARD
@@ -205,6 +218,9 @@ class DataConfig(BaseConfig):
     mode: str = "test"
     size: int | None = 448
     max_size: int | None = None
+    cache_dir: str | None = None
+    cache_read_only: bool = True  # Only build_tensor_cache.py should write
+    cache_in_memory: bool = False
 
 
 class WandbConfig(BaseConfig):

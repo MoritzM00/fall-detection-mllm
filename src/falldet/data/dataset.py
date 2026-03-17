@@ -2,6 +2,7 @@ import csv
 import logging
 import random
 import time
+from typing import TYPE_CHECKING
 
 import av
 import numpy as np
@@ -9,6 +10,9 @@ import torch
 import torchvision.transforms.v2 as v2
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
+
+if TYPE_CHECKING:
+    from falldet.data.cache import TensorDiskCache
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,8 @@ class GenericVideoDataset(Dataset):
         size=None,
         max_size=None,
         seed=0,
+        disk_cache: "TensorDiskCache | None" = None,
+        cache_in_memory: bool = False,
     ):
         self.video_root = video_root
         self.slow_video_file = annotations_file.replace(".csv", "_slow.csv")
@@ -44,6 +50,17 @@ class GenericVideoDataset(Dataset):
         self.size = size
         self.max_size = max_size
         self.seed = seed
+        self._disk_cache = disk_cache
+        self._cache_in_memory = cache_in_memory
+        self._memory_cache: dict[int, dict] = {}
+        self._stat_disk_hits = 0
+        self._stat_disk_misses = 0
+        self._stat_mem_hits = 0
+        self._stat_log_interval = 500  # log every N cache-layer accesses
+
+    def enable_memory_cache(self) -> None:
+        """Enable the lazy in-memory cache. Safe to call after construction."""
+        self._cache_in_memory = True
 
     def load_annotations(self, annotations_file):
         # call manually after init if needed
@@ -89,12 +106,74 @@ class GenericVideoDataset(Dataset):
         )
         return inputs
 
+    def _compute_cache_key(self, idx: int) -> str:
+        """Compute a cache key for the item at idx. Override in subclasses for segment-aware keys."""
+        from falldet.data.cache import compute_cache_key
+
+        path, _ = self._id2label(idx)
+        return compute_cache_key(video_path=str(path), idx=idx)
+
+    def _load_item_cached(self, idx: int) -> dict:
+        """Load item with optional caching: memory → disk → decode."""
+        has_disk = self._disk_cache is not None
+        has_mem = self._cache_in_memory
+
+        if not has_disk and not has_mem:
+            return self.load_item(idx)
+
+        # Layer 1: in-memory uses idx directly — no hash computation on hit.
+        if has_mem and idx in self._memory_cache:
+            self._stat_mem_hits += 1
+            self._maybe_log_cache_stats()
+            return self._memory_cache[idx]
+
+        # Layer 2: disk (hash computed only when needed).
+        if has_disk:
+            disk_key = self._compute_cache_key(idx)
+            cached = self._disk_cache.get(disk_key)
+            if cached is not None:
+                self._stat_disk_hits += 1
+                self._maybe_log_cache_stats()
+                if has_mem:
+                    self._memory_cache[idx] = cached
+                return cached
+            self._stat_disk_misses += 1
+            self._maybe_log_cache_stats()
+        else:
+            disk_key = None
+
+        # Cache miss: decode from video.
+        result = self.load_item(idx)
+        if has_disk:
+            self._disk_cache.put(disk_key, result)  # type: ignore[arg-type]
+        if has_mem:
+            self._memory_cache[idx] = result
+        return result
+
+    def _maybe_log_cache_stats(self) -> None:
+        total = self._stat_disk_hits + self._stat_disk_misses + self._stat_mem_hits
+        if total % self._stat_log_interval == 0:
+            self.log_cache_stats()
+
+    def log_cache_stats(self) -> None:
+        """Log a one-line cache hit-rate summary."""
+        disk_total = self._stat_disk_hits + self._stat_disk_misses
+        disk_rate = self._stat_disk_hits / disk_total if disk_total else 0.0
+        parts = []
+        if self._cache_in_memory:
+            parts.append(f"mem={self._stat_mem_hits}")
+        if self._disk_cache is not None:
+            parts.append(f"disk={self._stat_disk_hits}/{disk_total} ({disk_rate:.0%})")
+        if parts:
+            label = getattr(self, "dataset_name", type(self).__name__)
+            logger.info(f"Cache stats [{label}]: {', '.join(parts)}")
+
     def __getitem__(self, idx):
         original_idx = idx
         retries = 0
         while retries < self.max_retries:
             try:
-                return self.load_item(idx)
+                return self._load_item_cached(idx)
 
             except Exception as e:
                 retries += 1

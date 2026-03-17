@@ -7,6 +7,7 @@ from falldet.inference.conversation import (
     ConversationData,
     VideoWithMetadata,
 )
+from falldet.inference.prompts.components import FEWSHOT_SHORT_INSTRUCTION
 from falldet.inference.prompts.parsers import JSONOutputParser, KeywordOutputParser
 from falldet.schemas import PromptConfig
 
@@ -134,7 +135,7 @@ class TestConversationBuilder:
         assert conv_data.videos[0].frames is target_video
 
     def test_few_shot_messages_structure(self):
-        """Test message structure with exemplars passed at build time."""
+        """Test message structure: system + 1 user message containing all exemplars and target."""
         num_exemplars = 2
         exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(num_shots=num_exemplars)
@@ -143,31 +144,31 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: 2 user-assistant pairs + 1 target user = 5 messages
-        assert len(conv_data.messages) == 5
+        # system + 1 user message
+        assert len(conv_data.messages) == 2
+        assert conv_data.messages[0]["role"] == "system"
+        assert conv_data.messages[1]["role"] == "user"
 
-        # Check message order: user, assistant, user, assistant, user
-        assert conv_data.messages[0]["role"] == "user"
-        assert conv_data.messages[1]["role"] == "assistant"
-        assert conv_data.messages[2]["role"] == "user"
-        assert conv_data.messages[3]["role"] == "assistant"
-        assert conv_data.messages[4]["role"] == "user"
+        # Single user message contains all videos (N exemplars + target)
+        user_content = conv_data.messages[1]["content"]
+        video_items = [item for item in user_content if item["type"] == "video"]
+        assert len(video_items) == num_exemplars + 1
 
-    def test_few_shot_message_order_with_system(self):
-        """Test message order includes system message when needed (InternVL CoT)."""
+    def test_few_shot_system_message_contains_introduction(self):
+        """Test that system message is always present in few-shot and contains preamble."""
         exemplars = create_mock_exemplars(1)
-        config = PromptConfig(num_shots=1, cot=True, model_family="InternVL")
+        config = PromptConfig(num_shots=1, role_variant="standard")
         builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: system, user, assistant, user = 4 messages
-        assert len(conv_data.messages) == 4
+        # System message is always present in few-shot
         assert conv_data.messages[0]["role"] == "system"
-        assert conv_data.messages[1]["role"] == "user"
-        assert conv_data.messages[2]["role"] == "assistant"
-        assert conv_data.messages[3]["role"] == "user"
+        system_text = conv_data.messages[0]["content"][0]["text"]
+        assert "Role:" in system_text
+        assert "Task:" in system_text
+        assert "Allowed Labels:" in system_text
 
     def test_few_shot_video_count(self):
         """Test that few-shot has correct number of videos."""
@@ -328,8 +329,8 @@ class TestConversationBuilder:
 
         assert inputs_a["prompt"] != inputs_b["prompt"]
 
-    def test_exemplar_user_message_content(self):
-        """Test that exemplar user messages have correct content."""
+    def test_exemplar_user_message_contains_prompt(self):
+        """Test that EXEMPLAR_USER_PROMPT appears in the user message."""
         exemplars = create_mock_exemplars(1)
         config = PromptConfig(num_shots=1)
         builder = ConversationBuilder(config, LABEL2IDX)
@@ -337,17 +338,14 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        user_msg = conv_data.messages[0]
-        assert user_msg["role"] == "user"
-
-        content = user_msg["content"]
-        assert len(content) == 2
-        assert content[0]["type"] == "video"
-        assert content[1]["type"] == "text"
-        assert "Classify" in content[1]["text"]
+        # User message is at index 1 (after system)
+        user_msg = conv_data.messages[1]
+        text_items = [item["text"] for item in user_msg["content"] if item["type"] == "text"]
+        combined = "\n".join(text_items)
+        assert FEWSHOT_SHORT_INSTRUCTION in combined
 
     def test_exemplar_assistant_message_content(self):
-        """Test that exemplar assistant messages have correct content."""
+        """Test that the user message contains [RESPONSE] and the formatted answer."""
         exemplars = create_mock_exemplars(1)
         exemplars[0]["label_str"] = "fall"
         config = PromptConfig(num_shots=1, output_format="json")
@@ -356,13 +354,12 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        asst_msg = conv_data.messages[1]
-        assert asst_msg["role"] == "assistant"
-
-        content = asst_msg["content"]
-        assert len(content) == 1
-        assert content[0]["type"] == "text"
-        assert '"label": "fall"' in content[0]["text"]
+        # User message is at index 1 (after system)
+        user_msg = conv_data.messages[1]
+        text_items = [item["text"] for item in user_msg["content"] if item["type"] == "text"]
+        combined = "\n".join(text_items)
+        assert "[RESPONSE]" in combined
+        assert '"label": "fall"' in combined
 
     def test_target_message_has_full_prompt(self):
         """Test that target message contains full prompt (not exemplar prompt)."""
@@ -413,10 +410,11 @@ class TestConversationBuilder:
         assert conv_data.messages[1]["role"] == "user"
 
     def test_system_instruction_with_few_shot(self):
-        """Test that system_instruction works with few-shot exemplars."""
-        exemplars = create_mock_exemplars(1)
+        """Test that system_instruction overrides the auto-generated preamble in few-shot."""
+        num_exemplars = 1
+        exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(
-            num_shots=1,
+            num_shots=num_exemplars,
             system_instruction="Custom system instruction",
         )
         builder = ConversationBuilder(config, LABEL2IDX)
@@ -424,10 +422,51 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: system, user, assistant, user = 4 messages
-        assert len(conv_data.messages) == 4
+        # system + 1 user message
+        assert len(conv_data.messages) == 2
         assert conv_data.messages[0]["role"] == "system"
         assert conv_data.messages[0]["content"][0]["text"] == "Custom system instruction"
         assert conv_data.messages[1]["role"] == "user"
-        assert conv_data.messages[2]["role"] == "assistant"
-        assert conv_data.messages[3]["role"] == "user"
+
+    def test_fewshot_section_markers(self):
+        """Test that section markers appear in the single user message."""
+        exemplars = create_mock_exemplars(2)
+        config = PromptConfig(num_shots=2)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        all_text = "\n".join(
+            item["text"]
+            for msg in conv_data.messages
+            for item in msg["content"]
+            if item.get("type") == "text"
+        )
+        assert "[DEMONSTRATIONS]" in all_text
+        assert "[REQUEST]" in all_text
+        assert "[RESPONSE]" in all_text
+        assert "[QUERY]" in all_text
+
+        # [DEMONSTRATIONS] is in the first text item of the single user message
+        user_content = conv_data.messages[1]["content"]
+        first_text = user_content[0]["text"]
+        assert "[DEMONSTRATIONS]" in first_text
+        assert "[REQUEST]" in first_text
+
+    def test_fewshot_single_user_message_with_all_videos(self):
+        """Test that all exemplars and target are in a single user message."""
+        num_exemplars = 3
+        exemplars = create_mock_exemplars(num_exemplars)
+        config = PromptConfig(num_shots=num_exemplars)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        user_messages = [m for m in conv_data.messages if m["role"] == "user"]
+        assert len(user_messages) == 1
+
+        # Single user message contains all exemplar + target videos
+        video_items = [item for item in user_messages[0]["content"] if item["type"] == "video"]
+        assert len(video_items) == num_exemplars + 1
