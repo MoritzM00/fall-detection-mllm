@@ -39,12 +39,12 @@ SHOTS_RUNS: dict[str, tuple[str, int]] = {
     "TODO_internvl_5": ("InternVL3.5-8B", 5),
     "TODO_internvl_7": ("InternVL3.5-8B", 7),
     "TODO_internvl_10": ("InternVL3.5-8B", 10),
-    "TODO_qwen_1": ("Qwen3-VL-8B", 1),
-    "TODO_qwen_2": ("Qwen3-VL-8B", 2),
-    "TODO_qwen_3": ("Qwen3-VL-8B", 3),
-    "TODO_qwen_5": ("Qwen3-VL-8B", 5),
-    "TODO_qwen_7": ("Qwen3-VL-8B", 7),
-    "TODO_qwen_10": ("Qwen3-VL-8B", 10),
+    "33okjfx5": ("Qwen3-VL-8B", 1),
+    "nw3tonsj": ("Qwen3-VL-8B", 2),
+    "xhwi2y8g": ("Qwen3-VL-8B", 3),
+    "8x2iouxt": ("Qwen3-VL-8B", 5),
+    "14v4fcb0": ("Qwen3-VL-8B", 7),
+    "h60e7l5k": ("Qwen3-VL-8B", 10),
 }
 
 
@@ -145,7 +145,6 @@ def generate_latex(data: dict[tuple[str, int], list[float | None]]) -> str:
 \\renewcommand{{\\arraystretch}}{{1.2}}
 \\begin{{table}}[htp]
     \\centering
-    \\resizebox{{\\columnwidth}}{{!}}{{%
     \\begin{{tabular}}{{@{{}}l rrrr rrrr@{{}}}}
         \\toprule
         \\multirow{{2}}{{*}}{{\\textbf{{Shots}}}} &
@@ -158,7 +157,7 @@ def generate_latex(data: dict[tuple[str, int], list[float | None]]) -> str:
 {rows_str}
 
         \\bottomrule
-    \\end{{tabular}}}}
+    \\end{{tabular}}
     \\caption{{\\textbf{{Few-Shot Shots Ablation.}} Effect of the number of in-context exemplars on fall detection performance. Exemplars are selected by similarity (ascending order, with delimiters). Best results per model are \\textbf{{bolded}}.}}
     \\label{{tab:fewshot_shots_ablation}}
 \\end{{table}}

@@ -14,7 +14,7 @@ import wandb
 # Configuration
 # ============================================================================
 ENTITY = "moritzm00"
-PROJECT = "fall-detection-fewshot"  # TODO: update to actual W&B project name
+PROJECT = "fall-detection-fewshot"
 
 DATASET = "OOPS"
 SPLIT = "cs"
@@ -65,13 +65,13 @@ SELECTION_RUNS: dict[str, tuple[str, str, str | None]] = {
     "TODO_internvl_random": ("InternVL3.5-8B", "random", None),
     "TODO_internvl_balanced_asc": ("InternVL3.5-8B", "balanced", "ascending"),
     "TODO_internvl_balanced_desc": ("InternVL3.5-8B", "balanced", "descending"),
-    "TODO_internvl_similarity_asc": ("InternVL3.5-8B", "similarity", "ascending"),
+    "szm3htq5": ("InternVL3.5-8B", "similarity", "ascending"),
     "TODO_internvl_similarity_desc": ("InternVL3.5-8B", "similarity", "descending"),
-    "TODO_qwen_random": ("Qwen3-VL-8B", "random", None),
-    "TODO_qwen_balanced_asc": ("Qwen3-VL-8B", "balanced", "ascending"),
-    "TODO_qwen_balanced_desc": ("Qwen3-VL-8B", "balanced", "descending"),
-    "TODO_qwen_similarity_asc": ("Qwen3-VL-8B", "similarity", "ascending"),
-    "TODO_qwen_similarity_desc": ("Qwen3-VL-8B", "similarity", "descending"),
+    "qezzftr0": ("Qwen3-VL-8B", "random", None),
+    "0kl6yqw0": ("Qwen3-VL-8B", "balanced", "ascending"),
+    "lsgd8lyo": ("Qwen3-VL-8B", "balanced", "descending"),
+    "5phujyiy": ("Qwen3-VL-8B", "similarity", "ascending"),
+    "s4oswdvr": ("Qwen3-VL-8B", "similarity", "descending"),
 }
 
 
@@ -182,13 +182,14 @@ def generate_latex(data: dict[tuple[str, str, str | None], list[float | None]]) 
     sub_header = " & ".join(f"\\multicolumn{{1}}{{c}}{{{h}}}" for h in METRIC_HEADERS)
 
     table = f"""\\begingroup
-\\renewcommand{{\\arraystretch}}{{1.2}}
+\\renewcommand{{\\arraystretch}}{{1.1}}
 \\begin{{table}}[htp]
     \\centering
-    \\resizebox{{\\columnwidth}}{{!}}{{%
+    \\caption{{\\textbf{{Few-Shot Selection \\& Ordering Ablation.}} Effect of exemplar selection strategy and ordering on fall detection performance with $k=5$. Best results per model are \\textbf{{bolded}}.}}
+    \\label{{tab:fewshot_selection_ablation}}
     \\begin{{tabular}}{{@{{}}ll rrrr rrrr@{{}}}}
         \\toprule
-        \\multirow{{2}}{{*}}{{\\textbf{{Selection}}}} &
+        \\multirow{{2}}{{*}}{{\\textbf{{Method}}}} &
         \\multirow{{2}}{{*}}{{\\textbf{{Order}}}} &
         \\multicolumn{{{n_metric_cols}}}{{c}}{{\\textbf{{{MODELS[0]}}}}} &
         \\multicolumn{{{n_metric_cols}}}{{c}}{{\\textbf{{{MODELS[1]}}}}} \\\\
@@ -199,9 +200,7 @@ def generate_latex(data: dict[tuple[str, str, str | None], list[float | None]]) 
 {rows_str}
 
         \\bottomrule
-    \\end{{tabular}}}}
-    \\caption{{\\textbf{{Few-Shot Selection \\& Ordering Ablation.}} Effect of exemplar selection strategy and ordering on fall detection performance with 5 in-context shots (with delimiters). Best results per model are \\textbf{{bolded}}.}}
-    \\label{{tab:fewshot_selection_ablation}}
+    \\end{{tabular}}
 \\end{{table}}
 \\endgroup"""
 
