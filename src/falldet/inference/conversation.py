@@ -138,7 +138,7 @@ class ConversationBuilder:
             videos.append(self._make_video(exemplar["video"]))
 
         # Target query
-        content.append({"type": "text", "text": f"{QUERY_DELIMITER}\n{REQUEST_DELIMITER}"})
+        content.append({"type": "text", "text": f"{QUERY_DELIMITER}\n{REQUEST_DELIMITER}\n"})
         content.append({"type": "video", "video": target_video})
         content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
         videos.append(self._make_video(target_video))

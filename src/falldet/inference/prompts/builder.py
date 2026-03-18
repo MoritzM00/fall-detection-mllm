@@ -6,6 +6,7 @@ from .components import (
     COT_INSTRUCTION,
     DEFINITIONS_VARIANTS,
     FEWSHOT_PREAMBLE,
+    INTERNVL_DO_NOT_THINK_INSTRUCTION,
     LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
     OUTPUT_FORMAT_VARIANTS,
@@ -83,6 +84,8 @@ class PromptBuilder:
             sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
 
         sections.append(FEWSHOT_PREAMBLE)
+        if self.config.model_family.lower() == "internvl":
+            sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
 
         return "\n\n".join(sections)
 
