@@ -70,8 +70,8 @@ SELECTION_RUNS: dict[str, tuple[str, str, str | None]] = {
     "qezzftr0": ("Qwen3-VL-8B", "random", None),
     "0kl6yqw0": ("Qwen3-VL-8B", "balanced", "ascending"),
     "lsgd8lyo": ("Qwen3-VL-8B", "balanced", "descending"),
-    "5phujyiy": ("Qwen3-VL-8B", "similarity", "ascending"),
-    "s4oswdvr": ("Qwen3-VL-8B", "similarity", "descending"),
+    "9ek95yp9": ("Qwen3-VL-8B", "similarity", "ascending"),
+    "3xk84wk1": ("Qwen3-VL-8B", "similarity", "descending"),
 }
 
 
@@ -148,9 +148,9 @@ def generate_latex(data: dict[tuple[str, str, str | None], list[float | None]]) 
     prev_selection: str | None = None
 
     for row_idx, (selection, ordering) in enumerate(ROW_KEYS):
-        # Insert \midrule between selection groups
+        # Separate selection groups with whitespace instead of extra rules.
         if prev_selection is not None and selection != prev_selection:
-            rows.append("        \\midrule")
+            rows.append("        \\addlinespace[4pt]")
 
         span = SELECTION_SPAN[selection]
         order_str = ORDER_DISPLAY[ordering]
