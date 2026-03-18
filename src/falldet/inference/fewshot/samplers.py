@@ -129,7 +129,13 @@ class BalancedRandomSampler(ExemplarSampler):
             class_to_indices.setdefault(label, []).append(idx)
 
         self._class_to_indices = class_to_indices
-        logger.info(f"Built class index: {len(class_to_indices)} classes")
+        dist_str = ", ".join(
+            f"{cls}: {len(idxs)}"
+            for cls, idxs in sorted(class_to_indices.items(), key=lambda x: len(x[1]), reverse=True)
+        )
+        logger.info(
+            f"Built class index: {len(class_to_indices)} classes — distribution: {dist_str}"
+        )
         return class_to_indices
 
     def sample(self, query_index: int) -> list[int]:
@@ -140,11 +146,13 @@ class BalancedRandomSampler(ExemplarSampler):
         if not classes:
             return []
 
-        # Distribute shots as evenly as possible across classes
-        shots_per_class = {cls: self.num_shots // num_classes for cls in classes}
+        # Distribute shots across classes, giving priority to most frequent classes
+        classes_by_freq = sorted(classes, key=lambda c: len(class_to_indices[c]), reverse=True)
+        base = self.num_shots // num_classes
         remainder = self.num_shots % num_classes
-        for cls in self.rng.choice(classes, remainder, replace=False):
-            shots_per_class[cls] += 1
+        shots_per_class = {
+            cls: base + (1 if i < remainder else 0) for i, cls in enumerate(classes_by_freq)
+        }
 
         indices: list[int] = []
         for cls, num_to_sample in shots_per_class.items():
