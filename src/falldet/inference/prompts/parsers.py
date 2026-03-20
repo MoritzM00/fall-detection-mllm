@@ -23,6 +23,7 @@ class ParseResult:
     label: str
     reasoning: str | None = None
     raw_text: str = ""
+    content: str | None = None
 
 
 class OutputParser(Protocol):
@@ -302,8 +303,9 @@ class CoTOutputParser:
             logger.warning("No content found after reasoning tags. Parsing entire text as answer.")
             result = self.answer_parser.parse(text)
 
-        # Add reasoning to result
+        # Add reasoning and content to result
         result.reasoning = reasoning
+        result.content = content
         result.raw_text = text
 
         return result

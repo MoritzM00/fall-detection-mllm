@@ -215,6 +215,7 @@ def main(cfg: DictConfig):
         prediction = sample.copy()
         prediction["predicted_label"] = result.label
         prediction["reasoning"] = result.reasoning or ""
+        prediction["content"] = result.content or ""
         prediction["raw_output"] = result.raw_text
         predictions.append(prediction)
 
