@@ -1,5 +1,6 @@
 """Tests for the ConversationBuilder class."""
 
+import pytest
 import torch
 
 from falldet.inference.conversation import (
@@ -9,7 +10,7 @@ from falldet.inference.conversation import (
 )
 from falldet.inference.prompts.components import FEWSHOT_SHORT_INSTRUCTION
 from falldet.inference.prompts.parsers import JSONOutputParser, KeywordOutputParser
-from falldet.schemas import PromptConfig
+from falldet.schemas import FewshotFormat, PromptConfig
 
 # Test data
 LABEL2IDX = {
@@ -470,3 +471,135 @@ class TestConversationBuilder:
         # Single user message contains all exemplar + target videos
         video_items = [item for item in user_messages[0]["content"] if item["type"] == "video"]
         assert len(video_items) == num_exemplars + 1
+
+
+# ---------------------------------------------------------------------------
+# Parametrized tests for fewshot_format and fewshot_labeled
+# ---------------------------------------------------------------------------
+
+_NUM_SHOTS = 2
+
+# Expected role sequences for each format with _NUM_SHOTS=2
+_FORMAT_ROLES = [
+    (
+        FewshotFormat.SINGLE_MESSAGE,
+        ["system", "user"],
+    ),
+    (
+        FewshotFormat.USER_TURNS,
+        # preamble user + exemplar1 user + exemplar2 user + target user
+        ["user", "user", "user", "user"],
+    ),
+    (
+        FewshotFormat.SYSTEM_TURNS,
+        # preamble system + exemplar1 system + exemplar2 system + classify system + target user
+        ["system", "system", "system", "system", "user"],
+    ),
+    (
+        FewshotFormat.MULTI_TURN,
+        # preamble system + (user + assistant) * 2 + target user
+        ["system", "user", "assistant", "user", "assistant", "user"],
+    ),
+]
+
+
+class TestFewshotFormats:
+    """Parametrized tests for all fewshot_format values."""
+
+    @pytest.mark.parametrize("fmt,expected_roles", _FORMAT_ROLES)
+    def test_role_sequence(self, fmt: FewshotFormat, expected_roles: list[str]):
+        """Message roles must match the expected sequence for each format."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=fmt)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        exemplars = create_mock_exemplars(_NUM_SHOTS)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        roles = [msg["role"] for msg in conv_data.messages]
+        assert roles == expected_roles
+
+    @pytest.mark.parametrize("fmt", [f for f, _ in _FORMAT_ROLES])
+    def test_video_count(self, fmt: FewshotFormat):
+        """Total videos must equal num_shots + 1 for every format."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=fmt)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        exemplars = create_mock_exemplars(_NUM_SHOTS)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        assert len(conv_data.videos) == _NUM_SHOTS + 1
+
+    def test_user_turns_no_system_message(self):
+        """USER_TURNS must not produce a system message."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=FewshotFormat.USER_TURNS)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        roles = [msg["role"] for msg in conv_data.messages]
+        assert "system" not in roles
+
+    def test_system_turns_exemplar_in_system(self):
+        """SYSTEM_TURNS must place each exemplar in a system message (with a video)."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=FewshotFormat.SYSTEM_TURNS)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        system_msgs = [msg for msg in conv_data.messages if msg["role"] == "system"]
+        # preamble + num_shots exemplar msgs + classify instruction
+        assert len(system_msgs) == _NUM_SHOTS + 2
+
+        # Each exemplar system message (indices 1..num_shots) contains exactly one video
+        for msg in system_msgs[1 : _NUM_SHOTS + 1]:
+            video_items = [item for item in msg["content"] if item["type"] == "video"]
+            assert len(video_items) == 1
+
+    @pytest.mark.parametrize("fmt", [f for f, _ in _FORMAT_ROLES])
+    def test_fewshot_labeled_example_prefixes(self, fmt: FewshotFormat):
+        """When fewshot_labeled=True every format must include 'Example N:' and 'Query:'."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=fmt, fewshot_labeled=True)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        all_text = "\n".join(
+            item["text"]
+            for msg in conv_data.messages
+            for item in msg["content"]
+            if item.get("type") == "text"
+        )
+        for n in range(1, _NUM_SHOTS + 1):
+            assert f"Example {n}:" in all_text
+        assert "Query:" in all_text
+
+    @pytest.mark.parametrize("fmt", [f for f, _ in _FORMAT_ROLES])
+    def test_fewshot_unlabeled_no_example_prefix(self, fmt: FewshotFormat):
+        """When fewshot_labeled=False (default) no 'Example N:' or 'Query:' must appear."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=fmt, fewshot_labeled=False)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        all_text = "\n".join(
+            item["text"]
+            for msg in conv_data.messages
+            for item in msg["content"]
+            if item.get("type") == "text"
+        )
+        assert "Example 1:" not in all_text
+
+    @pytest.mark.parametrize("fmt", [f for f, _ in _FORMAT_ROLES])
+    def test_build_vllm_inputs_returns_valid_dict(self, fmt: FewshotFormat):
+        """build_vllm_inputs must return the expected keys with correct video count."""
+        config = PromptConfig(num_shots=_NUM_SHOTS, fewshot_format=fmt)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        processor = MockProcessor()
+
+        inputs = builder.build_vllm_inputs(
+            create_mock_video(), processor, exemplars=create_mock_exemplars(_NUM_SHOTS)
+        )
+
+        assert "prompt" in inputs
+        assert "multi_modal_data" in inputs
+        assert "mm_processor_kwargs" in inputs
+        assert isinstance(inputs["prompt"], str)
+        assert len(inputs["multi_modal_data"]["video"]) == _NUM_SHOTS + 1

@@ -15,3 +15,5 @@ num_shots: 3
 shot_selection: random
 exemplar_seed: 0
 exemplar_ordering: ascending
+fewshot_format: single_message
+fewshot_labeled: false
