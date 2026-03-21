@@ -117,26 +117,20 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
 
 # Few-shot: explanation added to the system instruction to set up the ICL format
 FEWSHOT_PREAMBLE = textwrap.dedent("""
-    You will be shown example videos paired with correct responses. After the examples, classify the action in the final video using only the allowed labels.
+    You will be shown example videos paired with correct responses. Each example consists of a video with a classification request and the correct response.
+    Carefully examine the exemplar videos and their responses before answering.
+    After the examples, classify the action in the final video using only the allowed labels.
     Match the exact output format used in the examples.
 """).strip()
 
-# Few-shot preamble for multi_turn format (user/assistant exchanges)
+# Few-shot preamble for assistant response style (user/assistant exchanges)
 FEWSHOT_PREAMBLE_MULTI_TURN = textwrap.dedent("""
-    You will be shown example exchanges between a user and assistant. Each exchange consists of a video with a classification request followed by the correct response. After the examples, classify the action in the final video using only the allowed labels.
+    You will be shown example exchanges between a user and assistant. Each exchange consists of a video with a classification request followed by the correct response.
+    Carefully examine the exemplar videos and their responses before answering.
+    After the examples, classify the action in the final video using only the allowed labels.
     Match the exact output format used in the examples.
 """).strip()
 
-# Few-shot preamble for system_turns format (exemplars in system context)
-FEWSHOT_PREAMBLE_SYSTEM = textwrap.dedent("""
-    The following system context contains example videos paired with correct classifications. Study these examples to understand the expected output format and classification criteria.
-    After reviewing the examples, classify the action in the user's video using only the allowed labels.
-""").strip()
-
-# Final system turn for system_turns format
-FEWSHOT_SYSTEM_CLASSIFY_INSTRUCTION = (
-    "Now classify the action in the user's video using the same format as the examples above."
-)
 INTERNVL_DO_NOT_THINK_INSTRUCTION = textwrap.dedent("""
     Do not think step-by-step, just provide the final answer in the same format as the exemplars.
 """).strip()
@@ -145,9 +139,6 @@ INTERNVL_DO_NOT_THINK_INSTRUCTION = textwrap.dedent("""
 FEWSHOT_SHORT_INSTRUCTION = "Classify the action shown in this video."
 
 # Few-shot section markers
-DEMONSTRATION_DELIMITER = "[DEMONSTRATIONS]"
-REQUEST_DELIMITER = "[REQUEST]"
-RESPONSE_DELIMITER = "[RESPONSE]"
 QUERY_DELIMITER = "[QUERY]"
 
 

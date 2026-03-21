@@ -5,16 +5,12 @@ from dataclasses import dataclass
 
 import torch
 
-from falldet.schemas import FewshotFormat, InferenceConfig, PromptConfig
+from falldet.schemas import FewshotPreamble, FewshotResponse, InferenceConfig, PromptConfig
 
 from .prompts import PromptBuilder
 from .prompts.components import (
-    DEMONSTRATION_DELIMITER,
     FEWSHOT_SHORT_INSTRUCTION,
-    FEWSHOT_SYSTEM_CLASSIFY_INSTRUCTION,
     QUERY_DELIMITER,
-    REQUEST_DELIMITER,
-    RESPONSE_DELIMITER,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,27 +71,21 @@ class ConversationBuilder:
         self._system_msg: dict | None
         if config.num_shots > 0:
             if config.system_instruction is not None:
-                # Explicit override always produces a system message regardless of format
-                self._preamble: str = config.system_instruction
+                # Explicit override always produces a system message
+                preamble = config.system_instruction
+            else:
+                preamble = self._prompt_builder.build_fewshot_preamble()
+
+            self._preamble: str = preamble
+            if config.fewshot_preamble == FewshotPreamble.SYSTEM:
                 self._user_preamble: str = ""
                 self._system_msg = {
                     "role": "system",
-                    "content": [{"type": "text", "text": config.system_instruction}],
+                    "content": [{"type": "text", "text": preamble}],
                 }
             else:
-                fewshot_sys = self._prompt_builder.build_fewshot_system_instruction()
-                if fewshot_sys is None:
-                    # USER_TURNS: preamble goes into the first user message
-                    self._user_preamble = self._prompt_builder.build_fewshot_user_preamble()
-                    self._preamble = self._user_preamble
-                    self._system_msg = None
-                else:
-                    self._user_preamble = ""
-                    self._preamble = fewshot_sys
-                    self._system_msg = {
-                        "role": "system",
-                        "content": [{"type": "text", "text": fewshot_sys}],
-                    }
+                self._user_preamble = preamble
+                self._system_msg = None
         else:
             self._user_prompt: str = self._prompt_builder.build_prompt()
             self._system_msg = self._prompt_builder.get_system_message()
@@ -115,172 +105,61 @@ class ConversationBuilder:
     def _build_fewshot_messages(
         self, exemplars: list[dict], target_video: torch.Tensor
     ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Dispatch to format-specific few-shot message builders."""
-        fmt = self.config.fewshot_format
-        if fmt == FewshotFormat.SINGLE_MESSAGE:
-            return self._build_fewshot_single_message(exemplars, target_video)
-        elif fmt == FewshotFormat.USER_TURNS:
-            return self._build_fewshot_user_turns(exemplars, target_video)
-        elif fmt == FewshotFormat.SYSTEM_TURNS:
-            return self._build_fewshot_system_turns(exemplars, target_video)
-        elif fmt == FewshotFormat.MULTI_TURN:
-            return self._build_fewshot_multi_turn(exemplars, target_video)
-        else:
-            raise ValueError(f"Unknown fewshot_format: {fmt}")
+        """Build few-shot messages using composable preamble + response style.
 
-    def _build_fewshot_single_message(
-        self, exemplars: list[dict], target_video: torch.Tensor
-    ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """All exemplars + target in one user message (current default).
+        Structure with fewshot_preamble="user":
+          [user: preamble]
+          [user: [Example N:\\n] REQUEST <video> instruction RESPONSE answer]  (inline)
+          or
+          [user: [Example N:\\n] REQUEST <video> instruction]
+          [assistant: RESPONSE answer]                                          (assistant)
+          ...
+          [user: [Query:\\n] QUERY REQUEST <video> instruction]
 
-        Structure:
-          [system: preamble]
-          [user: [DEMONSTRATIONS] [REQUEST] <video> prompt [RESPONSE] answer
-                 [REQUEST] <video> prompt [RESPONSE] answer  (repeated)
-                 [QUERY] [REQUEST] <video> prompt]
-        """
-        content: list[dict] = []
-        videos: list[VideoWithMetadata] = []
-
-        for i, exemplar in enumerate(exemplars):
-            answer = self._format_answer(exemplar["label_str"])
-            if i == 0:
-                marker = f"{DEMONSTRATION_DELIMITER}\n{REQUEST_DELIMITER}\n"
-            else:
-                marker = f"{REQUEST_DELIMITER}\n"
-            if self.config.fewshot_labeled:
-                marker = f"Example {i + 1}:\n{marker}"
-            content.append({"type": "text", "text": marker})
-            content.append({"type": "video", "video": exemplar["video"]})
-            content.append(
-                {
-                    "type": "text",
-                    "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}\n{RESPONSE_DELIMITER}\n{answer}\n\n",
-                }
-            )
-            videos.append(self._make_video(exemplar["video"]))
-
-        query_marker = f"{QUERY_DELIMITER}\n{REQUEST_DELIMITER}\n"
-        if self.config.fewshot_labeled:
-            query_marker = f"Query:\n{query_marker}"
-        content.append({"type": "text", "text": query_marker})
-        content.append({"type": "video", "video": target_video})
-        content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
-        videos.append(self._make_video(target_video))
-
-        return [{"role": "user", "content": content}], videos
-
-    def _build_fewshot_user_turns(
-        self, exemplars: list[dict], target_video: torch.Tensor
-    ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Each exemplar and the target as separate user messages; preamble first.
-
-        Structure:
-          [user: preamble (no video)]
-          [user: [Example N:\\n] <video> instruction \\n answer]  (per exemplar)
-          [user: [Query:\\n] <video> instruction]
+        With fewshot_preamble="system" the preamble is already in self._system_msg;
+        the message list starts directly with the exemplar turns.
         """
         messages: list[dict] = []
         videos: list[VideoWithMetadata] = []
+        use_assistant = self.config.fewshot_response == FewshotResponse.ASSISTANT
 
-        # Preamble user message (no video)
         if self._user_preamble:
             messages.append(
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": self._user_preamble}],
-                }
+                {"role": "user", "content": [{"type": "text", "text": self._user_preamble}]}
             )
 
         for i, exemplar in enumerate(exemplars):
+            n = i + 1
             answer = self._format_answer(exemplar["label_str"])
             content: list[dict] = []
-            if self.config.fewshot_labeled:
-                content.append({"type": "text", "text": f"Example {i + 1}:\n"})
-            content.append({"type": "video", "video": exemplar["video"]})
-            content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}\n{answer}"})
-            messages.append({"role": "user", "content": content})
+            if use_assistant:
+                content.append({"type": "text", "text": f"[DEMONSTRATION {n}]\n"})
+                content.append({"type": "video", "video": exemplar["video"]})
+                content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
+                messages.append({"role": "user", "content": content})
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": answer}],
+                    }
+                )
+            else:
+                content.append({"type": "text", "text": f"[REQUEST {n}]\n"})
+                content.append({"type": "video", "video": exemplar["video"]})
+                content.append(
+                    {
+                        "type": "text",
+                        "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}\n[RESPONSE {n}]\n{answer}",
+                    }
+                )
+                messages.append({"role": "user", "content": content})
             videos.append(self._make_video(exemplar["video"]))
 
         target_content: list[dict] = []
-        if self.config.fewshot_labeled:
-            target_content.append({"type": "text", "text": "Query:\n"})
-        target_content.append({"type": "video", "video": target_video})
-        target_content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
-        messages.append({"role": "user", "content": target_content})
-        videos.append(self._make_video(target_video))
-
-        return messages, videos
-
-    def _build_fewshot_system_turns(
-        self, exemplars: list[dict], target_video: torch.Tensor
-    ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """Exemplars in system messages; only the query is a user message.
-
-        Structure (system preamble already in self._system_msg):
-          [system: [Example N:\\n] <video> instruction \\n answer]  (per exemplar)
-          [system: classify instruction]
-          [user: <video> instruction]
-
-        Note: video content in system messages may not be supported by all models.
-        """
-        messages: list[dict] = []
-        videos: list[VideoWithMetadata] = []
-
-        for i, exemplar in enumerate(exemplars):
-            answer = self._format_answer(exemplar["label_str"])
-            content: list[dict] = []
-            if self.config.fewshot_labeled:
-                content.append({"type": "text", "text": f"Example {i + 1}:\n"})
-            content.append({"type": "video", "video": exemplar["video"]})
-            content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}\n{answer}"})
-            messages.append({"role": "system", "content": content})
-            videos.append(self._make_video(exemplar["video"]))
-
-        messages.append(
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": FEWSHOT_SYSTEM_CLASSIFY_INSTRUCTION}],
-            }
-        )
-
-        target_content: list[dict] = []
-        if self.config.fewshot_labeled:
-            target_content.append({"type": "text", "text": "Query:\n"})
-        target_content.append({"type": "video", "video": target_video})
-        target_content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
-        messages.append({"role": "user", "content": target_content})
-        videos.append(self._make_video(target_video))
-
-        return messages, videos
-
-    def _build_fewshot_multi_turn(
-        self, exemplars: list[dict], target_video: torch.Tensor
-    ) -> tuple[list[dict], list[VideoWithMetadata]]:
-        """User/assistant turn pairs for each exemplar, then the query.
-
-        Structure (system preamble already in self._system_msg):
-          [user: [Example N:\\n] <video> instruction]
-          [assistant: answer]   (per exemplar pair)
-          [user: [Query:\\n] <video> instruction]
-        """
-        messages: list[dict] = []
-        videos: list[VideoWithMetadata] = []
-
-        for i, exemplar in enumerate(exemplars):
-            answer = self._format_answer(exemplar["label_str"])
-            content: list[dict] = []
-            if self.config.fewshot_labeled:
-                content.append({"type": "text", "text": f"Example {i + 1}:\n"})
-            content.append({"type": "video", "video": exemplar["video"]})
-            content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
-            messages.append({"role": "user", "content": content})
-            messages.append({"role": "assistant", "content": [{"type": "text", "text": answer}]})
-            videos.append(self._make_video(exemplar["video"]))
-
-        target_content: list[dict] = []
-        if self.config.fewshot_labeled:
-            target_content.append({"type": "text", "text": "Query:\n"})
+        if use_assistant:
+            target_content.append({"type": "text", "text": f"{QUERY_DELIMITER}\n"})
+        else:
+            target_content.append({"type": "text", "text": f"{QUERY_DELIMITER}\n[REQUEST]\n"})
         target_content.append({"type": "video", "video": target_video})
         target_content.append({"type": "text", "text": f"\n{FEWSHOT_SHORT_INSTRUCTION}"})
         messages.append({"role": "user", "content": target_content})
@@ -398,8 +277,8 @@ class ConversationBuilder:
 
         if self.config.num_shots > 0:
             lines.append(
-                f"  [{idx}] few-shot ({self.config.fewshot_format}, "
-                f"labeled={self.config.fewshot_labeled}): "
+                f"  [{idx}] few-shot (preamble={self.config.fewshot_preamble}, "
+                f"response={self.config.fewshot_response}): "
                 f"{self.config.num_shots} exemplar(s) + target (dynamic per query)"
             )
         else:

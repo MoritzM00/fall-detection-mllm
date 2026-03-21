@@ -2,14 +2,14 @@
 """Run few-shot format ablation experiments.
 
 Sweeps over:
-    - prompt.fewshot_format: [single_message, user_turns, system_turns, multi_turn]
-    - prompt.fewshot_labeled: [false, true]
+    - prompt.fewshot_preamble: [system, user]
+    - prompt.fewshot_response: [inline, assistant]
 
-Produces 8 combinations per model by default (4 formats × 2 labeled settings).
+Produces 4 combinations per model by default (2 preambles × 2 responses).
 
 Base experiment config: experiment=fewshot
 
-W&B tags: [ablation, fewshot_format, format-<fmt>, labeled-<bool>]
+W&B tags: [ablation, fewshot_format, preamble-<p>, response-<r>]
 
 Usage examples:
     # Dry-run to preview all commands
@@ -18,18 +18,18 @@ Usage examples:
     # Run with specific model
     python scripts/ablations/run_fewshot_format_ablations.py --model qwenvl --params 7B
 
-    # Sweep only a subset of formats
-    python scripts/ablations/run_fewshot_format_ablations.py --formats single_message multi_turn
+    # Sweep only a subset
+    python scripts/ablations/run_fewshot_format_ablations.py --preambles system --responses inline assistant
 
     # Resume from experiment N (0-indexed)
-    python scripts/ablations/run_fewshot_format_ablations.py --start-from 4
+    python scripts/ablations/run_fewshot_format_ablations.py --start-from 2
 """
 
 import argparse
 import subprocess
 
-FEWSHOT_FORMATS = ["single_message", "user_turns", "system_turns", "multi_turn"]
-LABELED_VALUES = [False, True]
+FEWSHOT_PREAMBLES = ["system", "user"]
+FEWSHOT_RESPONSES = ["inline", "assistant"]
 
 
 # ---------------------------------------------------------------------------
@@ -38,17 +38,17 @@ LABELED_VALUES = [False, True]
 
 
 def generate_experiment_configs(
-    formats: list[str],
-    labeled_values: list[bool],
+    preambles: list[str],
+    responses: list[str],
 ) -> list[dict]:
-    """Generate the cross-product of formats × labeled_values."""
+    """Generate the cross-product of preambles × responses."""
     configs: list[dict] = []
-    for fmt in formats:
-        for labeled in labeled_values:
+    for preamble in preambles:
+        for response in responses:
             configs.append(
                 {
-                    "prompt.fewshot_format": fmt,
-                    "prompt.fewshot_labeled": str(labeled).lower(),
+                    "prompt.fewshot_preamble": preamble,
+                    "prompt.fewshot_response": response,
                 }
             )
     return configs
@@ -61,9 +61,14 @@ def generate_experiment_configs(
 
 def build_tags(config: dict) -> list[str]:
     """Build descriptive W&B tags from a config dict."""
-    fmt = config["prompt.fewshot_format"]
-    labeled = config["prompt.fewshot_labeled"]
-    return ["ablation", "fewshot_format", f"format-{fmt}", f"labeled-{labeled}"]
+    preamble = config["prompt.fewshot_preamble"]
+    response = config["prompt.fewshot_response"]
+    return [
+        "ablation",
+        "fewshot_format",
+        f"preamble-{preamble}",
+        f"response-{response}",
+    ]
 
 
 def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> list[str]:
@@ -72,8 +77,8 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         "python",
         "scripts/vllm_inference.py",
         "experiment=fewshot",
-        f"prompt.fewshot_format={config['prompt.fewshot_format']}",
-        f"prompt.fewshot_labeled={config['prompt.fewshot_labeled']}",
+        f"prompt.fewshot_preamble={config['prompt.fewshot_preamble']}",
+        f"prompt.fewshot_response={config['prompt.fewshot_response']}",
         f"model={model}",
         f"model.params={params}",
     ]
@@ -116,14 +121,14 @@ def run_experiment(config: dict, dry_run: bool = False, model: str = "qwenvl", p
 
 def _describe_config(config: dict, model: str) -> str:
     """Return a short human-readable description of the config."""
-    fmt = config["prompt.fewshot_format"]
-    labeled = config["prompt.fewshot_labeled"]
-    return f"model={model}, format={fmt}, labeled={labeled}"
+    preamble = config["prompt.fewshot_preamble"]
+    response = config["prompt.fewshot_response"]
+    return f"model={model}, preamble={preamble}, response={response}"
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run few-shot format ablation experiments (format × labeled sweep)"
+        description="Run few-shot format ablation experiments (preamble × response sweep)"
     )
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     parser.add_argument(
@@ -146,27 +151,26 @@ def main():
         help="Model parameter size applied to all models (default: 8B)",
     )
     parser.add_argument(
-        "--formats",
+        "--preambles",
         type=str,
         nargs="+",
-        default=FEWSHOT_FORMATS,
-        choices=FEWSHOT_FORMATS,
-        help=f"fewshot_format values to sweep (default: all {len(FEWSHOT_FORMATS)})",
+        default=FEWSHOT_PREAMBLES,
+        choices=FEWSHOT_PREAMBLES,
+        help=f"fewshot_preamble values to sweep (default: all {len(FEWSHOT_PREAMBLES)})",
     )
     parser.add_argument(
-        "--labeled",
+        "--responses",
         type=str,
         nargs="+",
-        default=["false", "true"],
-        choices=["false", "true"],
-        help="fewshot_labeled values to sweep (default: false true)",
+        default=FEWSHOT_RESPONSES,
+        choices=FEWSHOT_RESPONSES,
+        help=f"fewshot_response values to sweep (default: all {len(FEWSHOT_RESPONSES)})",
     )
     args = parser.parse_args()
 
-    labeled_bools = [v == "true" for v in args.labeled]
     configs = generate_experiment_configs(
-        formats=args.formats,
-        labeled_values=labeled_bools,
+        preambles=args.preambles,
+        responses=args.responses,
     )
 
     # Flat list: models vary slowest

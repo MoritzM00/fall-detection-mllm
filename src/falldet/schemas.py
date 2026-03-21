@@ -46,11 +46,14 @@ class ExemplarOrdering(StrEnum):
     RANDOM = "random"
 
 
-class FewshotFormat(StrEnum):
-    SINGLE_MESSAGE = "single_message"
-    USER_TURNS = "user_turns"
-    SYSTEM_TURNS = "system_turns"
-    MULTI_TURN = "multi_turn"
+class FewshotPreamble(StrEnum):
+    SYSTEM = "system"
+    USER = "user"
+
+
+class FewshotResponse(StrEnum):
+    INLINE = "inline"
+    ASSISTANT = "assistant"
 
 
 class PromptConfig(BaseConfig):
@@ -88,8 +91,8 @@ class PromptConfig(BaseConfig):
     shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
     exemplar_seed: int = 42
     exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
-    fewshot_format: FewshotFormat = FewshotFormat.SINGLE_MESSAGE
-    fewshot_labeled: bool = False
+    fewshot_preamble: FewshotPreamble = FewshotPreamble.SYSTEM
+    fewshot_response: FewshotResponse = FewshotResponse.INLINE
 
     @model_validator(mode="after")
     def validate_fewshot_cot(self) -> "PromptConfig":

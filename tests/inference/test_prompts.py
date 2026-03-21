@@ -350,13 +350,13 @@ class TestPromptBuilder:
     # Variant Selection Tests
     # ========================================================================
 
-    def test_build_fewshot_system_instruction_contains_all_sections(self):
-        """Test that build_fewshot_system_instruction includes context + preamble."""
+    def test_build_fewshot_preamble_contains_all_sections(self):
+        """Test that build_fewshot_preamble includes context + preamble."""
         config = PromptConfig(
             role_variant="standard", definitions_variant="standard", output_format="json"
         )
         builder = PromptBuilder(config, LABEL2IDX)
-        instr = builder.build_fewshot_system_instruction()
+        instr = builder.build_fewshot_preamble()
 
         assert "Role:" in instr
         assert "Task:" in instr
@@ -364,19 +364,19 @@ class TestPromptBuilder:
         assert "Definitions" in instr
         assert "example videos" in instr  # FEWSHOT_PREAMBLE
 
-    def test_build_fewshot_system_instruction_excludes_cot(self):
+    def test_build_fewshot_preamble_excludes_cot(self):
         """Test that CoT instruction is not included (CoT unsupported with few-shot)."""
         config = PromptConfig(role_variant="standard", output_format="text")
         builder = PromptBuilder(config, LABEL2IDX)
-        instr = builder.build_fewshot_system_instruction()
+        instr = builder.build_fewshot_preamble()
 
         assert "reason step-by-step" not in instr
 
-    def test_build_fewshot_system_instruction_no_role(self):
-        """Test build_fewshot_system_instruction without role variant."""
+    def test_build_fewshot_preamble_no_role(self):
+        """Test build_fewshot_preamble without role variant."""
         config = PromptConfig(role_variant=None)
         builder = PromptBuilder(config, LABEL2IDX)
-        instr = builder.build_fewshot_system_instruction()
+        instr = builder.build_fewshot_preamble()
 
         assert "Role:" not in instr
         assert "Task:" in instr

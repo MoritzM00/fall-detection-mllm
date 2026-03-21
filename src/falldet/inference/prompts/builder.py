@@ -7,7 +7,6 @@ from .components import (
     DEFINITIONS_VARIANTS,
     FEWSHOT_PREAMBLE,
     FEWSHOT_PREAMBLE_MULTI_TURN,
-    FEWSHOT_PREAMBLE_SYSTEM,
     INTERNVL_DO_NOT_THINK_INSTRUCTION,
     LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
@@ -64,21 +63,17 @@ class PromptBuilder:
 
         return "\n\n".join(sections)
 
-    def build_fewshot_system_instruction(self) -> str | None:
-        """Assemble the system instruction for few-shot mode.
+    def build_fewshot_preamble(self) -> str:
+        """Assemble the preamble text for few-shot mode.
 
         Includes all context-setting components (role, task, labels, definitions)
-        plus an exemplar preamble explaining the ICL format and the output format.
-        CoT is intentionally excluded (not supported with few-shot).
+        plus a response-style-appropriate exemplar explanation.
+        The caller decides placement (system vs user) based on fewshot_preamble.
 
         Returns:
-            Complete system instruction string, or None for USER_TURNS format
-            (which uses a user message for the preamble instead).
+            Complete preamble string.
         """
-        from falldet.schemas import FewshotFormat
-
-        if self.config.fewshot_format == FewshotFormat.USER_TURNS:
-            return None
+        from falldet.schemas import FewshotResponse
 
         sections = []
 
@@ -91,38 +86,11 @@ class PromptBuilder:
         if self.config.definitions_variant:
             sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
 
-        if self.config.fewshot_format == FewshotFormat.SYSTEM_TURNS:
-            sections.append(FEWSHOT_PREAMBLE_SYSTEM)
-        elif self.config.fewshot_format == FewshotFormat.MULTI_TURN:
+        if self.config.fewshot_response == FewshotResponse.ASSISTANT:
             sections.append(FEWSHOT_PREAMBLE_MULTI_TURN)
-        else:  # SINGLE_MESSAGE
+        else:
             sections.append(FEWSHOT_PREAMBLE)
-            if self.config.model_family.lower() == "internvl":
-                sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
 
-        return "\n\n".join(sections)
-
-    def build_fewshot_user_preamble(self) -> str:
-        """Assemble the preamble for the first user message in USER_TURNS format.
-
-        Same content as SINGLE_MESSAGE system instruction but placed in a user
-        message. CoT and InternVL-specific adjustments still apply.
-
-        Returns:
-            Preamble string for the first user message.
-        """
-        sections = []
-
-        if self.config.role_variant:
-            sections.append(ROLE_VARIANTS[self.config.role_variant])
-
-        sections.append(TASK_VARIANTS[self.config.task_variant])
-        sections.append(self._build_labels_section())
-
-        if self.config.definitions_variant:
-            sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
-
-        sections.append(FEWSHOT_PREAMBLE)
         if self.config.model_family.lower() == "internvl":
             sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
 
