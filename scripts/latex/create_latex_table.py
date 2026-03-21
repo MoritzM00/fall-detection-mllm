@@ -23,12 +23,15 @@ MODEL_NAMES: dict[str, str] = {
 }
 
 MODEL_NAMES_COT: dict[str, str] = {
-    "0fyrvcyv": "Qwen3-VL-2B",
-    "2yzuuwqm": "Qwen3-VL-4B",
-    "j5m9qihw": "Qwen3-VL-8B",
-    "opzspcfj": "Qwen3-VL-30B-A3B",
-    "ml3489zj": "Qwen3-VL-32B",
+    "dts57kgz": "InternVL3.5-2B",
+    "91g7t1y1": "Qwen3-VL-2B",
+    "cpe2sto4": "InternVL3.5-8B",
+    "fmmrnf5j": "Qwen3-VL-8B",
+    "73ivqn3d": "Qwen3-VL-32B",
+    "o8i8pojr": "InternVL3.5-38B",
 }
+USE_COT = True  # Set to True to use COT runs instead
+
 DATASET = "OOPS"
 SPLIT = "cs"
 
@@ -151,7 +154,8 @@ def generate_latex():
     )
 
     # Add WandB Models
-    for run_id, display_name in MODEL_NAMES.items():
+    model_dict = MODEL_NAMES_COT if USE_COT else MODEL_NAMES
+    for run_id, display_name in model_dict.items():
         metrics = fetch_run_data(api, run_id)
         all_rows.append({"name": display_name, "metrics": metrics, "type": "mllm"})
 
