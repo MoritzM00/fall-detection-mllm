@@ -11,7 +11,9 @@ labels_variant: bulleted
 definitions_variant: null
 
 # Few-shot settings
-num_shots: 3
-shot_selection: random
+num_shots: 5
+shot_selection: balanced
 exemplar_seed: 0
 exemplar_ordering: ascending
+fewshot_preamble: system
+fewshot_response: inline

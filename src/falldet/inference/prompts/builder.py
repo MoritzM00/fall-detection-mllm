@@ -62,16 +62,17 @@ class PromptBuilder:
 
         return "\n\n".join(sections)
 
-    def build_fewshot_system_instruction(self) -> str:
-        """Assemble the system instruction for few-shot mode.
+    def build_fewshot_preamble(self) -> str:
+        """Assemble the preamble text for few-shot mode.
 
         Includes all context-setting components (role, task, labels, definitions)
-        plus an exemplar preamble explaining the ICL format and the output format.
-        CoT is intentionally excluded (not supported with few-shot).
+        plus a response-style-appropriate exemplar explanation.
+        The caller decides placement (system vs user) based on fewshot_preamble.
 
         Returns:
-            Complete system instruction string for few-shot conversations.
+            Complete preamble string.
         """
+
         sections = []
 
         if self.config.role_variant:
@@ -84,6 +85,7 @@ class PromptBuilder:
             sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
 
         sections.append(FEWSHOT_PREAMBLE)
+
         if self.config.model_family.lower() == "internvl":
             sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
 

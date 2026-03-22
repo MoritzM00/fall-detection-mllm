@@ -46,6 +46,16 @@ class ExemplarOrdering(StrEnum):
     RANDOM = "random"
 
 
+class FewshotPreamble(StrEnum):
+    SYSTEM = "system"
+    USER = "user"
+
+
+class FewshotResponse(StrEnum):
+    INLINE = "inline"
+    ASSISTANT = "assistant"
+
+
 class PromptConfig(BaseConfig):
     """Configuration for prompt building.
 
@@ -81,6 +91,8 @@ class PromptConfig(BaseConfig):
     shot_selection: Literal["random", "balanced", "similarity", "per_class_similarity"] = "balanced"
     exemplar_seed: int = 42
     exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
+    fewshot_preamble: FewshotPreamble = FewshotPreamble.SYSTEM
+    fewshot_response: FewshotResponse = FewshotResponse.INLINE
 
     @model_validator(mode="after")
     def validate_fewshot_cot(self) -> "PromptConfig":

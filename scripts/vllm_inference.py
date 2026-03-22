@@ -174,7 +174,7 @@ def main(cfg: DictConfig):
         total_output_tokens = sum(
             len(o.outputs[0].token_ids)
             for o in all_outputs
-            if getattr(o.outputs[0], "token_ids", None) is not None
+            if o.outputs and getattr(o.outputs[0], "token_ids", None) is not None
         )
         n = max(len(all_outputs), 1)
         logger.info(

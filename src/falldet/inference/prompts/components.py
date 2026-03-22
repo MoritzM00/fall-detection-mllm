@@ -117,9 +117,13 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
 
 # Few-shot: explanation added to the system instruction to set up the ICL format
 FEWSHOT_PREAMBLE = textwrap.dedent("""
-    You will be shown example videos paired with correct responses. After the examples, classify the action in the final video using only the allowed labels.
+    Demonstrations:
+    You will be shown demonstrations, consisting of a video with a classification request
+    followed by the correct response.
+    After the demonstrations, classify the action in the query video using only the allowed labels.
     Match the exact output format used in the examples.
 """).strip()
+
 INTERNVL_DO_NOT_THINK_INSTRUCTION = textwrap.dedent("""
     Do not think step-by-step, just provide the final answer in the same format as the exemplars.
 """).strip()
@@ -128,9 +132,6 @@ INTERNVL_DO_NOT_THINK_INSTRUCTION = textwrap.dedent("""
 FEWSHOT_SHORT_INSTRUCTION = "Classify the action shown in this video."
 
 # Few-shot section markers
-DEMONSTRATION_DELIMITER = "[DEMONSTRATIONS]"
-REQUEST_DELIMITER = "[REQUEST]"
-RESPONSE_DELIMITER = "[RESPONSE]"
 QUERY_DELIMITER = "[QUERY]"
 
 
