@@ -117,17 +117,10 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
 
 # Few-shot: explanation added to the system instruction to set up the ICL format
 FEWSHOT_PREAMBLE = textwrap.dedent("""
-    You will be shown example videos paired with correct responses. Each example consists of a video with a classification request and the correct response.
-    Carefully examine the exemplar videos and their responses before answering.
-    After the examples, classify the action in the final video using only the allowed labels.
-    Match the exact output format used in the examples.
-""").strip()
-
-# Few-shot preamble for assistant response style (user/assistant exchanges)
-FEWSHOT_PREAMBLE_MULTI_TURN = textwrap.dedent("""
-    You will be shown example exchanges between a user and assistant. Each exchange consists of a video with a classification request followed by the correct response.
-    Carefully examine the exemplar videos and their responses before answering.
-    After the examples, classify the action in the final video using only the allowed labels.
+    Demonstrations:
+    You will be shown demonstrations, consisting of a video with a classification request
+    followed by the correct response.
+    After the demonstrations, classify the action in the query video using only the allowed labels.
     Match the exact output format used in the examples.
 """).strip()
 

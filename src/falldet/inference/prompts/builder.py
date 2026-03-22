@@ -6,7 +6,6 @@ from .components import (
     COT_INSTRUCTION,
     DEFINITIONS_VARIANTS,
     FEWSHOT_PREAMBLE,
-    FEWSHOT_PREAMBLE_MULTI_TURN,
     INTERNVL_DO_NOT_THINK_INSTRUCTION,
     LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
@@ -73,7 +72,6 @@ class PromptBuilder:
         Returns:
             Complete preamble string.
         """
-        from falldet.schemas import FewshotResponse
 
         sections = []
 
@@ -86,10 +84,7 @@ class PromptBuilder:
         if self.config.definitions_variant:
             sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
 
-        if self.config.fewshot_response == FewshotResponse.ASSISTANT:
-            sections.append(FEWSHOT_PREAMBLE_MULTI_TURN)
-        else:
-            sections.append(FEWSHOT_PREAMBLE)
+        sections.append(FEWSHOT_PREAMBLE)
 
         if self.config.model_family.lower() == "internvl":
             sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
