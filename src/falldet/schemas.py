@@ -78,7 +78,7 @@ class PromptConfig(BaseConfig):
 
     # Few-shot settings
     num_shots: int = 0
-    shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
+    shot_selection: Literal["random", "balanced", "similarity", "per_class_similarity"] = "balanced"
     exemplar_seed: int = 42
     exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
 
