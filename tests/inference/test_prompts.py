@@ -362,7 +362,7 @@ class TestPromptBuilder:
         assert "Task:" in instr
         assert "Allowed Labels:" in instr
         assert "Definitions" in instr
-        assert "example videos" in instr  # FEWSHOT_PREAMBLE
+        assert "demonstrations" in instr  # FEWSHOT_PREAMBLE
 
     def test_build_fewshot_preamble_excludes_cot(self):
         """Test that CoT instruction is not included (CoT unsupported with few-shot)."""

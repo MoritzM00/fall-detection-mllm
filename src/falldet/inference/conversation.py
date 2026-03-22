@@ -71,7 +71,7 @@ class ConversationBuilder:
         self._system_msg: dict | None
         if config.num_shots > 0:
             if config.system_instruction is not None:
-                # Explicit override always produces a system message
+                # Explicit override: placement is still controlled by fewshot_preamble
                 preamble = config.system_instruction
             else:
                 preamble = self._prompt_builder.build_fewshot_preamble()

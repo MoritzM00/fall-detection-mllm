@@ -82,8 +82,8 @@ def build_command(config: dict, model: str = "qwenvl", params: str = "8B") -> li
         f"model={model}",
         f"model.params={params}",
     ]
-    tags = build_tags(config)
-    cmd.append(f"wandb.tags={tags}")
+    tags_hydra = "[" + ",".join(build_tags(config)) + "]"
+    cmd.append(f"wandb.tags={tags_hydra}")
     return cmd
 
 
