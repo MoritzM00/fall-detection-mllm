@@ -165,6 +165,26 @@ def main(cfg: DictConfig):
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
 
+    if not is_embed:
+        total_input_tokens = sum(
+            len(o.prompt_token_ids)
+            for o in all_outputs
+            if getattr(o, "prompt_token_ids", None) is not None
+        )
+        total_output_tokens = sum(
+            len(o.outputs[0].token_ids)
+            for o in all_outputs
+            if getattr(o.outputs[0], "token_ids", None) is not None
+        )
+        n = max(len(all_outputs), 1)
+        logger.info(
+            f"Token usage: {total_input_tokens:,} input, {total_output_tokens:,} output, "
+            f"{total_input_tokens + total_output_tokens:,} total "
+            f"(avg {total_input_tokens // n:,} in / {total_output_tokens // n:,} out per request)"
+        )
+        run.summary["total_input_tokens"] = total_input_tokens
+        run.summary["total_output_tokens"] = total_output_tokens
+
     if sampler is not None:
         match_pct = (
             100.0 * queries_with_match / total_queries_with_exemplars
