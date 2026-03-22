@@ -3,10 +3,10 @@
 
 Sweeps:
     - prompt.num_shots: [1, 2, 3, 5] (configurable via --shot-values)
-    - prompt.shot_selection: [random, balanced, similarity] (optional, via --sweep-selection)
+    - prompt.shot_selection: [random, balanced, similarity, per_class_similarity] (optional, via --sweep-selection)
 
 Base experiment config: experiment=fewshot
-For similarity selection: experiment=fewshot_similarity (sets up embeddings dir/model).
+For similarity/per_class_similarity selection: experiment=fewshot_similarity (sets up embeddings dir/model).
 
 W&B tags: [ablation, fewshot, shots-<N>, selection-<strategy>]
 """
@@ -15,7 +15,7 @@ import argparse
 import subprocess
 
 DEFAULT_SHOT_VALUES = [1, 2, 3, 5]
-SELECTION_STRATEGIES = ["random", "balanced", "similarity"]
+SELECTION_STRATEGIES = ["random", "balanced", "similarity", "per_class_similarity"]
 ORDERING_VALUES = ["ascending", "descending", "random"]
 
 
@@ -77,7 +77,7 @@ def build_tags(config: dict) -> list[str]:
 
 def _experiment_name(config: dict) -> str:
     """Return the Hydra experiment name for this config."""
-    if config["prompt.shot_selection"] == "similarity":
+    if config["prompt.shot_selection"] in ("similarity", "per_class_similarity"):
         return "fewshot_similarity"
     return "fewshot"
 
