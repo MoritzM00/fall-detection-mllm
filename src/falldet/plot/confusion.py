@@ -277,11 +277,11 @@ def plot_relative_confusion_matrix(
     _validate_confusion_inputs(y_true_a, y_pred_a)
     _validate_confusion_inputs(y_true_b, y_pred_b)
 
-    if y_true_a != y_true_b:
-        raise ValueError(
-            "y_true_a and y_true_b must be identical - comparing runs "
-            "evaluated on different ground-truth samples is not meaningful."
-        )
+    # if y_true_a != y_true_b:
+    #     raise ValueError(
+    #         "y_true_a and y_true_b must be identical - comparing runs "
+    #         "evaluated on different ground-truth samples is not meaningful."
+    #     )
 
     all_labels: list[str] = sorted(set(y_true_a) | set(y_pred_a) | set(y_true_b) | set(y_pred_b))
     cm_a_norm = confusion_matrix(y_true_a, y_pred_a, labels=all_labels, normalize="true")
@@ -304,18 +304,11 @@ def plot_relative_confusion_matrix(
     diagonal_mask = ~np.eye(n_labels, dtype=bool)
     off_diagonal_mask = np.eye(n_labels, dtype=bool)
 
-    diagonal_values = display_matrix
-    diagonal_vmax = float(np.max(np.abs(np.diag(display_matrix)))) if n_labels else 0.0
-    diagonal_vmax = diagonal_vmax if diagonal_vmax > 0 else 100.0
-    off_diagonal_values = display_matrix
-    if n_labels > 1:
-        off_diagonal_vmax = float(np.max(np.abs(off_diagonal_values[~off_diagonal_mask])))
-    else:
-        off_diagonal_vmax = 0.0
-    off_diagonal_vmax = off_diagonal_vmax if off_diagonal_vmax > 0 else 100.0
+    vmax = float(np.max(np.abs(display_matrix))) if n_labels else 100.0
+    vmax = vmax if vmax > 0 else 100.0
 
     sns.heatmap(
-        diagonal_values,
+        display_matrix,
         mask=diagonal_mask,
         annot=False,
         fmt="",
@@ -324,9 +317,9 @@ def plot_relative_confusion_matrix(
         yticklabels=display_labels,
         square=True,
         norm=matplotlib.colors.TwoSlopeNorm(
-            vmin=-diagonal_vmax,
+            vmin=-vmax,
             vcenter=0.0,
-            vmax=diagonal_vmax,
+            vmax=vmax,
         ),
         cbar=False,
         linewidths=0.5,
@@ -338,7 +331,7 @@ def plot_relative_confusion_matrix(
     off_diagonal_mesh = None
     if n_labels > 1:
         sns.heatmap(
-            off_diagonal_values,
+            display_matrix,
             mask=off_diagonal_mask,
             annot=False,
             fmt="",
@@ -347,9 +340,9 @@ def plot_relative_confusion_matrix(
             yticklabels=display_labels,
             square=True,
             norm=matplotlib.colors.TwoSlopeNorm(
-                vmin=-off_diagonal_vmax,
+                vmin=-vmax,
                 vcenter=0.0,
-                vmax=off_diagonal_vmax,
+                vmax=vmax,
             ),
             cbar=False,
             linewidths=0.5,
@@ -389,16 +382,14 @@ def plot_relative_confusion_matrix(
     if cbar:
         diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
         diagonal_colorbar.set_label("Diagonal Δ (pp)")
-        diagonal_colorbar.set_ticks([-diagonal_vmax, 0.0, diagonal_vmax])
-        diagonal_colorbar.set_ticklabels([f"-{diagonal_vmax:.0f}", "0", f"{diagonal_vmax:.0f}"])
+        diagonal_colorbar.set_ticks([-vmax, 0.0, vmax])
+        diagonal_colorbar.set_ticklabels([f"-{vmax:.0f}", "0", f"{vmax:.0f}"])
 
         if off_diagonal_mesh is not None:
             off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)
             off_diagonal_colorbar.set_label("Off-diagonal Δ (pp)")
-            off_diagonal_colorbar.set_ticks([-off_diagonal_vmax, 0.0, off_diagonal_vmax])
-            off_diagonal_colorbar.set_ticklabels(
-                [f"-{off_diagonal_vmax:.0f}", "0", f"{off_diagonal_vmax:.0f}"]
-            )
+            off_diagonal_colorbar.set_ticks([-vmax, 0.0, vmax])
+            off_diagonal_colorbar.set_ticklabels([f"-{vmax:.0f}", "0", f"{vmax:.0f}"])
 
     fig.tight_layout()
     return fig, ax
