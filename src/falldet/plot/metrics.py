@@ -1,5 +1,6 @@
 """Metric-comparison plotting helpers."""
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TypeAlias
@@ -10,6 +11,8 @@ import numpy as np
 
 from falldet.data.video_dataset import idx2label
 from falldet.metrics.base import compute_metrics
+
+logger = logging.getLogger(__name__)
 
 LabelSequence: TypeAlias = list[str] | list[int] | np.ndarray
 
@@ -173,7 +176,7 @@ def compute_label_distribution_summaries(
     reference_labels = _normalize_label_sequence(runs[0].y_true)
     for run in runs[1:]:
         if _normalize_label_sequence(run.y_true) != reference_labels:
-            raise ValueError("All runs must share the same ground-truth label sequence.")
+            logger.warning("All runs should share the same ground-truth label sequence.")
 
     distributions = {
         actual_name: compute_label_distribution(
@@ -206,7 +209,7 @@ def plot_metric_comparison(
     xtick_horizontalalignment: str = "center",
     y_limits: tuple[float, float] | None = None,
     show_legend: bool = True,
-    apply_tight_layout: bool = True,
+    apply_tight_layout: bool = False,
     ax: matplotlib.axes.Axes | None = None,
 ) -> tuple[plt.Figure, matplotlib.axes.Axes]:
     """Plot selected metrics side by side for multiple runs."""
@@ -352,7 +355,6 @@ def plot_metric_comparison_panels(
             ax=axes_array[idx],
         )
 
-    fig.tight_layout()
     fig.subplots_adjust(wspace=wspace)
     return fig, axes_array
 

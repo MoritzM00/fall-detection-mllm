@@ -130,12 +130,12 @@ def set_publication_rc_defaults(
     )
 
     resolved_rc: dict[str, object] = {
-        "figure.dpi": 120,
+        "figure.dpi": 100,
         "savefig.dpi": 300,
         "savefig.bbox": "tight",
-        "savefig.pad_inches": 0.02,
+        "savefig.pad_inches": 0.1,
         "figure.figsize": (figure_width_in, figure_height_in),
-        "figure.constrained_layout.use": False,
+        "figure.constrained_layout.use": True,
         "font.size": preset["font.size"],
         "axes.titlesize": preset["axes.titlesize"],
         "axes.labelsize": preset["axes.labelsize"],

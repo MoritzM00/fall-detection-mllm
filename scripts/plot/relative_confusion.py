@@ -126,7 +126,7 @@ def _run_display_name(run_ref: str) -> str:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     _, (figure_width, figure_height) = set_publication_rc_defaults(
-        use_tex=True, height_ratio=1, width_fraction=0.5, rc={"font.size": 8}
+        use_tex=True, height_ratio=1, width_fraction=0.66, rc={"font.size": 8}
     )
     args = parse_args()
 

@@ -31,6 +31,7 @@ from falldet.plot import (
     plot_metric_comparison_panels_from_predictions,
 )
 from falldet.plot.base import set_publication_rc_defaults
+from falldet.plot.metrics import compute_label_distribution
 from falldet.schemas import InferenceConfig, ModelConfig
 from falldet.utils.predictions import extract_labels_for_metrics, load_predictions_jsonl
 from falldet.utils.wandb import load_run_from_wandb
@@ -387,6 +388,14 @@ def main() -> None:
         CLASS_SUBSET
         if CLASS_SUBSET is not None
         else tuple(idx2label[idx] for idx in sorted(idx2label))
+    )
+    actual_dist = compute_label_distribution(
+        metric_inputs[0].y_true,
+        label_order=list(distribution_labels),
+        normalize=True,
+    )
+    distribution_labels = tuple(
+        sorted(distribution_labels, key=lambda label: actual_dist.get(label, 0.0), reverse=True)
     )
     distribution_fig, _ = plot_label_distribution_comparison_from_predictions(
         metric_inputs,
