@@ -9,7 +9,7 @@
 temperature: 0.0
 
 # Maximum number of tokens to generate
-max_tokens: 1024
+max_tokens: 64
 
 # Top-k filtering: Only sample from the k most likely tokens
 # Range: -1 (disabled), or positive integer (e.g., 20, 50)
