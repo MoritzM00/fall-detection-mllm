@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 import torch
-
 import wandb
+
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
@@ -142,6 +142,80 @@ def log_videos_with_predictions(
                     caption=caption,
                     format="mp4",
                     fps=target_fps,
+                )
+            }
+        )
+
+
+def log_per_class_bar_plots(
+    metrics: dict[str, float],
+    dataset_name: str,
+) -> None:
+    """Log interactive per-class bar plots to wandb.
+
+    Creates bar charts for F1, Precision, Recall per class, and two bar charts
+    comparing actual vs predicted class distribution.
+
+    Args:
+        metrics: Flat metrics dict from compute_metrics().
+        dataset_name: Name of the dataset, used as a key prefix.
+    """
+    from falldet.data.video_dataset import idx2label
+
+    all_class_names = list(idx2label.values())
+    present_classes = [c for c in all_class_names if f"{c}_f1" in metrics]
+
+    if not present_classes:
+        logger.warning("No per-class metrics found in metrics dict; skipping bar plots.")
+        return
+
+    # Per-class F1, Precision, Recall bar charts
+    metric_configs: list[tuple[str, str, str]] = [
+        ("f1", "F1 Score", "f1"),
+        ("precision", "Precision", "precision"),
+        ("sensitivity", "Recall", "recall"),
+    ]
+    for metric_key, metric_label, col_name in metric_configs:
+        data = [[c, metrics[f"{c}_{metric_key}"]] for c in present_classes]
+        table = wandb.Table(data=data, columns=["class", col_name])
+        wandb.log(
+            {
+                f"{dataset_name}_{col_name}_by_class": wandb.plot.bar(
+                    table, "class", col_name, title=f"{metric_label} by Class ({dataset_name})"
+                )
+            }
+        )
+
+    # Actual distribution bar chart
+    actual_data = [
+        [c, metrics[f"true_dist_{c}"]] for c in present_classes if f"true_dist_{c}" in metrics
+    ]
+    if actual_data:
+        actual_table = wandb.Table(data=actual_data, columns=["class", "fraction"])
+        wandb.log(
+            {
+                f"{dataset_name}_actual_distribution": wandb.plot.bar(
+                    actual_table,
+                    "class",
+                    "fraction",
+                    title=f"Actual Class Distribution ({dataset_name})",
+                )
+            }
+        )
+
+    # Predicted distribution bar chart
+    pred_data = [
+        [c, metrics[f"pred_dist_{c}"]] for c in present_classes if f"pred_dist_{c}" in metrics
+    ]
+    if pred_data:
+        pred_table = wandb.Table(data=pred_data, columns=["class", "fraction"])
+        wandb.log(
+            {
+                f"{dataset_name}_predicted_distribution": wandb.plot.bar(
+                    pred_table,
+                    "class",
+                    "fraction",
+                    title=f"Predicted Class Distribution ({dataset_name})",
                 )
             }
         )
