@@ -1,8 +1,8 @@
-"""Generate a LaTeX ablation table for few-shot exemplar selection + ordering.
+"""Generate a LaTeX ablation table for few-shot exemplar selection.
 
-Rows: Random (—), Balanced × {asc, desc}, Similarity × {asc, desc}.
+Rows: Random, Balanced, Similarity (all ascending ordering).
 Columns: BAcc, F1, Fall F1, Fallen F1 for each of two models side by side.
-Fixed defaults: num_shots=5, delimiters=true.
+Fixed defaults: num_shots=5, delimiters=true, ordering=ascending.
 
 Usage:
     python scripts/latex/create_fewshot_selection_table.py
@@ -29,14 +29,12 @@ METRICS = [
 ]
 METRIC_HEADERS = ["BAcc", "F1", "Fall F1", "Fallen F1"]
 
-# Row definitions: (selection, ordering) — ordering is None for random
+# Row definitions: selection strategy only (all use ascending ordering).
 # This determines display order in the table.
-ROW_KEYS: list[tuple[str, str | None]] = [
-    ("random", None),
-    ("balanced", "ascending"),
-    ("balanced", "descending"),
-    ("similarity", "ascending"),
-    ("similarity", "descending"),
+ROW_KEYS: list[str] = [
+    "random",
+    "balanced",
+    "similarity",
 ]
 
 SELECTION_DISPLAY: dict[str, str] = {
@@ -45,33 +43,16 @@ SELECTION_DISPLAY: dict[str, str] = {
     "similarity": "Similarity",
 }
 
-ORDER_DISPLAY: dict[str | None, str] = {
-    None: "---",
-    "ascending": "asc",
-    "descending": "desc",
-}
-
-# How many rows each selection group spans (for \multirow)
-SELECTION_SPAN: dict[str, int] = {
-    "random": 1,
-    "balanced": 2,
-    "similarity": 2,
-}
-
-# Hardcoded run IDs: {run_id: (model_display_name, selection_strategy, ordering)}
-# ordering is None for random (ordering irrelevant), "ascending"/"descending" otherwise.
+# Hardcoded run IDs: {run_id: (model_display_name, selection_strategy)}
+# All runs use ascending ordering (or random, where ordering is irrelevant).
 # Fill in actual W&B run IDs before running.
-SELECTION_RUNS: dict[str, tuple[str, str, str | None]] = {
-    "TODO_internvl_random": ("InternVL3.5-8B", "random", None),
-    "TODO_internvl_balanced_asc": ("InternVL3.5-8B", "balanced", "ascending"),
-    "TODO_internvl_balanced_desc": ("InternVL3.5-8B", "balanced", "descending"),
-    "szm3htq5": ("InternVL3.5-8B", "similarity", "ascending"),
-    "TODO_internvl_similarity_desc": ("InternVL3.5-8B", "similarity", "descending"),
-    "qezzftr0": ("Qwen3-VL-8B", "random", None),
-    "0kl6yqw0": ("Qwen3-VL-8B", "balanced", "ascending"),
-    "lsgd8lyo": ("Qwen3-VL-8B", "balanced", "descending"),
-    "9ek95yp9": ("Qwen3-VL-8B", "similarity", "ascending"),
-    "3xk84wk1": ("Qwen3-VL-8B", "similarity", "descending"),
+SELECTION_RUNS: dict[str, tuple[str, str]] = {
+    "TODO_internvl_random": ("InternVL3.5-8B", "random"),
+    "TODO_internvl_balanced_asc": ("InternVL3.5-8B", "balanced"),
+    "szm3htq5": ("InternVL3.5-8B", "similarity"),
+    "qezzftr0": ("Qwen3-VL-8B", "random"),
+    "0kl6yqw0": ("Qwen3-VL-8B", "balanced"),
+    "9ek95yp9": ("Qwen3-VL-8B", "similarity"),
 }
 
 
@@ -93,12 +74,12 @@ def fetch_run_metrics(api: wandb.Api, run_id: str) -> list[float | None]:
 
 def collect_data(
     api: wandb.Api,
-) -> dict[tuple[str, str, str | None], list[float | None]]:
-    """Return {(model, selection, ordering): [metric_values]} for all run IDs."""
-    data: dict[tuple[str, str, str | None], list[float | None]] = {}
-    for run_id, (model, selection, ordering) in SELECTION_RUNS.items():
+) -> dict[tuple[str, str], list[float | None]]:
+    """Return {(model, selection): [metric_values]} for all run IDs."""
+    data: dict[tuple[str, str], list[float | None]] = {}
+    for run_id, (model, selection) in SELECTION_RUNS.items():
         metrics = fetch_run_metrics(api, run_id)
-        data[(model, selection, ordering)] = metrics
+        data[(model, selection)] = metrics
     return data
 
 
@@ -119,7 +100,7 @@ def format_value(val: float | None, best_val: float | None) -> str:
 
 
 def compute_col_bests(
-    data: dict[tuple[str, str, str | None], list[float | None]],
+    data: dict[tuple[str, str], list[float | None]],
 ) -> list[list[float | None]]:
     """Compute per-column best values across all rows per model."""
     bests: list[list[float | None]] = []
@@ -127,9 +108,9 @@ def compute_col_bests(
         model_bests: list[float | None] = []
         for col_idx in range(len(METRICS)):
             values = [
-                data[(model, sel, order)][col_idx]
-                for (sel, order) in ROW_KEYS
-                if (model, sel, order) in data and data[(model, sel, order)][col_idx] is not None
+                data[(model, sel)][col_idx]
+                for sel in ROW_KEYS
+                if (model, sel) in data and data[(model, sel)][col_idx] is not None
             ]
             model_bests.append(max(values) if values else None)
         bests.append(model_bests)
@@ -141,40 +122,25 @@ def compute_col_bests(
 # ============================================================================
 
 
-def generate_latex(data: dict[tuple[str, str, str | None], list[float | None]]) -> str:
+def generate_latex(data: dict[tuple[str, str], list[float | None]]) -> str:
     col_bests = compute_col_bests(data)
 
     rows: list[str] = []
-    prev_selection: str | None = None
 
-    for row_idx, (selection, ordering) in enumerate(ROW_KEYS):
-        # Separate selection groups with whitespace instead of extra rules.
-        if prev_selection is not None and selection != prev_selection:
-            rows.append("        \\addlinespace[4pt]")
-
-        span = SELECTION_SPAN[selection]
-        order_str = ORDER_DISPLAY[ordering]
-
-        # First row of a selection group: emit \multirow for the selection name
-        if selection != prev_selection:
-            sel_cell = f"\\multirow{{{span}}}{{*}}{{{SELECTION_DISPLAY[selection]}}}"
-        else:
-            sel_cell = ""
-
-        cells: list[str] = [sel_cell, order_str]
+    for selection in ROW_KEYS:
+        cells: list[str] = [SELECTION_DISPLAY[selection]]
         for model_idx, model in enumerate(MODELS):
-            metrics = data.get((model, selection, ordering), [None] * len(METRICS))
+            metrics = data.get((model, selection), [None] * len(METRICS))
             for col_idx, val in enumerate(metrics):
                 cells.append(format_value(val, col_bests[model_idx][col_idx]))
 
         rows.append("        " + " & ".join(cells) + " \\\\")
-        prev_selection = selection
 
     rows_str = "\n".join(rows)
 
     n_metric_cols = len(METRICS)
-    # Column layout: Selection | Order | 4×InternVL | 4×Qwen → columns 3..6 and 7..10
-    internvl_start = 3
+    # Column layout: Selection | 4×InternVL | 4×Qwen → columns 2..5 and 6..9
+    internvl_start = 2
     internvl_end = internvl_start + n_metric_cols - 1
     qwen_start = internvl_end + 1
     qwen_end = qwen_start + n_metric_cols - 1
@@ -185,16 +151,15 @@ def generate_latex(data: dict[tuple[str, str, str | None], list[float | None]]) 
 \\renewcommand{{\\arraystretch}}{{1.1}}
 \\begin{{table}}[htp]
     \\centering
-    \\caption{{\\textbf{{Few-Shot Selection \\& Ordering Ablation.}} Effect of exemplar selection strategy and ordering on fall detection performance with $k=5$. Best results per model are \\textbf{{bolded}}.}}
+    \\caption{{\\textbf{{Few-Shot Selection Ablation.}} Effect of exemplar selection strategy on fall detection performance with $k=3$. Best results per model are \\textbf{{bolded}}.}}
     \\label{{tab:fewshot_selection_ablation}}
-    \\begin{{tabular}}{{@{{}}ll rrrr rrrr@{{}}}}
+    \\begin{{tabular}}{{@{{}}l rrrr rrrr@{{}}}}
         \\toprule
         \\multirow{{2}}{{*}}{{\\textbf{{Method}}}} &
-        \\multirow{{2}}{{*}}{{\\textbf{{Order}}}} &
         \\multicolumn{{{n_metric_cols}}}{{c}}{{\\textbf{{{MODELS[0]}}}}} &
         \\multicolumn{{{n_metric_cols}}}{{c}}{{\\textbf{{{MODELS[1]}}}}} \\\\
         \\cmidrule(lr){{{internvl_start}-{internvl_end}}} \\cmidrule(lr){{{qwen_start}-{qwen_end}}}
-        & & {sub_header} & {sub_header} \\\\
+        & {sub_header} & {sub_header} \\\\
         \\midrule
 
 {rows_str}
@@ -211,7 +176,7 @@ def main() -> None:
     api = wandb.Api()
     print(f"Fetching few-shot selection ablation runs from {ENTITY}/{PROJECT}...")
     data = collect_data(api)
-    print(f"Collected data for {len(data)} (model, selection, ordering) combinations.")
+    print(f"Collected data for {len(data)} (model, selection) combinations.")
     print()
     print(generate_latex(data))
 
