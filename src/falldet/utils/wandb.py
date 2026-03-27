@@ -152,11 +152,9 @@ def log_per_class_bar_plots(
     dataset_name: str,
 ) -> None:
     """Log interactive per-class bar charts to wandb.
-    """Log interactive per-class bar charts to wandb.
 
     Logs six bar charts per dataset (F1, Precision, Recall, Accuracy by class, plus actual
     and predicted class distributions). Each appears as a separate interactive bar
-    chart in the run's Custom Charts panel.
     chart in the run's Custom Charts panel.
 
     Args:
