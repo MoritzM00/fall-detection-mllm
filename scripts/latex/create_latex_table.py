@@ -30,7 +30,7 @@ MODEL_NAMES_COT: dict[str, str] = {
     "73ivqn3d": "Qwen3-VL-32B",
     "o8i8pojr": "InternVL3.5-38B",
 }
-USE_COT = True  # Set to True to use COT runs instead
+USE_COT = False  # Set to True to use COT runs instead
 
 DATASET = "OOPS"
 SPLIT = "cs"
@@ -130,7 +130,7 @@ def format_value(val, col_index, stats):
     if col_index in HEATMAP_COLUMNS:
         min_val = stats[col_index]["min"]
         if max_val != min_val:
-            level = int(round((val - min_val) / (max_val - min_val) * 100))
+            level = int(round(10 + (val - min_val) / (max_val - min_val) * 90))
         else:
             level = 100
         formatted_str = f"\\gc{{{level}}}{{{formatted_str}}}"

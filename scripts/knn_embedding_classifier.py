@@ -204,7 +204,7 @@ def _format_latex_cell(
     if col_idx in HEATMAP_COLUMNS:
         mn = heatmap_stats[col_idx]["min"]
         mx = heatmap_stats[col_idx]["max"]
-        level = int(round((raw - mn) / (mx - mn) * 100)) if mx != mn else 100
+        level = int(round(10 + (raw - mn) / (mx - mn) * 90)) if mx != mn else 100
         s = f"\\gc{{{level}}}{{{s}}}"
 
     return s
