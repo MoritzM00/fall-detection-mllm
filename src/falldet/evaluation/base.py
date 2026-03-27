@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import wandb
 from torch.utils.data import Dataset
 
+import wandb
 from falldet.evaluation.visual import visualize_evaluation_results
 from falldet.metrics.base import compute_metrics
 from falldet.utils.latex import format_subgroup_latex_table

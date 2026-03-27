@@ -4,8 +4,9 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import wandb
 from matplotlib.patches import Patch
+
+import wandb
 
 # ==========================================
 # CONFIGURATION

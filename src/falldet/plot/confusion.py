@@ -251,8 +251,6 @@ def plot_confusion_matrix(
                 off_diagonal_colorbar.set_ticks([0.0, off_diagonal_vmax])
                 off_diagonal_colorbar.set_ticklabels(off_diagonal_ticklabels)
 
-    if not uses_gridspec_colorbars:
-        fig.tight_layout()
     return fig, ax
 
 

@@ -41,7 +41,7 @@ ROW_KEYS: list[str] = [
 SELECTION_DISPLAY: dict[str, str] = {
     "random": "Random",
     "balanced": "Balanced",
-    "similarity": "Similarity",
+    "similarity": "Sim.\\ (overall)",
     "similarity_per_class": "Sim.\\ (per-class)",
 }
 
