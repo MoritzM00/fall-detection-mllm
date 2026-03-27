@@ -11,13 +11,17 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import wandb
 from torch.utils.data import Dataset
 
-import wandb
 from falldet.evaluation.visual import visualize_evaluation_results
 from falldet.metrics.base import compute_metrics
 from falldet.utils.latex import format_subgroup_latex_table
-from falldet.utils.wandb import log_confusion_matrix, log_videos_with_predictions
+from falldet.utils.wandb import (
+    log_confusion_matrix,
+    log_per_class_bar_plots,
+    log_videos_with_predictions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +75,7 @@ def evaluate_predictions(
         for k, v in metrics.items():
             wandb.log({f"{dataset_name}_{k}": v})
 
+        log_per_class_bar_plots(metrics, dataset_name)
         log_confusion_matrix(
             predictions=predictions,
             references=references,

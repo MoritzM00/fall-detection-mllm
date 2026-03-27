@@ -147,6 +147,67 @@ def log_videos_with_predictions(
         )
 
 
+def log_per_class_bar_plots(
+    metrics: dict[str, float],
+    dataset_name: str,
+) -> None:
+    """Log interactive per-class bar charts to wandb.
+    """Log interactive per-class bar charts to wandb.
+
+    Logs six bar charts per dataset (F1, Precision, Recall, Accuracy by class, plus actual
+    and predicted class distributions). Each appears as a separate interactive bar
+    chart in the run's Custom Charts panel.
+    chart in the run's Custom Charts panel.
+
+    Args:
+        metrics: Flat metrics dict from compute_metrics().
+        dataset_name: Name of the dataset, used as a key prefix.
+    """
+    from falldet.data.video_dataset import idx2label
+
+    all_class_names = list(idx2label.values())
+    present_classes = [c for c in all_class_names if f"{c}_f1" in metrics]
+
+    if not present_classes:
+        logger.warning("No per-class metrics found in metrics dict; skipping bar plots.")
+        return
+
+    # One bar chart per metric
+    for metric_key, col_name, title in [
+        ("f1", "f1", "F1 Score"),
+        ("precision", "precision", "Precision"),
+        ("sensitivity", "recall", "Recall"),
+        ("accuracy", "accuracy", "Accuracy"),
+    ]:
+        data = [[c, metrics[f"{c}_{metric_key}"]] for c in present_classes]
+        table = wandb.Table(data=data, columns=["class", col_name])
+        wandb.log(
+            {
+                f"{dataset_name}_{col_name}_by_class": wandb.plot.bar(
+                    table, "class", col_name, title=f"{title} by Class ({dataset_name})"
+                )
+            }
+        )
+
+    # Actual and predicted class distributions
+    for dist_key, col_name, title in [
+        ("true_dist", "actual", "Actual Distribution"),
+        ("pred_dist", "predicted", "Predicted Distribution"),
+    ]:
+        data = [
+            [c, metrics[f"{dist_key}_{c}"]] for c in present_classes if f"{dist_key}_{c}" in metrics
+        ]
+        if data:
+            table = wandb.Table(data=data, columns=["class", col_name])
+            wandb.log(
+                {
+                    f"{dataset_name}_{col_name}_distribution": wandb.plot.bar(
+                        table, "class", col_name, title=f"{title} ({dataset_name})"
+                    )
+                }
+            )
+
+
 def log_confusion_matrix(
     predictions: list[str],
     references: list[str],
