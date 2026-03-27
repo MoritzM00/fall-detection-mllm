@@ -151,14 +151,11 @@ def log_per_class_bar_plots(
     metrics: dict[str, float],
     dataset_name: str,
 ) -> None:
-    """Log interactive per-class bar plots to wandb.
+    """Log interactive per-class bar charts to wandb.
 
-    Logs two tables per dataset:
-    - ``{dataset_name}_per_class_metrics``: F1, Precision, Recall per class in one table.
-    - ``{dataset_name}_class_distribution``: actual vs predicted class distribution per class.
-
-    Each table appears in the run's Media panel and supports bar chart visualization
-    and cross-run comparison in the W&B UI.
+    Logs five bar charts per dataset (F1, Precision, Recall by class, plus actual
+    and predicted class distributions). Each appears as a separate interactive bar
+    chart in the run's Custom Charts panel.
 
     Args:
         metrics: Flat metrics dict from compute_metrics().
@@ -173,30 +170,39 @@ def log_per_class_bar_plots(
         logger.warning("No per-class metrics found in metrics dict; skipping bar plots.")
         return
 
-    # Single table: F1, Precision, Recall per class
-    metrics_data = [
-        [
-            c,
-            metrics[f"{c}_f1"],
-            metrics[f"{c}_precision"],
-            metrics[f"{c}_sensitivity"],
-        ]
-        for c in present_classes
-    ]
-    metrics_table = wandb.Table(data=metrics_data, columns=["class", "f1", "precision", "recall"])
-    wandb.log({f"{dataset_name}_per_class_metrics": metrics_table})
+    # One bar chart per metric
+    for metric_key, col_name, title in [
+        ("f1", "f1", "F1 Score"),
+        ("precision", "precision", "Precision"),
+        ("sensitivity", "recall", "Recall"),
+    ]:
+        data = [[c, metrics[f"{c}_{metric_key}"]] for c in present_classes]
+        table = wandb.Table(data=data, columns=["class", col_name])
+        wandb.log(
+            {
+                f"{dataset_name}_{col_name}_by_class": wandb.plot.bar(
+                    table, "class", col_name, title=f"{title} by Class ({dataset_name})"
+                )
+            }
+        )
 
-    # Single table: actual vs predicted class distribution
-    dist_data = [
-        [
-            c,
-            metrics.get(f"true_dist_{c}", 0.0),
-            metrics.get(f"pred_dist_{c}", 0.0),
+    # Actual and predicted class distributions
+    for dist_key, col_name, title in [
+        ("true_dist", "actual", "Actual Distribution"),
+        ("pred_dist", "predicted", "Predicted Distribution"),
+    ]:
+        data = [
+            [c, metrics[f"{dist_key}_{c}"]] for c in present_classes if f"{dist_key}_{c}" in metrics
         ]
-        for c in present_classes
-    ]
-    dist_table = wandb.Table(data=dist_data, columns=["class", "actual", "predicted"])
-    wandb.log({f"{dataset_name}_class_distribution": dist_table})
+        if data:
+            table = wandb.Table(data=data, columns=["class", col_name])
+            wandb.log(
+                {
+                    f"{dataset_name}_{col_name}_distribution": wandb.plot.bar(
+                        table, "class", col_name, title=f"{title} ({dataset_name})"
+                    )
+                }
+            )
 
 
 def log_confusion_matrix(
