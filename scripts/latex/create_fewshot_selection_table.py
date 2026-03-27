@@ -49,14 +49,14 @@ SELECTION_DISPLAY: dict[str, str] = {
 # All runs use ascending ordering (or random, where ordering is irrelevant).
 # Fill in actual W&B run IDs before running.
 SELECTION_RUNS: dict[str, tuple[str, str]] = {
-    "TODO_internvl_random": ("InternVL3.5-8B", "random"),
-    "TODO_internvl_balanced_asc": ("InternVL3.5-8B", "balanced"),
-    "szm3htq5": ("InternVL3.5-8B", "similarity"),
-    "TODO_internvl_similarity_per_class": ("InternVL3.5-8B", "similarity_per_class"),
-    "qezzftr0": ("Qwen3-VL-8B", "random"),
-    "0kl6yqw0": ("Qwen3-VL-8B", "balanced"),
-    "9ek95yp9": ("Qwen3-VL-8B", "similarity"),
-    "TODO_qwen_similarity_per_class": ("Qwen3-VL-8B", "similarity_per_class"),
+    "8q1jodae": ("InternVL3.5-8B", "random"),
+    "5opbcbg8": ("InternVL3.5-8B", "balanced"),
+    "nh235rox": ("InternVL3.5-8B", "similarity"),
+    "n8tsvptj": ("InternVL3.5-8B", "similarity_per_class"),
+    "ppg5vme9": ("Qwen3-VL-8B", "random"),
+    "4gtamz6e": ("Qwen3-VL-8B", "balanced"),
+    "r7kqdmg4": ("Qwen3-VL-8B", "similarity"),
+    "b0n1ngwu": ("Qwen3-VL-8B", "similarity_per_class"),
 }
 
 

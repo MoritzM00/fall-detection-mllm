@@ -6,12 +6,12 @@ from typing import Any, cast
 
 import hydra
 import torch
-import wandb
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
 
+import wandb
 from falldet.config import resolve_model_path_from_config
 from falldet.data.video_dataset import label2idx
 from falldet.data.video_dataset_factory import get_video_datasets
@@ -184,6 +184,8 @@ def main(cfg: DictConfig):
         )
         run.summary["total_input_tokens"] = total_input_tokens
         run.summary["total_output_tokens"] = total_output_tokens
+        run.summary["avg_input_tokens_per_request"] = total_input_tokens // n
+        run.summary["avg_output_tokens_per_request"] = total_output_tokens // n
 
     if sampler is not None:
         match_pct = (
