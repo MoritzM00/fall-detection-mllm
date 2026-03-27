@@ -52,7 +52,7 @@ SELECTION_RUNS: dict[str, tuple[str, str]] = {
     "8q1jodae": ("InternVL3.5-8B", "random"),
     "5opbcbg8": ("InternVL3.5-8B", "balanced"),
     "nh235rox": ("InternVL3.5-8B", "similarity"),
-    "n8tsvptj": ("InternVL3.5-8B", "similarity_per_class"),
+    "wr5wgjth": ("InternVL3.5-8B", "similarity_per_class"),
     "ppg5vme9": ("Qwen3-VL-8B", "random"),
     "4gtamz6e": ("Qwen3-VL-8B", "balanced"),
     "r7kqdmg4": ("Qwen3-VL-8B", "similarity"),
