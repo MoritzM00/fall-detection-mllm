@@ -26,6 +26,7 @@ from falldet.plot import (
     COLORS,
     MetricComparisonPanelSpec,
     PredictionMetricInput,
+    compute_publication_figsize,
     plot_label_distribution_comparison_from_predictions,
     plot_metric_comparison_from_predictions,
     plot_metric_comparison_panels_from_predictions,
@@ -45,12 +46,11 @@ CLASS_SUBSET: tuple[str, ...] | None = (
     "fallen",
     "lying",
     "lie_down",
+    "jump",
     "other",
     "walk",
     "standing",
     "sit_down",
-    "sitting",
-    "crawl",
 )
 
 
@@ -397,12 +397,13 @@ def main() -> None:
     distribution_labels = tuple(
         sorted(distribution_labels, key=lambda label: actual_dist.get(label, 0.0), reverse=True)
     )
+    w, h = compute_publication_figsize(width_fraction=1, height_ratio=0.5)
     distribution_fig, _ = plot_label_distribution_comparison_from_predictions(
         metric_inputs,
         label_order=distribution_labels,
         label_labels={label: label.replace("_", " ") for label in distribution_labels},
         title=None,
-        figsize=(10.0, 4.8),
+        figsize=(w, h),
         actual_name="Actual",
         actual_color=COLORS["neutral"],
     )
