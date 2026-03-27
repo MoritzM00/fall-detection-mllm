@@ -175,6 +175,7 @@ def log_per_class_bar_plots(
         ("f1", "f1", "F1 Score"),
         ("precision", "precision", "Precision"),
         ("sensitivity", "recall", "Recall"),
+        ("accuracy", "accuracy", "Accuracy"),
     ]:
         data = [[c, metrics[f"{c}_{metric_key}"]] for c in present_classes]
         table = wandb.Table(data=data, columns=["class", col_name])
