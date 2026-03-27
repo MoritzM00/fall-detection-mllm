@@ -1,6 +1,6 @@
 """Generate a LaTeX ablation table for few-shot exemplar selection.
 
-Rows: Random, Balanced, Similarity (all ascending ordering).
+Rows: Random, Balanced, Similarity, Sim. (per-class) — all ascending ordering.
 Columns: BAcc, F1, Fall F1, Fallen F1 for each of two models side by side.
 Fixed defaults: num_shots=5, delimiters=true, ordering=ascending.
 
@@ -35,12 +35,14 @@ ROW_KEYS: list[str] = [
     "random",
     "balanced",
     "similarity",
+    "similarity_per_class",
 ]
 
 SELECTION_DISPLAY: dict[str, str] = {
     "random": "Random",
     "balanced": "Balanced",
     "similarity": "Similarity",
+    "similarity_per_class": "Sim.\\ (per-class)",
 }
 
 # Hardcoded run IDs: {run_id: (model_display_name, selection_strategy)}
@@ -50,9 +52,11 @@ SELECTION_RUNS: dict[str, tuple[str, str]] = {
     "TODO_internvl_random": ("InternVL3.5-8B", "random"),
     "TODO_internvl_balanced_asc": ("InternVL3.5-8B", "balanced"),
     "szm3htq5": ("InternVL3.5-8B", "similarity"),
+    "TODO_internvl_similarity_per_class": ("InternVL3.5-8B", "similarity_per_class"),
     "qezzftr0": ("Qwen3-VL-8B", "random"),
     "0kl6yqw0": ("Qwen3-VL-8B", "balanced"),
     "9ek95yp9": ("Qwen3-VL-8B", "similarity"),
+    "TODO_qwen_similarity_per_class": ("Qwen3-VL-8B", "similarity_per_class"),
 }
 
 
