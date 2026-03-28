@@ -44,18 +44,18 @@ METRIC_HEADERS = ["BAcc", "Acc", "F1", "Fall F1", "Fallen F1"]
 # Hardcoded run IDs: {run_id: (model_display_name, num_shots)}
 # Fill in actual W&B run IDs before running.
 SHOTS_RUNS: dict[str, tuple[str, int]] = {
-    "TODO_internvl_1": ("InternVL3.5-8B", 1),
-    "TODO_internvl_2": ("InternVL3.5-8B", 2),
-    "TODO_internvl_3": ("InternVL3.5-8B", 3),
-    "TODO_internvl_5": ("InternVL3.5-8B", 5),
-    "TODO_internvl_7": ("InternVL3.5-8B", 7),
+    "sq8lsotb": ("InternVL3.5-8B", 1),
+    "75z4bsdr": ("InternVL3.5-8B", 2),
+    "h4aei5c6": ("InternVL3.5-8B", 3),
+    "2redlhmd": ("InternVL3.5-8B", 5),
+    "urdofhif": ("InternVL3.5-8B", 7),
     "lz8e33if": ("Qwen3-VL-8B", 1),
     "h405omjo": ("Qwen3-VL-8B", 2),
     "xisxlsxd": ("Qwen3-VL-8B", 3),
     "iy7xabko": ("Qwen3-VL-8B", 5),
     "zy6qp8ph": ("Qwen3-VL-8B", 7),
-    "TODO_qwen_10": ("Qwen3-VL-8B", 10),
-    "TODO_qwen_15": ("Qwen3-VL-8B", 15),
+    "uei9m4ra": ("Qwen3-VL-8B", 10),
+    "iwoxtm2s": ("Qwen3-VL-8B", 15),
 }
 
 
