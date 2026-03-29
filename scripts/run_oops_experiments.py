@@ -26,6 +26,12 @@ Examples:
 
     # Run with chain of thought
     python scripts/run_oops_experiments.py --model qwenvl --cot
+
+    # Run with similarity-based few-shot
+    python scripts/run_oops_experiments.py --model internvl --fewshot-similarity
+
+    # Run few-shot similarity on multiple datasets
+    python scripts/run_oops_experiments.py --model qwenvl --fewshot-similarity --dataset cmdfall up-fall
 """
 
 from __future__ import annotations
@@ -94,7 +100,11 @@ def get_active_params(model: str, params: str) -> str | None:
 
 
 def generate_command(
-    model: str, params: str, cot: bool = False, dataset: str = DEFAULT_DATASET
+    model: str,
+    params: str,
+    cot: bool = False,
+    fewshot_similarity: bool = False,
+    dataset: str = DEFAULT_DATASET,
 ) -> str:
     """
     Generate the vllm_inference.py command.
@@ -103,12 +113,18 @@ def generate_command(
         model: Model family ('internvl' or 'qwenvl')
         params: Model parameter size (e.g., '8B', '30B')
         cot: Whether to use chain of thought
+        fewshot_similarity: Whether to use similarity-based few-shot
         dataset: Dataset name to run on
 
     Returns:
         Complete command string
     """
-    experiment = "zeroshot_cot" if cot else "zeroshot"
+    if fewshot_similarity:
+        experiment = "fewshot_similarity"
+    elif cot:
+        experiment = "zeroshot_cot"
+    else:
+        experiment = "zeroshot"
 
     cmd_parts = [
         "python scripts/vllm_inference.py",
@@ -156,6 +172,7 @@ def execute_runs(
     dry_run: bool = False,
     cooldown: int = 10,
     cot: bool = False,
+    fewshot_similarity: bool = False,
     datasets: list[str] | None = None,
 ) -> None:
     """
@@ -167,6 +184,7 @@ def execute_runs(
         dry_run: If True, only print commands without executing
         cooldown: Seconds to wait between runs
         cot: If True, run chain of thought experiments
+        fewshot_similarity: If True, run similarity-based few-shot experiments
         datasets: Dataset names to run on
     """
     if datasets is None:
@@ -195,7 +213,12 @@ def execute_runs(
     failed = 0
 
     prefix = "[DRY RUN] " if dry_run else ""
-    experiment_type = "chain of thought" if cot else "zeroshot"
+    if fewshot_similarity:
+        experiment_type = "fewshot similarity"
+    elif cot:
+        experiment_type = "chain of thought"
+    else:
+        experiment_type = "zeroshot"
     datasets_label = ", ".join(datasets)
     logging.info(
         f"\n{prefix}Running {total_runs} {experiment_type} experiments on [{datasets_label}] datasets"
@@ -203,7 +226,9 @@ def execute_runs(
     logging.info("=" * 60)
 
     for idx, (model, params, dataset) in enumerate(runs, start=1):
-        command = generate_command(model, params, cot=cot, dataset=dataset)
+        command = generate_command(
+            model, params, cot=cot, fewshot_similarity=fewshot_similarity, dataset=dataset
+        )
 
         action = "Would run" if dry_run else "Running"
         moe_label = " (MoE)" if is_moe_model(model, params) else ""
@@ -304,10 +329,16 @@ Examples:
         help="Seconds to wait between runs for vLLM cleanup (default: 10)",
     )
 
-    parser.add_argument(
+    experiment_group = parser.add_mutually_exclusive_group()
+    experiment_group.add_argument(
         "--cot",
         action="store_true",
         help="Use chain of thought (sets experiment=zeroshot_cot, model.variant=Thinking for qwen)",
+    )
+    experiment_group.add_argument(
+        "--fewshot-similarity",
+        action="store_true",
+        help="Use similarity-based few-shot (sets experiment=fewshot_similarity)",
     )
 
     return parser.parse_args()
@@ -330,6 +361,7 @@ def main() -> None:
         dry_run=args.dry_run,
         cooldown=args.cooldown,
         cot=args.cot,
+        fewshot_similarity=args.fewshot_similarity,
         datasets=args.dataset,
     )
 
