@@ -9,11 +9,11 @@ PROJECT = "fall-detection-fewshot"
 # Mapping run IDs to pretty display names (sorted by model size)
 # TODO: Fill in W&B run IDs after running fewshot-similarity experiments
 MODEL_NAMES: dict[str, str] = {
-    "TODO_internvl_2b": "InternVL3.5-2B",
-    "TODO_qwen_2b": "Qwen3-VL-2B",
-    "TODO_internvl_8b": "InternVL3.5-8B",
-    "TODO_qwen_8b": "Qwen3-VL-8B",
-    "TODO_qwen_32b": "Qwen3-VL-32B",
+    "8y5wihub": "InternVL3.5-2B",
+    "o6ta2929": "Qwen3-VL-2B",
+    "j77j15xy": "InternVL3.5-8B",
+    "dc2rkb9f": "Qwen3-VL-8B",
+    "lp4yccqf": "Qwen3-VL-32B",
     "TODO_internvl_38b": "InternVL3.5-38B",
 }
 
