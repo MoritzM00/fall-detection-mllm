@@ -4,6 +4,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import pdist
 from sklearn.metrics import confusion_matrix
 
 from .base import (
@@ -47,10 +49,71 @@ def _annotation_text_color_for_rgba(rgba: tuple[float, float, float, float]) -> 
     return "white" if luminance < 0.45 else "black"
 
 
+def cluster_confusion_labels(
+    y_true: list[str],
+    y_pred: list[str],
+    method: str = "average",
+    metric: str = "cosine",
+    optimal_ordering: bool = True,
+    labels: list[str] | None = None,
+) -> tuple[list[str], np.ndarray]:
+    """Reorder class labels by hierarchical clustering of the confusion matrix.
+
+    Each class is represented as its row in the row-normalized confusion matrix
+    (i.e. its "confusion profile"). Pairwise distances between these profiles
+    are clustered so that classes that get confused with each other end up
+    adjacent in the returned order.
+
+    Args:
+        y_true: Ground-truth labels.
+        y_pred: Predicted labels, same length as *y_true*.
+        method: Linkage method passed to ``scipy.cluster.hierarchy.linkage``
+            (e.g. ``"average"``, ``"complete"``, ``"ward"``).
+        metric: Distance metric for ``scipy.spatial.distance.pdist``
+            (e.g. ``"cosine"``, ``"euclidean"``). Note: ``"ward"`` linkage
+            requires ``"euclidean"`` distance.
+        optimal_ordering: When ``True``, apply optimal leaf ordering to
+            minimise the sum of distances between adjacent leaves.
+        labels: Explicit list of labels to cluster. When provided, the
+            confusion matrix is computed only for these labels (others are
+            ignored). Defaults to all unique labels in *y_true* and *y_pred*.
+
+    Returns:
+        A tuple ``(ordered_labels, linkage_matrix)`` where *ordered_labels*
+        is the reordered list of all unique labels and *linkage_matrix* is the
+        scipy linkage array (useful for plotting a dendrogram).
+    """
+    _validate_confusion_inputs(y_true, y_pred)
+    all_labels: list[str] = labels if labels is not None else sorted(set(y_true) | set(y_pred))
+    cm_norm = confusion_matrix(y_true, y_pred, labels=all_labels, normalize="true").astype(
+        np.float64
+    )
+
+    if len(all_labels) == 1:
+        return all_labels, np.empty((0, 4))
+
+    # Replace NaN rows (classes with zero true samples) with zeros
+    row_sums = cm_norm.sum(axis=1, keepdims=True)
+    cm_norm = np.where(row_sums == 0, 0.0, cm_norm)
+
+    dist = pdist(cm_norm, metric=metric)
+    # Guard against NaN distances (e.g. zero-vector cosine) by replacing with max
+    nan_mask = ~np.isfinite(dist)
+    if nan_mask.any():
+        dist[nan_mask] = dist[~nan_mask].max() if (~nan_mask).any() else 1.0
+
+    linkage_matrix = hierarchy.linkage(dist, method=method, optimal_ordering=optimal_ordering)
+    leaf_order = hierarchy.leaves_list(linkage_matrix)
+    ordered_labels = [all_labels[i] for i in leaf_order]
+    return ordered_labels, linkage_matrix
+
+
 def plot_confusion_matrix(
     y_true: list[str],
     y_pred: list[str],
     normalize: str | None = None,
+    label_order: list[str] | None = None,
+    normalization_labels: list[str] | None = None,
     subset: list[str] | None = None,
     title: str | None = None,
     cmap: str = "Blues",
@@ -58,18 +121,32 @@ def plot_confusion_matrix(
     annot_threshold: float | int | None = None,
     figsize: tuple[float, float] | None = None,
     ax: matplotlib.axes.Axes | None = None,
+    support: dict[str, int] | None = None,
 ) -> tuple[plt.Figure, matplotlib.axes.Axes]:
     """Plot a confusion matrix computed from string label arrays.
 
     The confusion matrix is always computed over all classes present in
-    ``y_true`` and ``y_pred``. When *subset* is given, only the
-    requested classes are shown in the plot, in the order provided.
+    ``y_true`` and ``y_pred``. When *label_order* is given it sets the full
+    display order; when *subset* is given only those classes are shown (in the
+    order provided by *subset*). *label_order* and *subset* are mutually
+    exclusive.
+
+    When displaying a subset of labels, normalization is by default computed
+    only over those labels. Pass *normalization_labels* with the full label set
+    to normalize over all classes — this preserves the correct row sums (each
+    true-label row sums to 1 across all predictions, not just the displayed ones).
 
     Args:
         y_true: Ground-truth labels.
         y_pred: Predicted labels, same length as *y_true*.
         normalize: One of ``None``, ``"true"``, ``"pred"``, or ``"all"``.
-        subset: Optional list of class names to display.
+        label_order: Optional explicit ordering of all class labels.  Use
+            ``cluster_confusion_labels`` to obtain a clustering-based order.
+        normalization_labels: Full label set used to compute the confusion
+            matrix before normalization. The displayed matrix is then extracted
+            from this full matrix. Use this when *label_order* covers only a
+            subset so that row sums reflect all predictions, not just displayed ones.
+        subset: Optional list of class names to display (filters and reorders).
         title: Title shown above the plot.
         cmap: Colormap name used for diagonal cells.
         cbar: Whether to show the color bar(s).
@@ -86,12 +163,27 @@ def plot_confusion_matrix(
         raise ValueError(f"normalize must be one of {valid_normalize}, got {normalize!r}.")
     if annot_threshold is not None and annot_threshold < 0:
         raise ValueError(f"annot_threshold must be non-negative, got {annot_threshold!r}.")
+    if label_order is not None and subset is not None:
+        raise ValueError("label_order and subset are mutually exclusive.")
 
-    all_labels: list[str] = sorted(set(y_true) | set(y_pred))
-    cm = confusion_matrix(y_true, y_pred, labels=all_labels, normalize=normalize)
-    display_values = cm.astype(np.float64)
-
-    display_labels, display_matrix = _resolve_display_subset(all_labels, display_values, subset)
+    if normalization_labels is not None:
+        # Compute full matrix (for correct normalization), then extract the display subset.
+        full_cm = confusion_matrix(
+            y_true, y_pred, labels=normalization_labels, normalize=normalize
+        ).astype(np.float64)
+        display_labels_for_extract = label_order if label_order is not None else subset
+        all_labels = normalization_labels
+        display_labels, display_matrix = _resolve_display_subset(
+            all_labels, full_cm, display_labels_for_extract
+        )
+    else:
+        if label_order is not None:
+            all_labels = list(label_order)
+        else:
+            all_labels = sorted(set(y_true) | set(y_pred))
+        cm = confusion_matrix(y_true, y_pred, labels=all_labels, normalize=normalize)
+        display_values = cm.astype(np.float64)
+        display_labels, display_matrix = _resolve_display_subset(all_labels, display_values, subset)
 
     annot = np.empty_like(display_matrix, dtype=object)
     for i in range(display_matrix.shape[0]):
@@ -215,7 +307,13 @@ def plot_confusion_matrix(
         ax.set_title(title)
 
     ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
-    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    if support is not None:
+        max_n = max(support.get(label, 0) for label in display_labels)
+        n_width = len(str(max_n))
+        y_labels = [f"{label} (n={support.get(label, 0):>{n_width}})" for label in display_labels]
+        ax.set_yticklabels(y_labels, rotation=0, family="monospace")
+    else:
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
     if cbar:
         value_label = "Proportion" if normalize else "Count"
@@ -393,4 +491,4 @@ def plot_relative_confusion_matrix(
     return fig, ax
 
 
-__all__ = ["plot_confusion_matrix", "plot_relative_confusion_matrix"]
+__all__ = ["cluster_confusion_labels", "plot_confusion_matrix", "plot_relative_confusion_matrix"]

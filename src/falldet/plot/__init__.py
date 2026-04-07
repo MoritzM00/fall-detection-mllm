@@ -1,7 +1,11 @@
 """Public plotting API for confusion matrices and video visualizations."""
 
 from .base import compute_publication_figsize, set_publication_rc_defaults
-from .confusion import plot_confusion_matrix, plot_relative_confusion_matrix
+from .confusion import (
+    cluster_confusion_labels,
+    plot_confusion_matrix,
+    plot_relative_confusion_matrix,
+)
 from .metrics import (
     COLORS,
     DEFAULT_METRIC_LABELS,
@@ -22,6 +26,7 @@ from .video import video_to_image_grid, visualize_video
 
 __all__ = [
     "COLORS",
+    "cluster_confusion_labels",
     "DEFAULT_METRIC_LABELS",
     "DEFAULT_METRIC_ORDER",
     "MetricComparisonPanelSpec",
