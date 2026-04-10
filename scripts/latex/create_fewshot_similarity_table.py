@@ -20,6 +20,11 @@ MODEL_NAMES: dict[str, str] = {
 DATASET = "OOPS"
 SPLIT = "cs"
 
+# Hardcoded specialized baseline (VMAE-K400) values (already in 0–100 scale)
+SPECIALIZED_BASELINE: dict[str, list[float]] = {
+    "VMAE-K400": [25.8, 95.5, 26.7, 79.3, 91.3, 76.0, 57.2, 92.8, 53.6, 80.9, 84.7, 76.9],
+}
+
 # Whether to include the Fall ∪ Fallen binary metrics column group
 INCLUDE_FALL_UNION_FALLEN = True
 
@@ -100,12 +105,18 @@ def format_value(val: float | None, col_index: int, stats: list[dict[str, float]
 def generate_latex() -> None:
     api = wandb.Api()
 
-    all_rows = []
+    mllm_rows = []
     for run_id, display_name in MODEL_NAMES.items():
         metrics = fetch_run_data(api, run_id)
-        all_rows.append({"name": display_name, "metrics": metrics})
+        mllm_rows.append({"name": display_name, "metrics": metrics})
 
-    # Calculate stats per column (max, second max, min)
+    # Build all rows (baseline + MLLMs) for global stats
+    all_rows = [
+        {"name": name, "metrics": vals}
+        for name, vals in SPECIALIZED_BASELINE.items()
+    ] + mllm_rows
+
+    # Calculate stats per column (max, second max, min) across all rows
     num_metrics = len(METRICS_ORDER)
     col_stats = []
 
@@ -120,19 +131,22 @@ def generate_latex() -> None:
         }
         col_stats.append(stats)
 
-    # Format rows
-    mllm_latex_rows = []
-    for row in all_rows:
-        formatted_metrics = []
-        for i, val in enumerate(row["metrics"]):
-            formatted_metrics.append(format_value(val, i, col_stats))
+    def fmt_row(row: dict) -> str:
+        formatted_metrics = [format_value(v, i, col_stats) for i, v in enumerate(row["metrics"])]
+        return f"{row['name']} & {' & '.join(formatted_metrics)} \\\\"
 
-        metrics_str = " & ".join(formatted_metrics)
-        mllm_latex_rows.append(f"{row['name']} & {metrics_str} \\\\")
+    # Format specialized baseline rows
+    baseline_latex_rows = [fmt_row(row) for row in all_rows if row["name"] in SPECIALIZED_BASELINE]
 
-    mllm_body = "\n".join(mllm_latex_rows)
+    # Group MLLMs by family: InternVL first, then Qwen
+    internvl_rows = [fmt_row(r) for r in mllm_rows if r["name"].startswith("InternVL")]
+    qwen_rows = [fmt_row(r) for r in mllm_rows if r["name"].startswith("Qwen")]
+
+    baseline_body = "\n".join(baseline_latex_rows)
+    mllm_body = "\n".join(internvl_rows) + "\n\\addlinespace\n" + "\n".join(qwen_rows)
 
     # Construct table
+    num_cols = len(METRICS_ORDER) + 1  # +1 for the model name column
     if INCLUDE_FALL_UNION_FALLEN:
         col_spec = "@{}l rrr rrr rrr rrr@{}"
         union_header = " &\n\\multicolumn{3}{c}{Fall $\\cup$ Fallen}"
@@ -145,6 +159,8 @@ def generate_latex() -> None:
         union_header = ""
         union_cmidrule = ""
         union_sub_header = ""
+
+    section_header_spec = "@{}l" + " r" * (num_cols - 1)
 
     full_table = f"""
 \\begingroup
@@ -170,6 +186,13 @@ We report classification metrics for the 16-class action recognition task, as we
  & \\multicolumn{{1}}{{c}}{{Se}}   & \\multicolumn{{1}}{{c}}{{Sp}}  & \\multicolumn{{1}}{{c}}{{F1}}{union_sub_header} \\\\
 \\midrule
 
+% Specialized baseline
+\\multicolumn{{{num_cols}}}{{@{{}}l}}{{\\textit{{Specialized Model}}}} \\\\
+{baseline_body}
+\\midrule
+
+% MLLMs grouped by family
+\\multicolumn{{{num_cols}}}{{@{{}}l}}{{\\textit{{Open-source MLLMs}}}} \\\\
 {mllm_body}
 
 \\bottomrule

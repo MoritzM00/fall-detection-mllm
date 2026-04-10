@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from rich.console import Console
 from rich.table import Table
-from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
@@ -50,13 +50,13 @@ _DATA_SIZE = 448
 
 # ── Classifier registry ──────────────────────────────────────────────
 
-_MLP_BASE: dict = {"max_iter": 1, "warm_start": True, "solver": "adam"}
+_MLP_BASE: dict = {"max_iter": 1, "warm_start": True, "solver": "adam", "batch_size": 64, "random_state": 0}
 
 CLASSIFIER_REGISTRY: dict[str, tuple[str, type, dict]] = {
     "knn": (
-        "$k$-NN ($k{=}5$)",
+        "$k$-NN ($k=3$)",
         KNeighborsClassifier,
-        {"n_neighbors": 5, "metric": "euclidean"},
+        {"n_neighbors": 3, "metric": "euclidean"},
     ),
     # ── MLP variants ──
     "mlp": (
@@ -64,37 +64,38 @@ CLASSIFIER_REGISTRY: dict[str, tuple[str, type, dict]] = {
         MLPClassifier,
         {**_MLP_BASE, "hidden_layer_sizes": (512, 256, 128, 64)},
     ),
-    "mlp_4l": (
-        "MLP (256-128-64-32)",
-        MLPClassifier,
-        {**_MLP_BASE, "hidden_layer_sizes": (256, 128, 64, 32)},
-    ),
-    "mlp_2l": (
-        "MLP (512-256)",
-        MLPClassifier,
-        {**_MLP_BASE, "hidden_layer_sizes": (512, 256)},
-    ),
-    "mlp_narrow": (
-        "MLP (128-64)",
-        MLPClassifier,
-        {**_MLP_BASE, "hidden_layer_sizes": (128, 64)},
-    ),
+    # "mlp_4l": (
+    #     "MLP (256-128-64-32)",
+    #     MLPClassifier,
+    #     {**_MLP_BASE, "hidden_layer_sizes": (256, 128, 64, 32)},
+    # ),
+    # "mlp_2l": (
+    #     "MLP (512-256)",
+    #     MLPClassifier,
+    #     {**_MLP_BASE, "hidden_layer_sizes": (512, 256)},
+    # ),
+    # "mlp_narrow": (
+    #     "MLP (128-64)",
+    #     MLPClassifier,
+    #     {**_MLP_BASE, "hidden_layer_sizes": (1024, 512, 256, 64), "verbose": True},
+    # ),
     # ── Other classifiers ──
     "svm": (
         "SVM (RBF)",
         SVC,
-        {"kernel": "rbf", "C": 1.0},
+        {"kernel": "rbf", "C": 1.0, "class_weight": "balanced"},
     ),
     "lr": (
         "Logistic Regression",
         LogisticRegression,
-        {"max_iter": 1000},
+        {"max_iter": 1000, "class_weight": "balanced"},
     ),
-    "gb": (
-        "Hist Gradient Boosting",
-        HistGradientBoostingClassifier,
-        {"max_iter": 1, "warm_start": True},
-    ),
+    "rf": (
+        "Random Forest",
+        RandomForestClassifier,
+        {"n_estimators": 200, "random_state": 0, "class_weight": "balanced", "max_depth": 10}
+    )
+    
 }
 
 # Classifiers that support val-based early stopping

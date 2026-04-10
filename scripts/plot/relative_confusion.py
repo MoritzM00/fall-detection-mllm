@@ -18,9 +18,12 @@ Examples:
     # Both local files
     python scripts/plot/relative_confusion.py run_a.jsonl run_b.jsonl
 
-    # With subset
+    # With subset, clustered order (default)
     python scripts/plot/relative_confusion.py abc123 def456 \\
         --subset fall fallen lie_down lying
+
+    # Canonical label order
+    python scripts/plot/relative_confusion.py abc123 def456 --order canonical
 """
 
 import argparse
@@ -28,9 +31,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from falldet.plot import plot_relative_confusion_matrix, set_publication_rc_defaults
+from falldet.data.video_dataset import label2idx
+from falldet.plot import (
+    cluster_confusion_labels,
+    plot_relative_confusion_matrix,
+    set_publication_rc_defaults,
+)
 from falldet.utils.predictions import extract_labels_for_metrics, load_predictions_jsonl
 from falldet.utils.wandb import load_run_from_wandb
+
+CANONICAL_ORDER = list(label2idx.keys())
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +102,23 @@ def parse_args() -> argparse.Namespace:
         help="Subset of class labels to display (e.g. --subset fall fallen lie_down)",
     )
     parser.add_argument(
+        "--order",
+        choices=["clustered", "canonical", "alphabetical", "fixed"],
+        default="clustered",
+        help="Label ordering strategy (default: clustered). "
+        "'fixed' preserves the --subset order exactly.",
+    )
+    parser.add_argument(
+        "--linkage-method",
+        default="average",
+        help="Linkage method for clustering (default: average)",
+    )
+    parser.add_argument(
+        "--metric",
+        default="cosine",
+        help="Distance metric for clustering (default: cosine)",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         default=None,
@@ -109,6 +136,24 @@ def parse_args() -> argparse.Namespace:
         help="Show color bar (default: off)",
     )
     parser.add_argument(
+        "--no-ylabel",
+        action="store_true",
+        default=False,
+        help="Hide y-axis labels (use for the right plot in a side-by-side figure)",
+    )
+    parser.add_argument(
+        "--width-fraction",
+        type=float,
+        default=0.5,
+        help="Figure width as fraction of text width (default: 0.5)",
+    )
+    parser.add_argument(
+        "--height-ratio",
+        type=float,
+        default=0.9,
+        help="Figure height ratio (default: 0.9)",
+    )
+    parser.add_argument(
         "--cache-dir",
         default=str(DEFAULT_CACHE_DIR),
         help="Output root containing predictions/<project>/<run_id>.jsonl (default: outputs/)",
@@ -123,12 +168,42 @@ def _run_display_name(run_ref: str) -> str:
     return run_ref
 
 
+def _resolve_label_order(
+    order: str,
+    y_true: list[str],
+    y_pred: list[str],
+    method: str,
+    metric: str,
+    labels: list[str] | None = None,
+) -> list[str]:
+    """Return an ordered list of labels for the requested mode."""
+    all_labels = labels if labels is not None else sorted(set(y_true) | set(y_pred))
+    if order == "clustered":
+        ordered, _ = cluster_confusion_labels(
+            y_true, y_pred, method=method, metric=metric, labels=all_labels
+        )
+        return ordered
+    elif order == "canonical":
+        present = set(all_labels)
+        ordered = [label for label in CANONICAL_ORDER if label in present]
+        ordered += sorted(present - set(ordered))
+        return ordered
+    elif order == "fixed":
+        # Preserve the exact order given by --subset (or the natural label order).
+        return all_labels
+    else:  # alphabetical
+        return sorted(all_labels)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    _, (figure_width, figure_height) = set_publication_rc_defaults(
-        use_tex=True, height_ratio=1, width_fraction=0.66, rc={"font.size": 8}
-    )
     args = parse_args()
+    _, (figure_width, figure_height) = set_publication_rc_defaults(
+        use_tex=True,
+        height_ratio=args.height_ratio,
+        width_fraction=args.width_fraction,
+        rc={"font.size": 9},
+    )
 
     output_root = Path(args.cache_dir)
 
@@ -144,10 +219,35 @@ def main() -> None:
     y_true_a, y_pred_a = extract_labels_for_metrics(preds_a)
     y_true_b, y_pred_b = extract_labels_for_metrics(preds_b)
 
+    # Support counts from run A (baseline ground truth).
+    from collections import Counter
+
+    true_counts = Counter(y_true_a)
+
+    # For clustering: use combined labels from both runs, filtered to subset if given.
+    subset_labels: list[str] | None = args.subset
+    all_true = y_true_a + y_true_b
+    all_pred = y_pred_a + y_pred_b
+    if subset_labels is not None:
+        subset_set = set(subset_labels)
+        pairs = [(t, p) for t, p in zip(all_true, all_pred) if t in subset_set]
+        y_clust, p_clust = (list(x) for x in zip(*pairs)) if pairs else ([], [])
+    else:
+        y_clust, p_clust = all_true, all_pred
+
+    label_order = _resolve_label_order(
+        args.order,
+        y_clust,
+        p_clust,
+        args.linkage_method,
+        args.metric,
+        labels=subset_labels,
+    )
+
+    support = {label: true_counts.get(label, 0) for label in label_order}
+
     # Build plot kwargs
     plot_kwargs: dict = {}
-    if args.subset:
-        plot_kwargs["subset"] = args.subset
     if args.title:
         plot_kwargs["title"] = args.title
     if args.cbar:
@@ -159,7 +259,10 @@ def main() -> None:
         y_pred_a=y_pred_a,
         y_true_b=y_true_b,
         y_pred_b=y_pred_b,
+        label_order=label_order,
         figsize=(figure_width, figure_height),
+        support=support,
+        show_ylabel=not args.no_ylabel,
         **plot_kwargs,
     )
 
@@ -169,7 +272,7 @@ def main() -> None:
     else:
         name_a = _run_display_name(args.run_a)
         name_b = _run_display_name(args.run_b)
-        output_path = DEFAULT_OUTPUT_DIR / f"relative_cm_{name_a}_vs_{name_b}.pdf"
+        output_path = DEFAULT_OUTPUT_DIR / f"relative_cm_{name_a}_vs_{name_b}_{args.order}.pdf"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight")

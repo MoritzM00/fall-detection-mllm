@@ -42,18 +42,18 @@ INCLUDE_FALL_UNION_FALLEN = True
 # so it can be included in the calculation for bold/underline.
 SPECIALIZED_MODEL_NAME = "VMAE-K400"
 SPECIALIZED_MODEL_METRICS_ALL: list[float | None] = [
-    22.9,
-    94.5,
-    23.3,
-    77.4,
-    84.8,
+    21.4,
+    47.6,
+    21.9,
+    72.9,
+    85.4,
+    65.6,
+    33.1,
+    96.3,
+    41.0,
+    68.2,
+    82.4,
     67.5,
-    28.0,
-    97.6,
-    38.2,
-    70.9,
-    84.1,
-    70.3,
 ]
 SPECIALIZED_MODEL_METRICS: list[float | None] = (
     SPECIALIZED_MODEL_METRICS_ALL
