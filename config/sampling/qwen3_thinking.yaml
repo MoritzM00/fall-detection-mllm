@@ -11,7 +11,7 @@ temperature: 0.5
 # Maximum number of tokens to generate
 # Note: Higher limit to accommodate thinking/reasoning tokens + output
 # max_tokens: 40960
-max_tokens: 2048
+max_tokens: 4096
 
 # Top-k filtering: Only sample from the k most likely tokens
 # Range: -1 (disabled), or positive integer (e.g., 20, 50)
