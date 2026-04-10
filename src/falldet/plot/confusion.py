@@ -358,17 +358,28 @@ def plot_relative_confusion_matrix(
     y_true_b: list[str],
     y_pred_b: list[str],
     subset: list[str] | None = None,
+    label_order: list[str] | None = None,
     title: str | None = None,
     cmap: str | matplotlib.colors.Colormap = RELATIVE_CONFUSION_DIAGONAL_CMAP,
     cbar: bool = False,
     figsize: tuple[float, float] | None = None,
     ax: matplotlib.axes.Axes | None = None,
+    support: dict[str, int] | None = None,
+    show_ylabel: bool = True,
 ) -> tuple[plt.Figure, matplotlib.axes.Axes]:
     """Plot a relative row-normalized confusion matrix for two runs.
 
     The matrix compares run *B* against run *A*. Cell color shows the
     change in row-normalized confusion. The annotation shows the raw
     difference (B - A) in percentage points.
+
+    Args:
+        label_order: Explicit label ordering for display. When provided,
+            takes precedence over *subset* for both filtering and order.
+        support: Per-class sample counts shown as ``(n=N)`` in the y-axis
+            labels. Numbers are right-aligned with monospace font.
+        show_ylabel: When ``False``, hide the y-axis label and tick labels.
+            Useful for the right plot in a side-by-side figure.
     """
     _validate_confusion_inputs(y_true_a, y_pred_a)
     _validate_confusion_inputs(y_true_b, y_pred_b)
@@ -386,8 +397,11 @@ def plot_relative_confusion_matrix(
     signed_matrix = diff_pp.astype(float)
     sign_annot = np.where(diff_pp == 0, "", np.vectorize(lambda v: f"{v:+d}")(diff_pp))
 
-    display_labels, display_matrix = _resolve_display_subset(all_labels, signed_matrix, subset)
-    _, display_annot = _resolve_display_subset(all_labels, sign_annot, subset)
+    display_order = label_order if label_order is not None else subset
+    display_labels, display_matrix = _resolve_display_subset(
+        all_labels, signed_matrix, display_order
+    )
+    _, display_annot = _resolve_display_subset(all_labels, sign_annot, display_order)
 
     if ax is None:
         if figsize is None:
@@ -469,25 +483,36 @@ def plot_relative_confusion_matrix(
             )
 
     ax.set_xlabel("Predicted")
-    ax.set_ylabel("True")
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
+    if show_ylabel:
+        ax.set_ylabel("True")
+        if support is not None:
+            max_n = max(support.get(label, 0) for label in display_labels)
+            n_width = len(str(max_n))
+            y_labels = [
+                f"{label} (n={support.get(label, 0):>{n_width}})" for label in display_labels
+            ]
+            ax.set_yticklabels(y_labels, rotation=0, family="monospace")
+        else:
+            ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    else:
+        ax.set_ylabel("")
+        ax.set_yticklabels([])
     if title is not None:
         ax.set_title(title)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="center")
-    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
     if cbar:
         diagonal_colorbar = fig.colorbar(diagonal_mesh, ax=ax, fraction=0.046, pad=0.04)
-        diagonal_colorbar.set_label("Diagonal Δ (pp)")
+        diagonal_colorbar.set_label("Diagonal (pp)")
         diagonal_colorbar.set_ticks([-vmax, 0.0, vmax])
         diagonal_colorbar.set_ticklabels([f"-{vmax:.0f}", "0", f"{vmax:.0f}"])
 
         if off_diagonal_mesh is not None:
             off_diagonal_colorbar = fig.colorbar(off_diagonal_mesh, ax=ax, fraction=0.046, pad=0.12)
-            off_diagonal_colorbar.set_label("Off-diagonal Δ (pp)")
+            off_diagonal_colorbar.set_label("Off-diagonal (pp)")
             off_diagonal_colorbar.set_ticks([-vmax, 0.0, vmax])
             off_diagonal_colorbar.set_ticklabels([f"-{vmax:.0f}", "0", f"{vmax:.0f}"])
 
-    fig.tight_layout()
     return fig, ax
 
 
