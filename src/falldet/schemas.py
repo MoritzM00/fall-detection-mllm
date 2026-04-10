@@ -76,6 +76,7 @@ class PromptConfig(BaseConfig):
         task_variant: Which task instruction variant to use
         labels_variant: Which label formatting variant to use
         definitions_variant: Which definitions component variant to use (None = omit definitions)
+        clip_overlap_note: Whether to include the note about clips containing multiple actions
     """
 
     system_instruction: str | None = None
@@ -99,6 +100,8 @@ class PromptConfig(BaseConfig):
         if self.cot and self.num_shots > 0:
             raise ValueError("cot=True is not supported with num_shots > 0")
         return self
+
+    clip_overlap_note: bool = False
 
     # Variant selectors
     role_variant: RoleVariant | None = RoleVariant.STANDARD

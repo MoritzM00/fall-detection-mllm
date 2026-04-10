@@ -30,6 +30,7 @@ TASK_INSTRUCTION = textwrap.dedent("""
 TASK_CLIP_OVERLAP_NOTE = textwrap.dedent("""
     Note that the clip may contain more than one action. If this is the case,
     focus on classifying the action in the first part of the clip, not the entire clip.
+    Example: Clips shows a person jumping and then falling. The correct label is jump.
 """).strip()
 
 

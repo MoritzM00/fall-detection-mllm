@@ -12,6 +12,7 @@ from .components import (
     OUTPUT_FORMAT_VARIANTS,
     R1_SYSTEM_PROMPT,
     ROLE_VARIANTS,
+    TASK_CLIP_OVERLAP_NOTE,
     TASK_VARIANTS,
 )
 from .parsers import CoTOutputParser, JSONOutputParser, KeywordOutputParser, OutputParser
@@ -44,6 +45,9 @@ class PromptBuilder:
 
         # 2. Task instruction (always included)
         sections.append(TASK_VARIANTS[self.config.task_variant])
+
+        if self.config.clip_overlap_note:
+            sections.append(TASK_CLIP_OVERLAP_NOTE)
 
         # 3. Labels section (always included)
         sections.append(self._build_labels_section())
