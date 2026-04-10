@@ -112,8 +112,7 @@ def generate_latex() -> None:
 
     # Build all rows (baseline + MLLMs) for global stats
     all_rows = [
-        {"name": name, "metrics": vals}
-        for name, vals in SPECIALIZED_BASELINE.items()
+        {"name": name, "metrics": vals} for name, vals in SPECIALIZED_BASELINE.items()
     ] + mllm_rows
 
     # Calculate stats per column (max, second max, min) across all rows

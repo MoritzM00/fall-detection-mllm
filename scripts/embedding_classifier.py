@@ -50,7 +50,13 @@ _DATA_SIZE = 448
 
 # ── Classifier registry ──────────────────────────────────────────────
 
-_MLP_BASE: dict = {"max_iter": 1, "warm_start": True, "solver": "adam", "batch_size": 64, "random_state": 0}
+_MLP_BASE: dict = {
+    "max_iter": 1,
+    "warm_start": True,
+    "solver": "adam",
+    "batch_size": 64,
+    "random_state": 0,
+}
 
 CLASSIFIER_REGISTRY: dict[str, tuple[str, type, dict]] = {
     "knn": (
@@ -93,9 +99,8 @@ CLASSIFIER_REGISTRY: dict[str, tuple[str, type, dict]] = {
     "rf": (
         "Random Forest",
         RandomForestClassifier,
-        {"n_estimators": 200, "random_state": 0, "class_weight": "balanced", "max_depth": 10}
-    )
-    
+        {"n_estimators": 200, "random_state": 0, "class_weight": "balanced", "max_depth": 10},
+    ),
 }
 
 # Classifiers that support val-based early stopping
