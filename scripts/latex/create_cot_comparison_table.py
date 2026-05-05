@@ -14,6 +14,7 @@ MODEL_PAIRS: dict[str, tuple[str, str]] = {
     "Qwen3-VL-2B": ("d4e8gwu0", "91g7t1y1"),
     "InternVL3.5-2B": ("pau6imuk", "dts57kgz"),
     "Qwen3-VL-8B": ("p1r3exbe", "fmmrnf5j"),
+    r"Qwen3-VL-8B$^{\dagger}$": ("p1r3exbe", "8sp890a2"),
     "InternVL3.5-8B": ("mx12190v", "cpe2sto4"),
     "Qwen3-VL-32B": ("toe74d9a", "73ivqn3d"),
     "InternVL3.5-38B": ("pkjbh92w", "o8i8pojr"),
@@ -174,6 +175,7 @@ Best CoT results per column in \\textbf{{bold}}, second-best \\underline{{underl
 \\midrule
 {body}
 \\bottomrule
+\\multicolumn{{{1 + 2 * num_metrics}}}{{@{{}}l}}{{\\footnotesize $^{{\\dagger}}$ Prompt variant including a note instructing the model to pick the label corresponding to the first part of the clip when two labels are equally valid.}} \\\\
 \\end{{tabular}}}}
 \\end{{table}}
 \\endgroup
