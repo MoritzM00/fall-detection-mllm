@@ -14,7 +14,7 @@ MODEL_NAMES: dict[str, str] = {
     "j77j15xy": "InternVL3.5-8B",
     "dc2rkb9f": "Qwen3-VL-8B",
     "lp4yccqf": "Qwen3-VL-32B",
-    "TODO_internvl_38b": "InternVL3.5-38B",
+    "omaympb0": "InternVL3.5-38B",
 }
 
 DATASET = "OOPS"
