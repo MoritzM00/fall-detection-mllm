@@ -23,13 +23,13 @@ PUBLICATION_TARGET_DEFAULTS: dict[str, dict[str, float | int]] = {
     },
     "thesis": {
         "text_width_pt": 427.43153,
-        "font.size": 9,
-        "axes.titlesize": 10,
-        "axes.labelsize": 9,
-        "legend.fontsize": 8,
-        "legend.title_fontsize": 8,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
+        "font.size": 10,
+        "axes.titlesize": 11,
+        "axes.labelsize": 10,
+        "legend.fontsize": 9,
+        "legend.title_fontsize": 9,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
     },
 }
 
