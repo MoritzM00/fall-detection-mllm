@@ -17,7 +17,6 @@ from rich.table import Table
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import LabelEncoder, normalize
 from sklearn.svm import SVC
@@ -59,11 +58,6 @@ _MLP_BASE: dict = {
 }
 
 CLASSIFIER_REGISTRY: dict[str, tuple[str, type, dict]] = {
-    "knn": (
-        "$k$-NN ($k=3$)",
-        KNeighborsClassifier,
-        {"n_neighbors": 3, "metric": "euclidean"},
-    ),
     # ── MLP variants ──
     "mlp": (
         "MLP",
@@ -211,9 +205,7 @@ def train_and_predict(
     display_name, clf_class, default_kwargs = CLASSIFIER_REGISTRY[clf_key]
     kwargs = {**default_kwargs}
 
-    # Inject random_state for classifiers that support it
-    if clf_key != "knn":
-        kwargs["random_state"] = seed
+    kwargs["random_state"] = seed
 
     clf = clf_class(**kwargs)
 

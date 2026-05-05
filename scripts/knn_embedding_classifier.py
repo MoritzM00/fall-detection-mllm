@@ -55,19 +55,36 @@ def knn_classify(
     eval_emb: torch.Tensor,
     k_values: list[int],
 ) -> dict[int, list[str]]:
-    """Return predicted labels for each K via majority-vote kNN."""
-    dist_matrix = torch.cdist(eval_emb.float(), train_emb.float())  # (n_eval, n_train)
+    """Return predicted labels for each K via majority-vote kNN (cosine similarity)."""
+    eval_norm = torch.nn.functional.normalize(eval_emb.float(), dim=1)
+    train_norm = torch.nn.functional.normalize(train_emb.float(), dim=1)
+    sim_matrix = eval_norm @ train_norm.T  # (n_eval, n_train)
     max_k = max(k_values)
-    # topk smallest distances for each eval sample — shape (n_eval, max_k)
-    _, top_indices = torch.topk(dist_matrix, k=max_k, dim=1, largest=False)
+    # topk largest similarities for each eval sample — shape (n_eval, max_k)
+    top_sims, top_indices = torch.topk(sim_matrix, k=max_k, dim=1, largest=True)
 
     predictions: dict[int, list[str]] = {}
     for k in k_values:
         preds = []
         for i in range(len(eval_emb)):
             neighbor_indices = top_indices[i, :k].tolist()
+            neighbor_sims = top_sims[i, :k].tolist()
             neighbor_labels = [train_labels[idx] for idx in neighbor_indices]
-            vote = collections.Counter(neighbor_labels).most_common(1)[0][0]
+
+            counts = collections.Counter(neighbor_labels)
+            max_votes = counts.most_common(1)[0][1]
+            tied = [label for label, cnt in counts.items() if cnt == max_votes]
+
+            if len(tied) == 1:
+                vote = tied[0]
+            else:
+                # Break tie by highest similarity among each label's neighbors
+                best_sim: dict[str, float] = {}
+                for label, sim in zip(neighbor_labels, neighbor_sims):
+                    if label in tied:
+                        best_sim[label] = max(best_sim.get(label, -2.0), sim)
+                vote = max(tied, key=lambda lbl: best_sim[lbl])
+
             preds.append(vote)
         predictions[k] = preds
     return predictions
