@@ -5,6 +5,7 @@ model_family: ${model.family}
 # Variant selectors
 role_variant: null
 task_variant: standard
+clip_overlap_note: false
 labels_variant: bulleted
 definitions_variant: null
 
