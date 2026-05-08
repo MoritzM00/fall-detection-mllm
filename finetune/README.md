@@ -39,9 +39,6 @@ python -m finetune.sft_lora training=smoke      # 50-step wiring check
 Common Hydra overrides:
 
 ```bash
-# different dataset
-python -m finetune.sft_lora dataset=omnifall/video/staged-cs
-
 # different model
 python -m finetune.sft_lora model.params=4B
 
@@ -50,6 +47,35 @@ python -m finetune.sft_lora wandb.mode=offline
 
 # cap epoch length for a quick check
 python -m finetune.sft_lora training.max_steps=20
+```
+
+## Full-run shortcuts (by data split)
+
+Pair `training=full` with the dataset group you want. Splits live in `config/dataset/omnifall/video/`.
+
+```bash
+# OOPS only (one file, ~thousands of clips, default dataset)
+python -m finetune.sft_lora training=full dataset=omnifall/video/oops
+
+# Staged datasets only (cross-subject)
+python -m finetune.sft_lora training=full dataset=omnifall/video/staged-cs
+
+# Staged datasets only (cross-view)
+python -m finetune.sft_lora training=full dataset=omnifall/video/staged-cv
+
+# Staged + OOPS combined
+python -m finetune.sft_lora training=full dataset=omnifall/video/staged-oops
+
+# Everything (staged + OOPS + wanfall — needs WANFALL_ROOT env var)
+python -m finetune.sft_lora training=full dataset=omnifall/video/all
+```
+
+To match the val set to the train set, override `dataset_val` too:
+
+```bash
+python -m finetune.sft_lora training=full \
+    dataset=omnifall/video/staged-cs \
+    dataset@dataset_val=omnifall/video/staged-cs
 ```
 
 ## Configs

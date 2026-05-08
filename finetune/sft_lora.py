@@ -178,6 +178,12 @@ def main(cfg: DictConfig) -> None:
 
     logger.info(f"Saving adapter to {adapter_dir}")
     trainer.save_model(str(adapter_dir))
+
+    logger.info(
+        "Run vLLM inference with this adapter via:\n"
+        f"  python scripts/vllm_inference.py "
+        f"lora.path={adapter_dir} lora.max_rank={config.lora.r}"
+    )
     run.finish()
 
 
