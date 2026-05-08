@@ -273,6 +273,18 @@ class DatasetConfig(BaseConfig):
     split: str | None = None
 
 
+class LoraConfig(BaseConfig):
+    """LoRA adapter configuration for vLLM inference.
+
+    When ``path`` is set, vLLM is started with ``enable_lora=True`` and the
+    adapter at ``path`` is applied to every request via ``LoRARequest``.
+    """
+
+    path: str | None = None
+    name: str = "adapter"
+    max_rank: int = 16
+
+
 class InferenceConfig(BaseConfig):
     """Root configuration composing all sub-configs."""
 
@@ -284,6 +296,7 @@ class InferenceConfig(BaseConfig):
     prompt: PromptConfig
     dataset: DatasetConfig
     wandb: WandbConfig
+    lora: LoraConfig = LoraConfig()
 
     # Root-level fields
     task: Literal["classify", "embed"] = "classify"
