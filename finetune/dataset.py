@@ -33,7 +33,7 @@ class Qwen3VLFallDataset(Dataset):
         messages.append(
             {
                 "role": "assistant",
-                "content": [{"type": "text", "text": sample["label_str"]}],
+                "content": [{"type": "text", "text": f"The best answer is: {sample['label_str']}"}],
             }
         )
         return {

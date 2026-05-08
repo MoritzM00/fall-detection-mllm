@@ -13,6 +13,11 @@ logging_steps: 5
 save_strategy: steps
 save_steps: 100
 save_total_limit: 2
+eval_strategy: steps
+eval_steps: 50
+eval_on_start: false
+per_device_eval_batch_size: 1
+max_eval_samples: 200
 gradient_checkpointing: true
 max_length: null
 report_to: wandb

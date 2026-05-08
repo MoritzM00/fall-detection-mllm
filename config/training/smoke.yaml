@@ -12,6 +12,10 @@ fp16: false
 logging_steps: 1
 save_strategy: "no"
 save_steps: 500
+eval_strategy: "no"
+eval_steps: 500
+eval_on_start: false
+per_device_eval_batch_size: 1
 gradient_checkpointing: false
 max_length: null
 report_to: wandb

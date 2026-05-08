@@ -7,7 +7,7 @@ defaults:
   - _self_
 
 data:
-  seed: 0
+  seed: null  # train: random per run; val forced to 0 in train.py
   split: cs
   mode: train
   size: 224

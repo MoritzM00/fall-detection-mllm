@@ -22,6 +22,7 @@ import hydra
 import torch
 from omegaconf import DictConfig
 from peft import LoraConfig as PeftLoraConfig
+from torch.utils.data import Subset
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 from trl import SFTConfig, SFTTrainer
 
@@ -88,6 +89,25 @@ def main(cfg: DictConfig) -> None:
     train_ds = Qwen3VLFallDataset(base, conv_builder)
     collator = Qwen3VLSFTCollator(processor)
 
+    eval_ds = None
+    if config.training.eval_strategy != "no":
+        val_base = get_video_datasets(
+            config=config,
+            mode="val",
+            run=run,
+            return_individual=False,
+            split=config.data.split,
+            size=config.data.size,
+            max_size=config.data.max_size,
+            seed=0,  # val is deterministic regardless of data.seed
+        )
+        logger.info(f"Base val dataset: {len(val_base)} samples")
+        if config.training.max_eval_samples is not None:
+            n = min(config.training.max_eval_samples, len(val_base))
+            val_base = Subset(val_base, list(range(n)))
+            logger.info(f"Capped val dataset to {n} samples")
+        eval_ds = Qwen3VLFallDataset(val_base, conv_builder)
+
     peft_lora = PeftLoraConfig(
         r=config.lora.r,
         lora_alpha=config.lora.lora_alpha,
@@ -112,6 +132,10 @@ def main(cfg: DictConfig) -> None:
         save_strategy=config.training.save_strategy,
         save_steps=config.training.save_steps,
         save_total_limit=config.training.save_total_limit,
+        eval_strategy=config.training.eval_strategy,
+        eval_steps=config.training.eval_steps,
+        eval_on_start=config.training.eval_on_start,
+        per_device_eval_batch_size=config.training.per_device_eval_batch_size,
         gradient_checkpointing=config.training.gradient_checkpointing,
         max_length=config.training.max_length,
         report_to=config.training.report_to,
@@ -126,6 +150,7 @@ def main(cfg: DictConfig) -> None:
         args=sft_config,
         peft_config=peft_lora,
         train_dataset=train_ds,
+        eval_dataset=eval_ds,
         data_collator=collator,
         processing_class=processor,
     )

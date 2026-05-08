@@ -40,6 +40,7 @@ class Qwen3VLSFTCollator:
             videos=videos,
             video_metadata=video_metadata,
             do_sample_frames=False,
+            do_resize=False,
             return_tensors="pt",
             padding=True,
         )
@@ -49,6 +50,7 @@ class Qwen3VLSFTCollator:
             videos=videos,
             video_metadata=video_metadata,
             do_sample_frames=False,
+            do_resize=False,
             return_tensors="pt",
             padding=False,
         )

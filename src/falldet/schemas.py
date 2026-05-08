@@ -228,7 +228,7 @@ class SamplingConfig(BaseConfig):
 class DataConfig(BaseConfig):
     """Data loading configuration."""
 
-    seed: int = 0
+    seed: int | None = 0
     split: str = "cs"
     mode: str = "test"
     size: int | None = 448
@@ -320,6 +320,11 @@ class TrainingHyperparams(BaseConfig):
     save_strategy: Literal["no", "steps", "epoch"] = "no"
     save_steps: int = 500
     save_total_limit: int | None = None
+    eval_strategy: Literal["no", "steps", "epoch"] = "no"
+    eval_steps: int = 500
+    eval_on_start: bool = False
+    per_device_eval_batch_size: int = 1
+    max_eval_samples: int | None = None
     gradient_checkpointing: bool = False
     max_length: int | None = None
     report_to: str = "none"
