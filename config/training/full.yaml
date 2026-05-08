@@ -9,7 +9,7 @@ num_train_epochs: 3
 max_steps: -1  # let epochs decide; set a positive int to cap
 
 learning_rate: 2.0e-4
-warmup_steps: 50  # ~3% of a few-thousand-step run; raise for longer runs
+warmup_steps: 10  # ~3% of a few-thousand-step run; raise for longer runs
 weight_decay: 1e-4
 lr_scheduler_type: cosine
 
@@ -23,9 +23,9 @@ save_steps: 200
 save_total_limit: 3
 
 eval_strategy: steps
-eval_steps: 200
+eval_steps: 50
 eval_on_start: true
-per_device_eval_batch_size: 8
+per_device_eval_batch_size: 16
 max_eval_samples: 1000
 load_best_model_at_end: true
 metric_for_best_model: eval_loss
