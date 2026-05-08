@@ -8,11 +8,7 @@ only on the assistant response.
 
 from __future__ import annotations
 
-import logging
-
 import torch
-
-logger = logging.getLogger(__name__)
 
 
 def _extract_videos(messages: list[dict]) -> list:
@@ -25,15 +21,9 @@ def _extract_videos(messages: list[dict]) -> list:
 
 
 class PromptMaskedSFTCollator:
-    def __init__(
-        self,
-        processor,
-        max_length: int | None = None,
-        debug_first_batch: bool = True,
-    ):
+    def __init__(self, processor, max_length: int | None = None):
         self.processor = processor
         self.max_length = max_length
-        self._debug_first_batch = debug_first_batch
         self._first_batch = True
 
         padding_side = getattr(processor.tokenizer, "padding_side", None)
@@ -82,6 +72,7 @@ class PromptMaskedSFTCollator:
         labels = full_ids.clone()
         if self._first_batch:
             self._validate_alignment(full_ids, prompt_batch["input_ids"], prompt_lens)
+            self._first_batch = False
         for i, plen in enumerate(prompt_lens):
             labels[i, :plen] = -100
         labels[labels == pad_id] = -100
@@ -90,13 +81,6 @@ class PromptMaskedSFTCollator:
         if self.max_length is not None and full_ids.shape[1] > self.max_length:
             for key in ("input_ids", "attention_mask", "labels"):
                 batch[key] = batch[key][:, : self.max_length]
-            full_ids = batch["input_ids"]
-            labels = batch["labels"]
-
-        if self._first_batch:
-            if self._debug_first_batch:
-                self._log_first_batch(examples, full_ids, labels, prompt_lens)
-            self._first_batch = False
 
         return batch
 
@@ -118,29 +102,3 @@ class PromptMaskedSFTCollator:
                     f"Example {i}: prompt length {plen} >= full length {full_ids.shape[1]}; "
                     "no response tokens left to train on."
                 )
-
-    def _log_first_batch(
-        self,
-        examples: list[dict],
-        full_ids: torch.Tensor,
-        labels: torch.Tensor,
-        prompt_lens: list[int],
-    ) -> None:
-        tok = self.processor.tokenizer
-        _, t = full_ids.shape
-        logger.info(
-            f"[collator] first batch: shape={tuple(full_ids.shape)}, prompt_lens={prompt_lens}"
-        )
-        for i in range(min(full_ids.shape[0], 2)):
-            plen = prompt_lens[i]
-            n_supervised = int((labels[i] != -100).sum())
-            n_pad = int((full_ids[i] == tok.pad_token_id).sum())
-            response_text = tok.decode(full_ids[i, plen:], skip_special_tokens=False)
-            last_real_token = tok.decode(full_ids[i, t - n_pad - 1 : t - n_pad])
-            logger.info(
-                f"[collator] ex{i}: total={t} prompt={plen} pad={n_pad} "
-                f"supervised={n_supervised} last_real_token={last_real_token!r}"
-            )
-            logger.info(f"[collator] ex{i} response: {response_text!r}")
-            gold = examples[i]["messages"][-1]["content"]
-            logger.info(f"[collator] ex{i} gold message content: {gold!r}")
