@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 from typing import Any, cast
 
 import hydra
@@ -25,7 +24,7 @@ from falldet.inference import (
 from falldet.schemas import from_dictconfig
 from falldet.utils.logging import reconfigure_logging_after_wandb, setup_logging
 from falldet.utils.predictions import save_predictions_jsonl
-from falldet.utils.wandb import initialize_run_from_config
+from falldet.utils.wandb import get_prediction_output_path, initialize_run_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +165,28 @@ def main(cfg: DictConfig):
     logger.info(f"Inference completed in {end - start:.2f} seconds")
     run.summary["inference_time_seconds"] = end - start
 
+    if not is_embed:
+        total_input_tokens = sum(
+            len(o.prompt_token_ids)
+            for o in all_outputs
+            if getattr(o, "prompt_token_ids", None) is not None
+        )
+        total_output_tokens = sum(
+            len(o.outputs[0].token_ids)
+            for o in all_outputs
+            if o.outputs and getattr(o.outputs[0], "token_ids", None) is not None
+        )
+        n = max(len(all_outputs), 1)
+        logger.info(
+            f"Token usage: {total_input_tokens:,} input, {total_output_tokens:,} output, "
+            f"{total_input_tokens + total_output_tokens:,} total "
+            f"(avg {total_input_tokens // n:,} in / {total_output_tokens // n:,} out per request)"
+        )
+        run.summary["total_input_tokens"] = total_input_tokens
+        run.summary["total_output_tokens"] = total_output_tokens
+        run.summary["avg_input_tokens_per_request"] = total_input_tokens // n
+        run.summary["avg_output_tokens_per_request"] = total_output_tokens // n
+
     if sampler is not None:
         match_pct = (
             100.0 * queries_with_match / total_queries_with_exemplars
@@ -177,6 +198,7 @@ def main(cfg: DictConfig):
             f"({match_pct:.1f}%) queries had at least one exemplar with a matching label"
         )
         run.summary["exemplar_label_match_pct"] = match_pct
+        sampler.log_cache_stats()
 
     if is_embed:
         from falldet.embeddings import save_embeddings
@@ -215,6 +237,7 @@ def main(cfg: DictConfig):
         prediction = sample.copy()
         prediction["predicted_label"] = result.label
         prediction["reasoning"] = result.reasoning or ""
+        prediction["content"] = result.content or ""
         prediction["raw_output"] = result.raw_text
         predictions.append(prediction)
 
@@ -224,10 +247,12 @@ def main(cfg: DictConfig):
     # Save predictions if enabled
     predictions_file = None
     if config.save_predictions:
-        predictions_dir = Path(config.output_dir) / "predictions"
-        predictions_dir.mkdir(parents=True, exist_ok=True)
-
-        predictions_file = predictions_dir / f"{run.name}.jsonl"
+        predictions_file = get_prediction_output_path(
+            config.output_dir,
+            config.wandb.project,
+            run.id,
+        )
+        predictions_file.parent.mkdir(parents=True, exist_ok=True)
 
         save_predictions_jsonl(
             output_path=predictions_file,

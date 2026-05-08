@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 
 from omegaconf import DictConfig, OmegaConf
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class BaseConfig(BaseModel):
@@ -40,6 +40,22 @@ class DefinitionsVariant(StrEnum):
     EXTENDED = "extended"
 
 
+class ExemplarOrdering(StrEnum):
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+    RANDOM = "random"
+
+
+class FewshotPreamble(StrEnum):
+    SYSTEM = "system"
+    USER = "user"
+
+
+class FewshotResponse(StrEnum):
+    INLINE = "inline"
+    ASSISTANT = "assistant"
+
+
 class PromptConfig(BaseConfig):
     """Configuration for prompt building.
 
@@ -60,6 +76,7 @@ class PromptConfig(BaseConfig):
         task_variant: Which task instruction variant to use
         labels_variant: Which label formatting variant to use
         definitions_variant: Which definitions component variant to use (None = omit definitions)
+        clip_overlap_note: Whether to include the note about clips containing multiple actions
     """
 
     system_instruction: str | None = None
@@ -72,8 +89,19 @@ class PromptConfig(BaseConfig):
 
     # Few-shot settings
     num_shots: int = 0
-    shot_selection: Literal["random", "balanced", "similarity"] = "balanced"
+    shot_selection: Literal["random", "balanced", "similarity", "per_class_similarity"] = "balanced"
     exemplar_seed: int = 42
+    exemplar_ordering: ExemplarOrdering = ExemplarOrdering.ASCENDING
+    fewshot_preamble: FewshotPreamble = FewshotPreamble.SYSTEM
+    fewshot_response: FewshotResponse = FewshotResponse.INLINE
+
+    @model_validator(mode="after")
+    def validate_fewshot_cot(self) -> "PromptConfig":
+        if self.cot and self.num_shots > 0:
+            raise ValueError("cot=True is not supported with num_shots > 0")
+        return self
+
+    clip_overlap_note: bool = False
 
     # Variant selectors
     role_variant: RoleVariant | None = RoleVariant.STANDARD
@@ -205,6 +233,9 @@ class DataConfig(BaseConfig):
     mode: str = "test"
     size: int | None = 448
     max_size: int | None = None
+    cache_dir: str | None = None
+    cache_read_only: bool = True  # Only build_tensor_cache.py should write
+    cache_in_memory: bool = False
 
 
 class WandbConfig(BaseConfig):

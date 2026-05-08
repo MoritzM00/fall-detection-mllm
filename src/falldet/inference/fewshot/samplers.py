@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset
 
 from falldet.embeddings import compute_similarity_scores
-from falldet.schemas import InferenceConfig
+from falldet.schemas import ExemplarOrdering, InferenceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,11 @@ class ExemplarSampler(ABC):
         with ThreadPoolExecutor(max_workers=len(indices)) as executor:
             return list(executor.map(self.corpus.__getitem__, indices))
 
+    def log_cache_stats(self) -> None:
+        """Log cache stats from the exemplar corpus, if available."""
+        if hasattr(self.corpus, "log_cache_stats"):
+            self.corpus.log_cache_stats()  # type: ignore[union-attr]
+
     def get_batch_exemplars(self, query_indices: list[int]) -> list[list[dict]]:
         """Load exemplars for multiple queries in a single thread pool.
 
@@ -72,6 +77,57 @@ class ExemplarSampler(ABC):
         for (_, batch_pos, _), item in zip(flat_keys, flat_items):
             result[batch_pos].append(item)
         return result
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_class_to_indices(corpus: Dataset) -> dict[str, list[int]]:
+    """Build a mapping from class label strings to corpus indices."""
+    class_to_indices: dict[str, list[int]] = {}
+    for idx in range(len(corpus)):  # type: ignore[arg-type]
+        label: str = corpus.video_segments[idx]["label_str"]  # type: ignore[union-attr]
+        class_to_indices.setdefault(label, []).append(idx)
+    return class_to_indices
+
+
+def _apply_exemplar_ordering(
+    retrievals: list[list[int]],
+    scores: list[list[float]],
+    ordering: ExemplarOrdering,
+    seed: int,
+) -> tuple[list[list[int]], list[list[float]]]:
+    """Reorder pre-computed retrievals and scores in place."""
+    if ordering == ExemplarOrdering.ASCENDING:
+        retrievals = [r[::-1] for r in retrievals]
+        scores = [s[::-1] for s in scores]
+    elif ordering == ExemplarOrdering.RANDOM:
+        rng = np.random.default_rng(seed)
+        for i in range(len(retrievals)):
+            perm = rng.permutation(len(retrievals[i]))
+            retrievals[i] = [retrievals[i][j] for j in perm]
+            scores[i] = [scores[i][j] for j in perm]
+    return retrievals, scores
+
+
+class _PrecomputedSampler(ExemplarSampler):
+    """Base for samplers that pre-compute all retrievals at init for O(1) lookup."""
+
+    def __init__(self, corpus: Dataset, num_shots: int = 5, seed: int = 0):
+        super().__init__(corpus, num_shots)
+        self._retrievals: list[list[int]] = []
+        self._scores: list[list[float]] = []
+
+    def sample(self, query_index: int) -> list[int]:
+        return self._retrievals[query_index]
+
+    def get_scores(self, query_index: int) -> list[float]:
+        return self._scores[query_index]
+
+    def __len__(self) -> int:
+        return len(self._retrievals)
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +156,16 @@ class BalancedRandomSampler(ExemplarSampler):
     ``video_segments`` attribute of the corpus dataset to read labels.
     """
 
-    def __init__(self, corpus: Dataset, num_shots: int = 5, seed: int = 0):
+    def __init__(
+        self,
+        corpus: Dataset,
+        num_shots: int = 5,
+        seed: int = 0,
+        exemplar_ordering: ExemplarOrdering = ExemplarOrdering.RANDOM,
+    ):
         super().__init__(corpus, num_shots)
         self.rng = np.random.default_rng(seed)
+        self.exemplar_ordering = exemplar_ordering
         self._class_to_indices: dict[str, list[int]] | None = None
 
     def _build_class_index(self) -> dict[str, list[int]]:
@@ -110,15 +173,17 @@ class BalancedRandomSampler(ExemplarSampler):
         if self._class_to_indices is not None:
             return self._class_to_indices
 
-        class_to_indices: dict[str, list[int]] = {}
-        for idx in range(len(self.corpus)):  # type: ignore[arg-type]
-            segment = self.corpus.video_segments[idx]  # type: ignore[union-attr]
-            label: str = segment["label_str"]
-            class_to_indices.setdefault(label, []).append(idx)
-
-        self._class_to_indices = class_to_indices
-        logger.info(f"Built class index: {len(class_to_indices)} classes")
-        return class_to_indices
+        self._class_to_indices = _build_class_to_indices(self.corpus)
+        dist_str = ", ".join(
+            f"{cls}: {len(idxs)}"
+            for cls, idxs in sorted(
+                self._class_to_indices.items(), key=lambda x: len(x[1]), reverse=True
+            )
+        )
+        logger.info(
+            f"Built class index: {len(self._class_to_indices)} classes — distribution: {dist_str}"
+        )
+        return self._class_to_indices
 
     def sample(self, query_index: int) -> list[int]:
         """Return freshly sampled balanced indices (``query_index`` ignored)."""
@@ -128,11 +193,13 @@ class BalancedRandomSampler(ExemplarSampler):
         if not classes:
             return []
 
-        # Distribute shots as evenly as possible across classes
-        shots_per_class = {cls: self.num_shots // num_classes for cls in classes}
+        # Distribute shots across classes, giving priority to most frequent classes
+        classes_by_freq = sorted(classes, key=lambda c: len(class_to_indices[c]), reverse=True)
+        base = self.num_shots // num_classes
         remainder = self.num_shots % num_classes
-        for cls in self.rng.choice(classes, remainder, replace=False):
-            shots_per_class[cls] += 1
+        shots_per_class = {
+            cls: base + (1 if i < remainder else 0) for i, cls in enumerate(classes_by_freq)
+        }
 
         indices: list[int] = []
         for cls, num_to_sample in shots_per_class.items():
@@ -142,11 +209,23 @@ class BalancedRandomSampler(ExemplarSampler):
                 sampled = self.rng.choice(available, n, replace=False).tolist()
                 indices.extend(sampled)
 
-        self.rng.shuffle(indices)
+        if self.exemplar_ordering == ExemplarOrdering.RANDOM:
+            self.rng.shuffle(indices)
+        elif self.exemplar_ordering in (ExemplarOrdering.ASCENDING, ExemplarOrdering.DESCENDING):
+            freq = {cls: len(idxs) for cls, idxs in class_to_indices.items()}
+            label_of = {
+                idx: self.corpus.video_segments[idx]["label_str"]  # type: ignore[union-attr]
+                for idx in indices
+            }
+            indices.sort(
+                key=lambda i: freq[label_of[i]],
+                reverse=(self.exemplar_ordering == ExemplarOrdering.DESCENDING),
+            )
+
         return indices
 
 
-class SimilaritySampler(ExemplarSampler):
+class SimilaritySampler(_PrecomputedSampler):
     """Cosine-similarity retrieval – pre-computes all retrievals at init.
 
     Performs a single batched matrix multiply to compute cosine similarity
@@ -160,6 +239,8 @@ class SimilaritySampler(ExemplarSampler):
         num_shots: int = 5,
         query_embeddings: torch.Tensor | None = None,
         corpus_embeddings: torch.Tensor | None = None,
+        exemplar_ordering: ExemplarOrdering = ExemplarOrdering.DESCENDING,
+        seed: int = 0,
     ):
         super().__init__(corpus, num_shots)
 
@@ -180,25 +261,89 @@ class SimilaritySampler(ExemplarSampler):
         k = min(num_shots, corpus_embeddings.shape[0])
         topk_scores, topk_indices = torch.topk(similarity, k=k, dim=1)
 
-        self._retrievals: list[list[int]] = topk_indices.tolist()
-        self._scores: list[list[float]] = topk_scores.tolist()
+        self._retrievals = topk_indices.tolist()
+        self._scores = topk_scores.tolist()
+        self._retrievals, self._scores = _apply_exemplar_ordering(
+            self._retrievals, self._scores, exemplar_ordering, seed
+        )
 
         logger.info(
             f"SimilaritySampler: {len(query_embeddings)} queries, "
-            f"{len(corpus_embeddings)} corpus, top-{k}"
+            f"{len(corpus_embeddings)} corpus, top-{k}, ordering={exemplar_ordering}"
         )
 
-    def sample(self, query_index: int) -> list[int]:
-        """Return pre-computed top-k corpus indices for ``query_index``."""
-        return self._retrievals[query_index]
 
-    def get_scores(self, query_index: int) -> list[float]:
-        """Return cosine similarity scores for the retrieved exemplars."""
-        return self._scores[query_index]
+class PerClassSimilaritySampler(_PrecomputedSampler):
+    """Per-class cosine-similarity retrieval – one exemplar per selected class.
 
-    def __len__(self) -> int:
-        """Number of queries with pre-computed retrievals."""
-        return len(self._retrievals)
+    For each query, computes the best-matching (highest cosine similarity)
+    corpus item within every class, then selects the top-k classes ranked by
+    that per-class maximum similarity.  This guarantees class diversity: each
+    selected class contributes exactly one exemplar.
+
+    ``num_shots`` must be <= the number of distinct classes in the corpus.
+    """
+
+    def __init__(
+        self,
+        corpus: Dataset,
+        num_shots: int = 5,
+        query_embeddings: torch.Tensor | None = None,
+        corpus_embeddings: torch.Tensor | None = None,
+        exemplar_ordering: ExemplarOrdering = ExemplarOrdering.DESCENDING,
+        seed: int = 0,
+    ):
+        super().__init__(corpus, num_shots)
+
+        if query_embeddings is None or corpus_embeddings is None:
+            raise ValueError(
+                "PerClassSimilaritySampler requires both query_embeddings and corpus_embeddings."
+            )
+        assert len(corpus) == corpus_embeddings.shape[0], (  # type: ignore[arg-type]
+            "Corpus embeddings must match corpus size."
+        )
+        assert query_embeddings.shape[1] == corpus_embeddings.shape[1], (
+            f"Query and corpus embeddings must have the same dimension, but got "
+            f"query dim {query_embeddings.shape[1]} and corpus dim {corpus_embeddings.shape[1]}."
+        )
+
+        class_to_indices = _build_class_to_indices(corpus)
+        num_classes = len(class_to_indices)
+        if num_shots > num_classes:
+            raise ValueError(
+                f"num_shots ({num_shots}) must be <= number of classes ({num_classes}) "
+                "for PerClassSimilaritySampler."
+            )
+
+        similarity = compute_similarity_scores(query_embeddings, corpus_embeddings)
+        num_queries = query_embeddings.shape[0]
+
+        # Pre-compute per-class index tensors once to avoid repeated allocation in the query loop
+        class_index_tensors = [torch.tensor(idxs) for idxs in class_to_indices.values()]
+        class_index_lists = list(class_to_indices.values())
+
+        for qi in range(num_queries):
+            sim_row = similarity[qi]
+            class_best: list[tuple[float, int]] = []
+            for idx_tensor, indices in zip(class_index_tensors, class_index_lists):
+                local_best = sim_row[idx_tensor].argmax().item()
+                best_idx = indices[int(local_best)]
+                class_best.append((sim_row[best_idx].item(), best_idx))
+
+            class_best.sort(key=lambda x: x[0], reverse=True)
+            top_k = class_best[:num_shots]
+            self._scores.append([s for s, _ in top_k])
+            self._retrievals.append([i for _, i in top_k])
+
+        self._retrievals, self._scores = _apply_exemplar_ordering(
+            self._retrievals, self._scores, exemplar_ordering, seed
+        )
+
+        logger.info(
+            f"PerClassSimilaritySampler: {num_queries} queries, "
+            f"{len(corpus_embeddings)} corpus, {num_classes} classes, "
+            f"top-{num_shots} classes, ordering={exemplar_ordering}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +354,7 @@ _SAMPLER_REGISTRY: dict[str, type[ExemplarSampler]] = {
     "random": RandomSampler,
     "balanced": BalancedRandomSampler,
     "similarity": SimilaritySampler,
+    "per_class_similarity": PerClassSimilaritySampler,
 }
 
 
@@ -238,11 +384,31 @@ def create_sampler(
         raise ValueError(f"Unknown shot_selection strategy: {strategy!r}")
 
     if sampler_cls is SimilaritySampler:
-        return sampler_cls(
+        return SimilaritySampler(
             corpus=corpus,
             num_shots=num_shots,
             query_embeddings=query_embeddings,
             corpus_embeddings=corpus_embeddings,
+            exemplar_ordering=config.prompt.exemplar_ordering,
+            seed=seed,
+        )
+
+    if sampler_cls is PerClassSimilaritySampler:
+        return PerClassSimilaritySampler(
+            corpus=corpus,
+            num_shots=num_shots,
+            query_embeddings=query_embeddings,
+            corpus_embeddings=corpus_embeddings,
+            exemplar_ordering=config.prompt.exemplar_ordering,
+            seed=seed,
+        )
+
+    if sampler_cls is BalancedRandomSampler:
+        return sampler_cls(
+            corpus=corpus,
+            num_shots=num_shots,
+            seed=seed,
+            exemplar_ordering=config.prompt.exemplar_ordering,
         )
 
     return sampler_cls(corpus=corpus, num_shots=num_shots, seed=seed)
@@ -285,10 +451,17 @@ def setup_fewshot_sampler(
     train_dataset = list(train_datasets["individual"].values())[0]  # type: ignore[union-attr]
     logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
 
+    # Enable in-memory caching for the exemplar corpus only (not the test dataset).
+    # ThreadPoolExecutor in get_batch_exemplars shares memory across threads, so
+    # repeated corpus accesses within a run hit O(1) dict lookup after the first load.
+    if config.data.cache_in_memory:
+        train_dataset.enable_memory_cache()
+        logger.info("In-memory cache enabled for exemplar corpus")
+
     # Load embeddings if needed for similarity-based retrieval
     query_embeddings: torch.Tensor | None = None
     corpus_embeddings: torch.Tensor | None = None
-    if config.prompt.shot_selection == "similarity":
+    if config.prompt.shot_selection in ("similarity", "per_class_similarity"):
         from pathlib import Path
 
         from falldet.embeddings import get_embedding_filename, load_embeddings

@@ -12,6 +12,7 @@
       "Read(./secrets/**)"
     ]
   },
+  "model": "opusplan",
   "hooks": {
     "Stop": [
       {
@@ -22,9 +23,12 @@
             "command": "ruff check --fix && ruff format",
             "timeout": 30
           }
-       ]
+        ]
       }
     ]
   },
-  "model": "opusplan"
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true,
+    "huggingface-skills@claude-plugins-official": true
+  }
 }

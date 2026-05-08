@@ -78,6 +78,8 @@ class WanfallVideoDataset(OmnifallVideoDataset):
             size=size,
             max_size=max_size,
             seed=seed,
+            disk_cache=kwargs.get("disk_cache"),
+            cache_in_memory=kwargs.get("cache_in_memory", False),
         )
         self.dataset_name = dataset_name
         self.split = None  # WanFall doesn't use cross-subject/cross-view splits

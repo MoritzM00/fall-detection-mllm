@@ -10,6 +10,9 @@ num_samples: null
 model:
   params: 8B
 
+batch_size: 16
+num_workers: 4
+
 # Similarity-based exemplar selection
 prompt:
   shot_selection: similarity
@@ -24,11 +27,11 @@ embedding_model_name: Qwen3-VL-Embedding-2B
 vllm:
   mm_processor_cache_gb: 4
 
+data:
+  cache_dir: "outputs/tensor_cache"
+
 # W&B tracking
 wandb:
   project: "fall-detection-fewshot"
   name:
   tags: ["fewshot", "similarity"]
-
-# Output settings
-output_dir: "outputs/fewshot_similarity"

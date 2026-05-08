@@ -15,6 +15,3 @@ wandb:
   project: "fall-detection-zeroshot-v4"
   name:
   tags: ["zeroshot"]
-
-# Output settings
-output_dir: "outputs/zeroshot-v4"

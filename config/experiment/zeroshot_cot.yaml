@@ -17,6 +17,3 @@ wandb:
   name:
   tags: ["zeroshot", "cot"]
   mode: online
-
-# Output settings
-output_dir: "outputs/zeroshot-v4"

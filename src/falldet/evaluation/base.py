@@ -6,8 +6,8 @@ without requiring HuggingFace Trainer or Accelerator dependencies.
 
 import json
 import logging
-import os
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -17,7 +17,11 @@ import wandb
 from falldet.evaluation.visual import visualize_evaluation_results
 from falldet.metrics.base import compute_metrics
 from falldet.utils.latex import format_subgroup_latex_table
-from falldet.utils.wandb import log_confusion_matrix, log_videos_with_predictions
+from falldet.utils.wandb import (
+    log_confusion_matrix,
+    log_per_class_bar_plots,
+    log_videos_with_predictions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +75,7 @@ def evaluate_predictions(
         for k, v in metrics.items():
             wandb.log({f"{dataset_name}_{k}": v})
 
+        log_per_class_bar_plots(metrics, dataset_name)
         log_confusion_matrix(
             predictions=predictions,
             references=references,
@@ -85,7 +90,7 @@ def evaluate_predictions(
 
 def save_evaluation_results(
     all_results: dict[str, Any],
-    subgroup_results: dict[str, Any],
+    subgroup_results: dict[str, Any] | None,
     output_dir: str,
     run: wandb.Run | None = None,
 ):
@@ -97,19 +102,21 @@ def save_evaluation_results(
         subgroup_results: Subgroup evaluation results
         output_dir: Directory to save results
     """
-    results_dir = os.path.join(output_dir, "evaluation_results")
-    os.makedirs(results_dir, exist_ok=True)
+    results_dir = Path(output_dir) / "evaluation_results"
+    if run and run.project:
+        results_dir = results_dir / run.project
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     # Save JSON results
     filename = run.name if run else f"results_{time.strftime('%Y%m%d-%H%M%S')}"
-    results_file = os.path.join(results_dir, f"test_results_{filename}.json")
+    results_file = results_dir / f"test_results_{filename}.json"
     with open(results_file, "w") as f:
         json.dump(all_results, f, indent=4)
     logger.info(f"Saved evaluation results to {results_file}")
 
     # Save subgroup LaTeX tables if available
     if subgroup_results:
-        latex_file = os.path.join(results_dir, f"subgroup_tables_{filename}.tex")
+        latex_file = results_dir / f"subgroup_tables_{filename}.tex"
         logger.info(f"Generating subgroup LaTeX tables for {len(subgroup_results)} dataset(s)")
 
         with open(latex_file, "w") as f:

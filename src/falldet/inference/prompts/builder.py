@@ -5,11 +5,14 @@ from falldet.schemas import PromptConfig
 from .components import (
     COT_INSTRUCTION,
     DEFINITIONS_VARIANTS,
+    FEWSHOT_PREAMBLE,
+    INTERNVL_DO_NOT_THINK_INSTRUCTION,
     LABEL_FORMAT_VARIANTS,
     LABELS_COMPONENT,
     OUTPUT_FORMAT_VARIANTS,
     R1_SYSTEM_PROMPT,
     ROLE_VARIANTS,
+    TASK_CLIP_OVERLAP_NOTE,
     TASK_VARIANTS,
 )
 from .parsers import CoTOutputParser, JSONOutputParser, KeywordOutputParser, OutputParser
@@ -43,6 +46,9 @@ class PromptBuilder:
         # 2. Task instruction (always included)
         sections.append(TASK_VARIANTS[self.config.task_variant])
 
+        if self.config.clip_overlap_note:
+            sections.append(TASK_CLIP_OVERLAP_NOTE)
+
         # 3. Labels section (always included)
         sections.append(self._build_labels_section())
 
@@ -57,6 +63,35 @@ class PromptBuilder:
         # 6. Output format instruction (skip for embed mode)
         if self.config.output_format is not None:
             sections.append(OUTPUT_FORMAT_VARIANTS[self.config.output_format])
+
+        return "\n\n".join(sections)
+
+    def build_fewshot_preamble(self) -> str:
+        """Assemble the preamble text for few-shot mode.
+
+        Includes all context-setting components (role, task, labels, definitions)
+        plus a response-style-appropriate exemplar explanation.
+        The caller decides placement (system vs user) based on fewshot_preamble.
+
+        Returns:
+            Complete preamble string.
+        """
+
+        sections = []
+
+        if self.config.role_variant:
+            sections.append(ROLE_VARIANTS[self.config.role_variant])
+
+        sections.append(TASK_VARIANTS[self.config.task_variant])
+        sections.append(self._build_labels_section())
+
+        if self.config.definitions_variant:
+            sections.append(DEFINITIONS_VARIANTS[self.config.definitions_variant])
+
+        sections.append(FEWSHOT_PREAMBLE)
+
+        if self.config.model_family.lower() == "internvl":
+            sections.append(INTERNVL_DO_NOT_THINK_INSTRUCTION)
 
         return "\n\n".join(sections)
 

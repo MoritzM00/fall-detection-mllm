@@ -1,5 +1,6 @@
 """Tests for the ConversationBuilder class."""
 
+import pytest
 import torch
 
 from falldet.inference.conversation import (
@@ -7,8 +8,9 @@ from falldet.inference.conversation import (
     ConversationData,
     VideoWithMetadata,
 )
+from falldet.inference.prompts.components import FEWSHOT_SHORT_INSTRUCTION
 from falldet.inference.prompts.parsers import JSONOutputParser, KeywordOutputParser
-from falldet.schemas import PromptConfig
+from falldet.schemas import FewshotPreamble, FewshotResponse, PromptConfig
 
 # Test data
 LABEL2IDX = {
@@ -134,40 +136,36 @@ class TestConversationBuilder:
         assert conv_data.videos[0].frames is target_video
 
     def test_few_shot_messages_structure(self):
-        """Test message structure with exemplars passed at build time."""
+        """Test message structure: system + one user message per exemplar + target user."""
         num_exemplars = 2
         exemplars = create_mock_exemplars(num_exemplars)
+        # Default: preamble=system, response=inline
         config = PromptConfig(num_shots=num_exemplars)
         builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: 2 user-assistant pairs + 1 target user = 5 messages
-        assert len(conv_data.messages) == 5
+        # system + exemplar1 user + exemplar2 user + target user
+        assert len(conv_data.messages) == num_exemplars + 2
+        assert conv_data.messages[0]["role"] == "system"
+        for msg in conv_data.messages[1:]:
+            assert msg["role"] == "user"
 
-        # Check message order: user, assistant, user, assistant, user
-        assert conv_data.messages[0]["role"] == "user"
-        assert conv_data.messages[1]["role"] == "assistant"
-        assert conv_data.messages[2]["role"] == "user"
-        assert conv_data.messages[3]["role"] == "assistant"
-        assert conv_data.messages[4]["role"] == "user"
-
-    def test_few_shot_message_order_with_system(self):
-        """Test message order includes system message when needed (InternVL CoT)."""
+    def test_few_shot_system_message_contains_introduction(self):
+        """Test that system message is present in few-shot and contains preamble."""
         exemplars = create_mock_exemplars(1)
-        config = PromptConfig(num_shots=1, cot=True, model_family="InternVL")
+        config = PromptConfig(num_shots=1, role_variant="standard")
         builder = ConversationBuilder(config, LABEL2IDX)
         target_video = create_mock_video()
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: system, user, assistant, user = 4 messages
-        assert len(conv_data.messages) == 4
         assert conv_data.messages[0]["role"] == "system"
-        assert conv_data.messages[1]["role"] == "user"
-        assert conv_data.messages[2]["role"] == "assistant"
-        assert conv_data.messages[3]["role"] == "user"
+        system_text = conv_data.messages[0]["content"][0]["text"]
+        assert "Role:" in system_text
+        assert "Task:" in system_text
+        assert "Allowed Labels:" in system_text
 
     def test_few_shot_video_count(self):
         """Test that few-shot has correct number of videos."""
@@ -179,7 +177,6 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have exemplar videos + target video
         assert len(conv_data.videos) == num_exemplars + 1
 
     def test_video_metadata_structure(self):
@@ -328,8 +325,8 @@ class TestConversationBuilder:
 
         assert inputs_a["prompt"] != inputs_b["prompt"]
 
-    def test_exemplar_user_message_content(self):
-        """Test that exemplar user messages have correct content."""
+    def test_exemplar_user_message_contains_prompt(self):
+        """Test that FEWSHOT_SHORT_INSTRUCTION appears in the exemplar user message."""
         exemplars = create_mock_exemplars(1)
         config = PromptConfig(num_shots=1)
         builder = ConversationBuilder(config, LABEL2IDX)
@@ -337,17 +334,14 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        user_msg = conv_data.messages[0]
-        assert user_msg["role"] == "user"
+        # With default (system, inline): system + exemplar user + target user
+        exemplar_msg = conv_data.messages[1]
+        text_items = [item["text"] for item in exemplar_msg["content"] if item["type"] == "text"]
+        combined = "\n".join(text_items)
+        assert FEWSHOT_SHORT_INSTRUCTION in combined
 
-        content = user_msg["content"]
-        assert len(content) == 2
-        assert content[0]["type"] == "video"
-        assert content[1]["type"] == "text"
-        assert "Classify" in content[1]["text"]
-
-    def test_exemplar_assistant_message_content(self):
-        """Test that exemplar assistant messages have correct content."""
+    def test_exemplar_inline_contains_response_delimiter_and_answer(self):
+        """Test that inline user message contains [RESPONSE 1] and the formatted answer."""
         exemplars = create_mock_exemplars(1)
         exemplars[0]["label_str"] = "fall"
         config = PromptConfig(num_shots=1, output_format="json")
@@ -356,13 +350,33 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        asst_msg = conv_data.messages[1]
-        assert asst_msg["role"] == "assistant"
+        # With default (system, inline): exemplar is at index 1
+        exemplar_msg = conv_data.messages[1]
+        text_items = [item["text"] for item in exemplar_msg["content"] if item["type"] == "text"]
+        combined = "\n".join(text_items)
+        assert "[RESPONSE 1]" in combined
+        assert '"label": "fall"' in combined
 
-        content = asst_msg["content"]
-        assert len(content) == 1
-        assert content[0]["type"] == "text"
-        assert '"label": "fall"' in content[0]["text"]
+    def test_fewshot_section_markers(self):
+        """Test that numbered [REQUEST N], [RESPONSE N], and [QUERY] markers appear."""
+        exemplars = create_mock_exemplars(2)
+        config = PromptConfig(num_shots=2)
+        builder = ConversationBuilder(config, LABEL2IDX)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        all_text = "\n".join(
+            item["text"]
+            for msg in conv_data.messages
+            for item in msg["content"]
+            if item.get("type") == "text"
+        )
+        assert "[REQUEST 1]" in all_text
+        assert "[RESPONSE 1]" in all_text
+        assert "[REQUEST 2]" in all_text
+        assert "[RESPONSE 2]" in all_text
+        assert "[QUERY]" in all_text
 
     def test_target_message_has_full_prompt(self):
         """Test that target message contains full prompt (not exemplar prompt)."""
@@ -413,10 +427,11 @@ class TestConversationBuilder:
         assert conv_data.messages[1]["role"] == "user"
 
     def test_system_instruction_with_few_shot(self):
-        """Test that system_instruction works with few-shot exemplars."""
-        exemplars = create_mock_exemplars(1)
+        """Test that system_instruction overrides the auto-generated preamble in few-shot."""
+        num_exemplars = 1
+        exemplars = create_mock_exemplars(num_exemplars)
         config = PromptConfig(
-            num_shots=1,
+            num_shots=num_exemplars,
             system_instruction="Custom system instruction",
         )
         builder = ConversationBuilder(config, LABEL2IDX)
@@ -424,10 +439,223 @@ class TestConversationBuilder:
 
         conv_data = builder.build(target_video, exemplars=exemplars)
 
-        # Should have: system, user, assistant, user = 4 messages
-        assert len(conv_data.messages) == 4
+        # system + exemplar user + target user
+        assert len(conv_data.messages) == 3
         assert conv_data.messages[0]["role"] == "system"
         assert conv_data.messages[0]["content"][0]["text"] == "Custom system instruction"
-        assert conv_data.messages[1]["role"] == "user"
-        assert conv_data.messages[2]["role"] == "assistant"
-        assert conv_data.messages[3]["role"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# Parametrized tests for fewshot_preamble × fewshot_response
+# ---------------------------------------------------------------------------
+
+_NUM_SHOTS = 2
+
+# (preamble, response, expected_roles) with _NUM_SHOTS=2
+_FORMAT_ROLES = [
+    (
+        FewshotPreamble.SYSTEM,
+        FewshotResponse.INLINE,
+        # system preamble + exemplar1 user + exemplar2 user + target user
+        ["system", "user", "user", "user"],
+    ),
+    (
+        FewshotPreamble.USER,
+        FewshotResponse.INLINE,
+        # user preamble + exemplar1 user + exemplar2 user + target user
+        ["user", "user", "user", "user"],
+    ),
+    (
+        FewshotPreamble.SYSTEM,
+        FewshotResponse.ASSISTANT,
+        # system preamble + (user + assistant) * 2 + target user
+        ["system", "user", "assistant", "user", "assistant", "user"],
+    ),
+    (
+        FewshotPreamble.USER,
+        FewshotResponse.ASSISTANT,
+        # user preamble + (user + assistant) * 2 + target user
+        ["user", "user", "assistant", "user", "assistant", "user"],
+    ),
+]
+
+
+class TestFewshotFormats:
+    """Parametrized tests for all fewshot_preamble × fewshot_response combinations."""
+
+    @pytest.mark.parametrize("preamble,response,expected_roles", _FORMAT_ROLES)
+    def test_role_sequence(
+        self,
+        preamble: FewshotPreamble,
+        response: FewshotResponse,
+        expected_roles: list[str],
+    ):
+        """Message roles must match the expected sequence for each combination."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS, fewshot_preamble=preamble, fewshot_response=response
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        exemplars = create_mock_exemplars(_NUM_SHOTS)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        roles = [msg["role"] for msg in conv_data.messages]
+        assert roles == expected_roles
+
+    @pytest.mark.parametrize("preamble,response,_", _FORMAT_ROLES)
+    def test_video_count(self, preamble: FewshotPreamble, response: FewshotResponse, _):
+        """Total videos must equal num_shots + 1 for every combination."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS, fewshot_preamble=preamble, fewshot_response=response
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        exemplars = create_mock_exemplars(_NUM_SHOTS)
+        target_video = create_mock_video()
+
+        conv_data = builder.build(target_video, exemplars=exemplars)
+
+        assert len(conv_data.videos) == _NUM_SHOTS + 1
+
+    def test_user_preamble_no_system_message(self):
+        """fewshot_preamble='user' must not produce a system message."""
+        for response in FewshotResponse:
+            config = PromptConfig(
+                num_shots=_NUM_SHOTS,
+                fewshot_preamble=FewshotPreamble.USER,
+                fewshot_response=response,
+            )
+            builder = ConversationBuilder(config, LABEL2IDX)
+            conv_data = builder.build(
+                create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS)
+            )
+            roles = [msg["role"] for msg in conv_data.messages]
+            assert "system" not in roles
+
+    def test_system_preamble_has_system_message(self):
+        """fewshot_preamble='system' must produce exactly one system message."""
+        for response in FewshotResponse:
+            config = PromptConfig(
+                num_shots=_NUM_SHOTS,
+                fewshot_preamble=FewshotPreamble.SYSTEM,
+                fewshot_response=response,
+            )
+            builder = ConversationBuilder(config, LABEL2IDX)
+            conv_data = builder.build(
+                create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS)
+            )
+            system_msgs = [msg for msg in conv_data.messages if msg["role"] == "system"]
+            assert len(system_msgs) == 1
+
+    def test_assistant_response_has_assistant_turns(self):
+        """fewshot_response='assistant' must produce one assistant turn per exemplar."""
+        for preamble in FewshotPreamble:
+            config = PromptConfig(
+                num_shots=_NUM_SHOTS,
+                fewshot_preamble=preamble,
+                fewshot_response=FewshotResponse.ASSISTANT,
+            )
+            builder = ConversationBuilder(config, LABEL2IDX)
+            conv_data = builder.build(
+                create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS)
+            )
+            asst_msgs = [msg for msg in conv_data.messages if msg["role"] == "assistant"]
+            assert len(asst_msgs) == _NUM_SHOTS
+
+    def test_inline_response_no_assistant_turns(self):
+        """fewshot_response='inline' must not produce any assistant turns."""
+        for preamble in FewshotPreamble:
+            config = PromptConfig(
+                num_shots=_NUM_SHOTS,
+                fewshot_preamble=preamble,
+                fewshot_response=FewshotResponse.INLINE,
+            )
+            builder = ConversationBuilder(config, LABEL2IDX)
+            conv_data = builder.build(
+                create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS)
+            )
+            asst_msgs = [msg for msg in conv_data.messages if msg["role"] == "assistant"]
+            assert len(asst_msgs) == 0
+
+    def test_numbered_request_delimiters_inline(self):
+        """Inline turns must use numbered [REQUEST N] and [RESPONSE N] delimiters."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS,
+            fewshot_preamble=FewshotPreamble.SYSTEM,
+            fewshot_response=FewshotResponse.INLINE,
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        all_text = "\n".join(
+            item["text"]
+            for msg in conv_data.messages
+            for item in msg["content"]
+            if item.get("type") == "text"
+        )
+        for n in range(1, _NUM_SHOTS + 1):
+            assert f"[REQUEST {n}]" in all_text
+            assert f"[RESPONSE {n}]" in all_text
+        assert "[QUERY]" in all_text
+
+    def test_demonstration_delimiters_in_assistant_variant(self):
+        """Assistant variant must use [DEMONSTRATION N] in user turns and bare answers in assistant turns."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS,
+            fewshot_preamble=FewshotPreamble.SYSTEM,
+            fewshot_response=FewshotResponse.ASSISTANT,
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        # Check [DEMONSTRATION N] in exemplar user turns
+        user_msgs = [msg for msg in conv_data.messages if msg["role"] == "user"]
+        for i in range(_NUM_SHOTS):
+            n = i + 1
+            all_text = " ".join(
+                item["text"] for item in user_msgs[i]["content"] if item["type"] == "text"
+            )
+            assert f"[DEMONSTRATION {n}]" in all_text
+
+        # Assistant turns must not contain any bracket delimiters
+        for msg in conv_data.messages:
+            if msg["role"] == "assistant":
+                text = msg["content"][0]["text"]
+                assert "[" not in text
+
+    @pytest.mark.parametrize("preamble,response,_", _FORMAT_ROLES)
+    def test_build_vllm_inputs_returns_valid_dict(
+        self, preamble: FewshotPreamble, response: FewshotResponse, _
+    ):
+        """build_vllm_inputs must return the expected keys with correct video count."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS, fewshot_preamble=preamble, fewshot_response=response
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        processor = MockProcessor()
+
+        inputs = builder.build_vllm_inputs(
+            create_mock_video(), processor, exemplars=create_mock_exemplars(_NUM_SHOTS)
+        )
+
+        assert "prompt" in inputs
+        assert "multi_modal_data" in inputs
+        assert "mm_processor_kwargs" in inputs
+        assert isinstance(inputs["prompt"], str)
+        assert len(inputs["multi_modal_data"]["video"]) == _NUM_SHOTS + 1
+
+    @pytest.mark.parametrize("preamble,response,_", _FORMAT_ROLES)
+    def test_videos_always_in_user_turns(
+        self, preamble: FewshotPreamble, response: FewshotResponse, _
+    ):
+        """All videos in exemplar turns must be in user messages (never system)."""
+        config = PromptConfig(
+            num_shots=_NUM_SHOTS, fewshot_preamble=preamble, fewshot_response=response
+        )
+        builder = ConversationBuilder(config, LABEL2IDX)
+        conv_data = builder.build(create_mock_video(), exemplars=create_mock_exemplars(_NUM_SHOTS))
+
+        for msg in conv_data.messages:
+            if msg["role"] == "system":
+                video_items = [item for item in msg["content"] if item["type"] == "video"]
+                assert len(video_items) == 0, "System messages must not contain videos"

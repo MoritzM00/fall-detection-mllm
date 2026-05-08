@@ -89,6 +89,8 @@ class OmnifallVideoDataset(GenericVideoDataset):
             size=size,
             max_size=max_size,
             seed=seed,
+            disk_cache=kwargs.get("disk_cache"),
+            cache_in_memory=kwargs.get("cache_in_memory", False),
         )
         self.dataset_name = dataset_name
         self.split = split
@@ -183,6 +185,18 @@ class OmnifallVideoDataset(GenericVideoDataset):
         """Format relative video path to full path."""
         return self.path_format.format(
             video_root=self.video_root, video_path=rel_path, ext=self.ext
+        )
+
+    def _compute_cache_key(self, idx: int) -> str:
+        """Cache key includes segment boundaries for Omnifall temporal segments."""
+        from falldet.data.cache import compute_cache_key
+
+        segment = self.video_segments[idx]
+        return compute_cache_key(
+            video_path=segment["video_path"],
+            idx=idx,
+            segment_start=segment["start"],
+            segment_end=segment["end"],
         )
 
     def get_random_offset(self, length, target_interval, idx, fps, start=0):

@@ -23,6 +23,7 @@ class ParseResult:
     label: str
     reasoning: str | None = None
     raw_text: str = ""
+    content: str | None = None
 
 
 class OutputParser(Protocol):
@@ -95,11 +96,31 @@ class KeywordOutputParser:
         """
         self.label2idx = label2idx
 
+    def _extract_best_answer_phrase(self, text: str) -> str | None:
+        """Extract label portion from 'The best answer is: <label>' phrase.
+
+        Args:
+            text: Raw output text from LLM
+
+        Returns:
+            Extracted answer string, or None if phrase not found
+        """
+        match = re.search(
+            r"(?i)the\s+best\s+answer\s+is\s*[:\-]?\s*(.+?)(?:\.|$)",
+            text,
+            re.MULTILINE,
+        )
+        if match:
+            answer = match.group(1).strip()
+            return answer if answer else None
+        return None
+
     def parse(self, text: str) -> ParseResult:
         """Parse plain text output by searching for valid labels.
 
-        Searches the text for any of the valid labels from label2idx
-        and returns the first match found. Handles variants like "walking" -> "walk".
+        First looks for 'The best answer is: <label>' phrase. If found, parses
+        only that portion. Otherwise searches the full text for any valid label.
+        Handles variants like "walking" -> "walk".
 
         Args:
             text: Raw output text from LLM
@@ -107,7 +128,8 @@ class KeywordOutputParser:
         Returns:
             ParseResult with extracted label (or "other" if no match)
         """
-        text_lower = text.lower()
+        answer_phrase = self._extract_best_answer_phrase(text)
+        text_lower = (answer_phrase if answer_phrase is not None else text).lower()
 
         # Sort labels by length (longest first) to match "sit_down" before "sitting"
         sorted_labels: list[str] = sorted(self.label2idx.keys(), key=lambda s: len(s), reverse=True)
@@ -281,8 +303,9 @@ class CoTOutputParser:
             logger.warning("No content found after reasoning tags. Parsing entire text as answer.")
             result = self.answer_parser.parse(text)
 
-        # Add reasoning to result
+        # Add reasoning and content to result
         result.reasoning = reasoning
+        result.content = content
         result.raw_text = text
 
         return result

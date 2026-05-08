@@ -4,6 +4,7 @@
 defaults:
   - /dataset/omnifall/video@dataset: oops
   - override /vllm: debug
+  - override /prompt: fewshot
 
 # Limit to small number of samples for fast testing
 num_samples: 10

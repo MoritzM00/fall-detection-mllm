@@ -23,12 +23,15 @@ MODEL_NAMES: dict[str, str] = {
 }
 
 MODEL_NAMES_COT: dict[str, str] = {
-    "0fyrvcyv": "Qwen3-VL-2B",
-    "2yzuuwqm": "Qwen3-VL-4B",
-    "j5m9qihw": "Qwen3-VL-8B",
-    "opzspcfj": "Qwen3-VL-30B-A3B",
-    "ml3489zj": "Qwen3-VL-32B",
+    "dts57kgz": "InternVL3.5-2B",
+    "91g7t1y1": "Qwen3-VL-2B",
+    "cpe2sto4": "InternVL3.5-8B",
+    "fmmrnf5j": "Qwen3-VL-8B",
+    "73ivqn3d": "Qwen3-VL-32B",
+    "o8i8pojr": "InternVL3.5-38B",
 }
+USE_COT = False  # Set to True to use COT runs instead
+
 DATASET = "OOPS"
 SPLIT = "cs"
 
@@ -39,18 +42,18 @@ INCLUDE_FALL_UNION_FALLEN = True
 # so it can be included in the calculation for bold/underline.
 SPECIALIZED_MODEL_NAME = "VMAE-K400"
 SPECIALIZED_MODEL_METRICS_ALL: list[float | None] = [
-    22.9,
-    94.5,
-    23.3,
-    77.4,
-    84.8,
+    21.4,
+    47.6,
+    21.9,
+    72.9,
+    85.4,
+    65.6,
+    33.1,
+    96.3,
+    41.0,
+    68.2,
+    82.4,
     67.5,
-    28.0,
-    97.6,
-    38.2,
-    70.9,
-    84.1,
-    70.3,
 ]
 SPECIALIZED_MODEL_METRICS: list[float | None] = (
     SPECIALIZED_MODEL_METRICS_ALL
@@ -127,7 +130,7 @@ def format_value(val, col_index, stats):
     if col_index in HEATMAP_COLUMNS:
         min_val = stats[col_index]["min"]
         if max_val != min_val:
-            level = int(round((val - min_val) / (max_val - min_val) * 100))
+            level = int(round(10 + (val - min_val) / (max_val - min_val) * 90))
         else:
             level = 100
         formatted_str = f"\\gc{{{level}}}{{{formatted_str}}}"
@@ -151,7 +154,8 @@ def generate_latex():
     )
 
     # Add WandB Models
-    for run_id, display_name in MODEL_NAMES.items():
+    model_dict = MODEL_NAMES_COT if USE_COT else MODEL_NAMES
+    for run_id, display_name in model_dict.items():
         metrics = fetch_run_data(api, run_id)
         all_rows.append({"name": display_name, "metrics": metrics, "type": "mllm"})
 

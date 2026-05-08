@@ -1,6 +1,7 @@
 from falldet.inference.fewshot.samplers import (
     BalancedRandomSampler,
     ExemplarSampler,
+    PerClassSimilaritySampler,
     RandomSampler,
     SimilaritySampler,
     create_sampler,
@@ -12,6 +13,7 @@ __all__ = [
     "RandomSampler",
     "BalancedRandomSampler",
     "SimilaritySampler",
+    "PerClassSimilaritySampler",
     "create_sampler",
     "setup_fewshot_sampler",
 ]

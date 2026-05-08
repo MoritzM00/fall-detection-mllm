@@ -21,7 +21,6 @@ ROLE_COMPONENT_VIDEO_SPECIALIZED = textwrap.dedent("""
     You are an expert video analyst specializing in Human Activity Recognition (HAR) focused on fall detection and post-fall assessment.
 """).strip()
 
-
 TASK_INSTRUCTION = textwrap.dedent("""
     Task:
     Analyze the video clip and classify the primary action being performed.
@@ -31,6 +30,7 @@ TASK_INSTRUCTION = textwrap.dedent("""
 TASK_CLIP_OVERLAP_NOTE = textwrap.dedent("""
     Note that the clip may contain more than one action. If this is the case,
     focus on classifying the action in the first part of the clip, not the entire clip.
+    Example: Clips shows a person jumping and then falling. The correct label is jump.
 """).strip()
 
 
@@ -116,8 +116,24 @@ R1_SYSTEM_PROMPT = textwrap.dedent("""
     You are a helpful assistant. Before providing your final answer, conduct a detailed analysis of the question. Enclose your entire thinking process within <think> and </think> tags. After your analysis, provide your final answer separately.
 """).strip()
 
+# Few-shot: explanation added to the system instruction to set up the ICL format
+FEWSHOT_PREAMBLE = textwrap.dedent("""
+    Demonstrations:
+    You will be shown demonstrations, consisting of a video with a classification request
+    followed by the correct response.
+    After the demonstrations, classify the action in the query video using only the allowed labels.
+    Match the exact output format used in the examples.
+""").strip()
+
+INTERNVL_DO_NOT_THINK_INSTRUCTION = textwrap.dedent("""
+    Do not think step-by-step, just provide the final answer in the same format as the exemplars.
+""").strip()
+
 # Few-shot exemplar prompt (used for exemplar user turns)
-EXEMPLAR_USER_PROMPT = "Classify the action shown in this video."
+FEWSHOT_SHORT_INSTRUCTION = "Classify the action shown in this video."
+
+# Few-shot section markers
+QUERY_DELIMITER = "[QUERY]"
 
 
 # ============================================================================
