@@ -285,6 +285,48 @@ class LoraConfig(BaseConfig):
     max_rank: int = 16
 
 
+class LoraTrainConfig(BaseConfig):
+    """LoRA hyperparameters for training (passed to ``peft.LoraConfig``)."""
+
+    r: int = 8
+    lora_alpha: int = 16
+    lora_dropout: float = 0.05
+    bias: Literal["none", "all", "lora_only"] = "none"
+    target_modules: list[str] = [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+    ]
+
+
+class TrainingHyperparams(BaseConfig):
+    """Subset of ``trl.SFTConfig`` knobs we expose via Hydra."""
+
+    per_device_train_batch_size: int = 1
+    gradient_accumulation_steps: int = 1
+    num_train_epochs: float = 1.0
+    max_steps: int = -1
+    learning_rate: float = 2.0e-4
+    warmup_steps: int = 0
+    weight_decay: float = 0.0
+    lr_scheduler_type: str = "constant"
+    bf16: bool = True
+    fp16: bool = False
+    logging_steps: int = 1
+    save_strategy: Literal["no", "steps", "epoch"] = "no"
+    save_steps: int = 500
+    save_total_limit: int | None = None
+    gradient_checkpointing: bool = False
+    max_length: int | None = None
+    report_to: str = "none"
+    seed: int = 0
+    freeze_visual: bool = True
+
+
 class InferenceConfig(BaseConfig):
     """Root configuration composing all sub-configs."""
 
@@ -317,6 +359,36 @@ class InferenceConfig(BaseConfig):
     dataset_train: DatasetConfig | None = None
     dataset_val: DatasetConfig | None = None
     dataset_test: DatasetConfig | None = None
+
+
+class TrainingConfig(BaseConfig):
+    """Root configuration for the SFT training entry point."""
+
+    model: ModelConfig
+    data: DataConfig
+    prompt: PromptConfig
+    dataset: DatasetConfig
+    wandb: WandbConfig
+    lora: LoraTrainConfig
+    training: TrainingHyperparams
+
+    model_fps: float = 7.5
+    num_frames: int = 16
+    num_workers: int = 4
+    output_dir: str = "outputs/training"
+
+    # Mode-specific dataset overrides (parity with InferenceConfig)
+    dataset_train: DatasetConfig | None = None
+    dataset_val: DatasetConfig | None = None
+    dataset_test: DatasetConfig | None = None
+
+
+def from_dictconfig_training(cfg: DictConfig) -> TrainingConfig:
+    """Convert an OmegaConf DictConfig to a validated TrainingConfig."""
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    assert isinstance(raw, dict)
+    raw.pop("hydra", None)
+    return TrainingConfig.model_validate(raw)
 
 
 def from_dictconfig(cfg: DictConfig) -> InferenceConfig:

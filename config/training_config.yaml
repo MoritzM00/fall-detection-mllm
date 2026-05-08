@@ -1,0 +1,33 @@
+defaults:
+  - model: qwenvl
+  - prompt: default
+  - dataset: omnifall/video/oops
+  - lora: train
+  - training: oops_quick
+  - _self_
+
+data:
+  seed: 0
+  split: cs
+  mode: train
+  size: 224
+  max_size: null
+  cache_dir: null
+  cache_read_only: true
+  cache_in_memory: false
+
+model_fps: 7.5
+num_frames: 16
+num_workers: 4
+
+output_dir: outputs/training
+
+wandb:
+  mode: online
+  project: falldet-mllm-finetune
+  name:
+  tags:
+
+hydra:
+  job:
+    chdir: false

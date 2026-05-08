@@ -11,7 +11,7 @@ import wandb
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
-from falldet.schemas import InferenceConfig
+from falldet.schemas import InferenceConfig, TrainingConfig
 from falldet.utils.predictions import (
     load_predictions_jsonl,
     prediction_jsonl_path,
@@ -21,12 +21,18 @@ from falldet.utils.predictions import (
 logger = logging.getLogger(__name__)
 
 
-def initialize_run_from_config(config: InferenceConfig):
+def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
     wandb_mode = config.wandb.mode
     logger.info(f"Initializing W&B in {wandb_mode} mode")
     run_id = wandb.util.generate_id()
     base_name, tags = create_name_and_tags_from_config(config)
     run_name = f"{base_name}_{run_id}"
+    if isinstance(config, TrainingConfig):
+        tags = list(set(tags + ["training", f"lora_r{config.lora.r}"]))
+        # Ensure TRL's own wandb integration attaches to the same run.
+        os.environ["WANDB_RUN_ID"] = run_id
+        os.environ["WANDB_PROJECT"] = config.wandb.project
+        os.environ["WANDB_NAME"] = run_name
     run = wandb.init(
         project=config.wandb.project,
         id=run_id,
@@ -40,7 +46,9 @@ def initialize_run_from_config(config: InferenceConfig):
     return run
 
 
-def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list[str]]:
+def create_name_and_tags_from_config(
+    config: InferenceConfig | TrainingConfig,
+) -> tuple[str, list[str]]:
     """Create a W&B base run name and tags based on the configuration.
 
     Args:

@@ -1,0 +1,142 @@
+"""Hydra-driven SFT training: TRL SFTTrainer + LoRA on Qwen3-VL.
+
+Composes the same config groups as inference (dataset/model/prompt) plus a
+training/ group for SFTConfig knobs and a lora/train.yaml for peft.LoraConfig.
+
+Run from repo root in the ``falldet-finetune`` conda env:
+
+    python finetune/train.py                     # uses training=oops_quick
+    python finetune/train.py training=smoke      # short dummy-data run
+    python finetune/train.py wandb.mode=offline  # disable W&B sync
+
+Outputs land under ``${output_dir}/<run_name>/``; final adapter at
+``${output_dir}/<run_name>/adapter``.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+import hydra
+import torch
+from omegaconf import DictConfig
+from peft import LoraConfig as PeftLoraConfig
+from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+from trl import SFTConfig, SFTTrainer
+
+from falldet.data.video_dataset import label2idx as omnifall_label2idx
+from falldet.data.video_dataset_factory import get_video_datasets
+from falldet.inference.conversation import ConversationBuilder
+from falldet.schemas import TrainingConfig, from_dictconfig_training
+from falldet.utils.logging import setup_logging
+from falldet.utils.wandb import initialize_run_from_config
+from finetune.collator import Qwen3VLSFTCollator
+from finetune.dataset import Qwen3VLFallDataset
+
+logger = logging.getLogger(__name__)
+
+
+@hydra.main(config_path="../config", config_name="training_config", version_base=None)
+def main(cfg: DictConfig) -> None:
+    setup_logging(
+        log_file="logs/training.log",
+        console_level=logging.INFO,
+        file_level=logging.DEBUG,
+    )
+    config: TrainingConfig = from_dictconfig_training(cfg)
+    logger.info(config.model_dump_json(indent=2))
+
+    run = initialize_run_from_config(config)
+    run_name = run.name
+
+    output_dir = Path(config.output_dir) / run_name
+    adapter_dir = output_dir / "adapter"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = config.model.path
+    logger.info(f"Loading processor: {model_path}")
+    processor = AutoProcessor.from_pretrained(model_path)
+
+    logger.info("Loading model")
+    model = Qwen3VLForConditionalGeneration.from_pretrained(model_path, dtype=torch.bfloat16)
+    model.config.use_cache = False
+    if config.training.freeze_visual:
+        for p in model.model.visual.parameters():
+            p.requires_grad = False
+
+    labels = list(omnifall_label2idx.keys())
+    prompt_config = config.prompt.model_copy(update={"labels": labels, "output_format": "text"})
+    conv_builder = ConversationBuilder(
+        config=prompt_config,
+        label2idx=omnifall_label2idx,
+        model_fps=config.model_fps,
+        needs_video_metadata=config.model.needs_video_metadata,
+    )
+
+    base = get_video_datasets(
+        config=config,
+        mode=config.data.mode,
+        run=run,
+        return_individual=False,
+        split=config.data.split,
+        size=config.data.size,
+        max_size=config.data.max_size,
+        seed=config.data.seed,
+    )
+    logger.info(f"Base train dataset: {len(base)} samples")
+    train_ds = Qwen3VLFallDataset(base, conv_builder)
+    collator = Qwen3VLSFTCollator(processor)
+
+    peft_lora = PeftLoraConfig(
+        r=config.lora.r,
+        lora_alpha=config.lora.lora_alpha,
+        lora_dropout=config.lora.lora_dropout,
+        bias=config.lora.bias,
+        target_modules=list(config.lora.target_modules),
+    )
+
+    sft_config = SFTConfig(
+        output_dir=str(output_dir),
+        per_device_train_batch_size=config.training.per_device_train_batch_size,
+        gradient_accumulation_steps=config.training.gradient_accumulation_steps,
+        num_train_epochs=config.training.num_train_epochs,
+        max_steps=config.training.max_steps,
+        learning_rate=config.training.learning_rate,
+        warmup_steps=config.training.warmup_steps,
+        weight_decay=config.training.weight_decay,
+        lr_scheduler_type=config.training.lr_scheduler_type,
+        bf16=config.training.bf16,
+        fp16=config.training.fp16,
+        logging_steps=config.training.logging_steps,
+        save_strategy=config.training.save_strategy,
+        save_steps=config.training.save_steps,
+        save_total_limit=config.training.save_total_limit,
+        gradient_checkpointing=config.training.gradient_checkpointing,
+        max_length=config.training.max_length,
+        report_to=config.training.report_to,
+        seed=config.training.seed,
+        run_name=run_name,
+        remove_unused_columns=False,
+        dataloader_num_workers=config.num_workers,
+    )
+
+    trainer = SFTTrainer(
+        model=model,
+        args=sft_config,
+        peft_config=peft_lora,
+        train_dataset=train_ds,
+        data_collator=collator,
+        processing_class=processor,
+    )
+
+    logger.info("Starting training")
+    trainer.train()
+
+    logger.info(f"Saving adapter to {adapter_dir}")
+    trainer.save_model(str(adapter_dir))
+    run.finish()
+
+
+if __name__ == "__main__":
+    main()
