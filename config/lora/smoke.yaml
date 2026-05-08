@@ -1,0 +1,4 @@
+# Apply the adapter saved by `finetune/train_smoke.py`.
+path: finetune/outputs/smoke/adapter
+name: smoke
+max_rank: 8
