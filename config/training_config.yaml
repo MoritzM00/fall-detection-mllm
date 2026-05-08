@@ -2,8 +2,9 @@ defaults:
   - model: qwenvl
   - prompt: default
   - dataset: omnifall/video/oops
+  - dataset@dataset_val: omnifall/video/oops
   - lora: train
-  - training: oops_quick
+  - training: quick
   - _self_
 
 data:

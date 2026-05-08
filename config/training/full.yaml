@@ -1,0 +1,37 @@
+# Full SFT run. Effective batch = per_device * grad_accum * num_gpus.
+# Tune num_train_epochs / max_steps based on dataset size; rule of thumb is
+# 2-3 epochs over the train split.
+
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 2  # effective batch 16 on a single GPU
+
+num_train_epochs: 3
+max_steps: -1  # let epochs decide; set a positive int to cap
+
+learning_rate: 2.0e-4
+warmup_steps: 50  # ~3% of a few-thousand-step run; raise for longer runs
+weight_decay: 1e-4
+lr_scheduler_type: cosine
+
+bf16: true
+fp16: false
+
+logging_steps: 10
+
+save_strategy: steps
+save_steps: 200
+save_total_limit: 3
+
+eval_strategy: steps
+eval_steps: 200
+eval_on_start: true
+per_device_eval_batch_size: 8
+max_eval_samples: 1000
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+
+gradient_checkpointing: true
+max_length: null
+report_to: wandb
+seed: 0

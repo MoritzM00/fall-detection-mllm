@@ -16,7 +16,7 @@ from torch.utils.data import Dataset
 from falldet.inference.conversation import ConversationBuilder
 
 
-class Qwen3VLFallDataset(Dataset):
+class SFTConversationDataset(Dataset):
     column_names = None  # signals to TRL to infer columns from a sample
 
     def __init__(self, base: Dataset, conversation_builder: ConversationBuilder):

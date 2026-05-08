@@ -20,4 +20,3 @@ gradient_checkpointing: false
 max_length: null
 report_to: wandb
 seed: 0
-freeze_visual: true

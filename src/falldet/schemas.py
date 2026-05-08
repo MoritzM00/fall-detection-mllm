@@ -325,11 +325,13 @@ class TrainingHyperparams(BaseConfig):
     eval_on_start: bool = False
     per_device_eval_batch_size: int = 1
     max_eval_samples: int | None = None
+    load_best_model_at_end: bool = False
+    metric_for_best_model: str | None = None
+    greater_is_better: bool | None = None
     gradient_checkpointing: bool = False
     max_length: int | None = None
     report_to: str = "none"
     seed: int = 0
-    freeze_visual: bool = True
 
 
 class InferenceConfig(BaseConfig):

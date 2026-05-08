@@ -3,11 +3,11 @@
 Composes the same config groups as inference (dataset/model/prompt) plus a
 training/ group for SFTConfig knobs and a lora/train.yaml for peft.LoraConfig.
 
-Run from repo root in the ``falldet-finetune`` conda env:
+Run from the repo root in the ``falldet-finetune`` conda env:
 
-    python finetune/train.py                     # uses training=oops_quick
-    python finetune/train.py training=smoke      # short dummy-data run
-    python finetune/train.py wandb.mode=offline  # disable W&B sync
+    python -m finetune.sft_lora                     # uses training=quick
+    python -m finetune.sft_lora training=full       # full run preset
+    python -m finetune.sft_lora training=smoke      # short wiring check
 
 Outputs land under ``${output_dir}/<run_name>/``; final adapter at
 ``${output_dir}/<run_name>/adapter``.
@@ -32,8 +32,8 @@ from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.utils.logging import setup_logging
 from falldet.utils.wandb import initialize_run_from_config
-from finetune.collator import Qwen3VLSFTCollator
-from finetune.dataset import Qwen3VLFallDataset
+from finetune.sft_collator import PromptMaskedSFTCollator
+from finetune.sft_dataset import SFTConversationDataset
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +62,6 @@ def main(cfg: DictConfig) -> None:
     logger.info("Loading model")
     model = Qwen3VLForConditionalGeneration.from_pretrained(model_path, dtype=torch.bfloat16)
     model.config.use_cache = False
-    if config.training.freeze_visual:
-        for p in model.model.visual.parameters():
-            p.requires_grad = False
 
     labels = list(omnifall_label2idx.keys())
     prompt_config = config.prompt.model_copy(update={"labels": labels, "output_format": "text"})
@@ -86,8 +83,8 @@ def main(cfg: DictConfig) -> None:
         seed=config.data.seed,
     )
     logger.info(f"Base train dataset: {len(base)} samples")
-    train_ds = Qwen3VLFallDataset(base, conv_builder)
-    collator = Qwen3VLSFTCollator(processor)
+    train_ds = SFTConversationDataset(base, conv_builder)
+    collator = PromptMaskedSFTCollator(processor, max_length=config.training.max_length)
 
     eval_ds = None
     if config.training.eval_strategy != "no":
@@ -106,7 +103,7 @@ def main(cfg: DictConfig) -> None:
             n = min(config.training.max_eval_samples, len(val_base))
             val_base = Subset(val_base, list(range(n)))
             logger.info(f"Capped val dataset to {n} samples")
-        eval_ds = Qwen3VLFallDataset(val_base, conv_builder)
+        eval_ds = SFTConversationDataset(val_base, conv_builder)
 
     peft_lora = PeftLoraConfig(
         r=config.lora.r,
@@ -136,6 +133,9 @@ def main(cfg: DictConfig) -> None:
         eval_steps=config.training.eval_steps,
         eval_on_start=config.training.eval_on_start,
         per_device_eval_batch_size=config.training.per_device_eval_batch_size,
+        load_best_model_at_end=config.training.load_best_model_at_end,
+        metric_for_best_model=config.training.metric_for_best_model,
+        greater_is_better=config.training.greater_is_better,
         gradient_checkpointing=config.training.gradient_checkpointing,
         max_length=config.training.max_length,
         report_to=config.training.report_to,
@@ -153,6 +153,24 @@ def main(cfg: DictConfig) -> None:
         eval_dataset=eval_ds,
         data_collator=collator,
         processing_class=processor,
+    )
+
+    world_size = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
+    effective_batch = (
+        config.training.per_device_train_batch_size
+        * config.training.gradient_accumulation_steps
+        * world_size
+    )
+    steps_per_epoch = max(1, len(train_ds) // effective_batch)
+    if config.training.max_steps and config.training.max_steps > 0:
+        total_steps = config.training.max_steps
+    else:
+        total_steps = int(steps_per_epoch * config.training.num_train_epochs)
+    logger.info(
+        f"Train samples={len(train_ds)} | effective_batch={effective_batch} "
+        f"(per_device={config.training.per_device_train_batch_size} "
+        f"x grad_accum={config.training.gradient_accumulation_steps} x world={world_size}) "
+        f"| steps/epoch={steps_per_epoch} | total_steps={total_steps}"
     )
 
     logger.info("Starting training")
