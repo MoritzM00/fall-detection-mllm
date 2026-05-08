@@ -2,7 +2,7 @@
 # Automates environment setup and common development tasks
 
 # Configuration variables
-ENV_NAME := cu129_vllm17_py312
+ENV_NAME := cu130_vllm20_py312
 MAX_JOBS := 8
 
 # Phony targets (not actual files)
@@ -30,7 +30,7 @@ env:
 # Install all pip dependencies (must be run in active conda env)
 install:
 	@echo "Installing vLLM..."
-	uv pip install vllm==0.17.0 --torch-backend=cu129
+	uv pip install vllm==0.20.0 --torch-backend=cu130
 	@echo "Installing requirements..."
 	uv pip install -r requirements.txt
 	@echo "Installing dev requirements..."
@@ -40,7 +40,7 @@ install:
 	@echo "Installation complete!"
 
 install_new:
-	uv pip install vllm --torch-backend=cu129
+	uv pip install vllm --torch-backend=cu130
 	uv pip install accelerate json-repair jupyter matplotlib seaborn pandas scikit-learn rich plotext hydra-core "wandb[media]" pydantic numpy
 	uv pip install -r requirements-dev.txt
 	uv pip install -e .

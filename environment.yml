@@ -10,4 +10,4 @@ dependencies:
   - uv
   - psutil
   - ninja
-  - cuda-toolkit==12.9.1
+  - cuda-toolkit==13.0.3
