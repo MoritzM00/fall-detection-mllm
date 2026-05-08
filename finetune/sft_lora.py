@@ -162,7 +162,7 @@ def main(cfg: DictConfig) -> None:
         * world_size
     )
     steps_per_epoch = max(1, len(train_ds) // effective_batch)
-    if config.training.max_steps and config.training.max_steps > 0:
+    if config.training.max_steps > 0:
         total_steps = config.training.max_steps
     else:
         total_steps = int(steps_per_epoch * config.training.num_train_epochs)
