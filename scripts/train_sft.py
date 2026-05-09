@@ -5,9 +5,9 @@ training/ group for SFTConfig knobs and a lora/train.yaml for peft.LoraConfig.
 
 Run from the repo root in the ``falldet-finetune`` conda env:
 
-    python -m finetune.sft_lora                     # uses training=quick
-    python -m finetune.sft_lora training=full       # full run preset
-    python -m finetune.sft_lora training=smoke      # short wiring check
+    python scripts/train_sft.py                     # uses training=quick
+    python scripts/train_sft.py training=full       # full run preset
+    python scripts/train_sft.py training=smoke      # short wiring check
 
 Outputs land under ``${output_dir}/<run_name>/``; final adapter at
 ``${output_dir}/<run_name>/adapter``.
@@ -32,8 +32,8 @@ from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.utils.logging import setup_logging
 from falldet.utils.wandb import initialize_run_from_config
-from finetune.sft_collator import PromptMaskedSFTCollator
-from finetune.sft_dataset import SFTConversationDataset
+from falldet.training.collator import PromptMaskedSFTCollator
+from falldet.training.dataset import SFTConversationDataset
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import torch
 
-from finetune.sft_collator import PromptMaskedSFTCollator
+from falldet.training.collator import PromptMaskedSFTCollator
 
 
 class FakeTokenizer:

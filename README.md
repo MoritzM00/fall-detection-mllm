@@ -82,6 +82,49 @@ python scripts/vllm_inference.py experiment=embed
 This uses the Qwen3-VL-Embedding model and saves embeddings to `outputs/embeddings/`.
 
 
+### Fine-tuning
+
+Supervised fine-tuning of Qwen3-VL with LoRA via TRL `SFTTrainer`, driven by Hydra.
+
+```shell
+python scripts/train_sft.py                     # default: training=quick
+python scripts/train_sft.py training=full       # full run preset
+python scripts/train_sft.py training=smoke      # short wiring check
+```
+
+Common overrides:
+
+```shell
+python scripts/train_sft.py model.params=4B     # different model
+python scripts/train_sft.py wandb.mode=offline  # disable W&B sync
+python scripts/train_sft.py training.max_steps=20
+```
+
+Pair `training=full` with the dataset group you want (splits live in `config/dataset/omnifall/video/`):
+
+```shell
+python scripts/train_sft.py training=full dataset=omnifall/video/oops
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-cs
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-cv
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-oops
+python scripts/train_sft.py training=full dataset=omnifall/video/all
+```
+
+To match the val set to the train set, override `dataset_val` too:
+
+```shell
+python scripts/train_sft.py training=full \
+    dataset=omnifall/video/staged-cs \
+    dataset@dataset_val=omnifall/video/staged-cs
+```
+
+Outputs land under `outputs/training/<run_name>/`, with the final adapter at `outputs/training/<run_name>/adapter`. Load it at inference time via the `lora` config group in `inference_config.yaml`.
+
+Relevant configs:
+- `config/training_config.yaml` — root config; composes `model`, `prompt`, `dataset`, `lora`, `training`.
+- `config/training/` — `smoke.yaml`, `quick.yaml`, `full.yaml`.
+- `config/lora/train.yaml` — PEFT LoRA hyperparameters.
+
 ### Configuration options
 
 Besides settings experiments, the main configuration options are
