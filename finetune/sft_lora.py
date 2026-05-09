@@ -143,6 +143,8 @@ def main(cfg: DictConfig) -> None:
         run_name=run_name,
         remove_unused_columns=False,
         dataloader_num_workers=config.num_workers,
+        completion_only_loss=True,
+        dataset_kwargs={"skip_prepare_dataset": True},
     )
 
     trainer = SFTTrainer(
