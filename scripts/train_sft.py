@@ -30,10 +30,10 @@ from falldet.data.video_dataset import label2idx as omnifall_label2idx
 from falldet.data.video_dataset_factory import get_video_datasets
 from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
-from falldet.utils.logging import setup_logging
-from falldet.utils.wandb import initialize_run_from_config
 from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset
+from falldet.utils.logging import setup_logging
+from falldet.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,7 @@ def main(cfg: DictConfig) -> None:
         dataloader_num_workers=config.num_workers,
         completion_only_loss=True,
         dataset_kwargs={"skip_prepare_dataset": True},
+        use_liger_kernel=config.training.use_liger_kernel,
     )
 
     trainer = SFTTrainer(

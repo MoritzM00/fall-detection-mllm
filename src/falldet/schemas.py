@@ -332,6 +332,7 @@ class TrainingHyperparams(BaseConfig):
     max_length: int | None = None
     report_to: str = "none"
     seed: int = 0
+    use_liger_kernel: bool = False
 
 
 class InferenceConfig(BaseConfig):
