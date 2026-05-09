@@ -2,7 +2,7 @@
 # Automates environment setup and common development tasks
 
 # Configuration variables
-ENV_NAME := cu129_vllm15
+ENV_NAME := cu129_vllm15_finetune
 MAX_JOBS := 8
 
 # Phony targets (not actual files)
