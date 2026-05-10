@@ -30,7 +30,7 @@ from accelerate import PartialState
 from omegaconf import DictConfig
 from peft import LoraConfig as PeftLoraConfig
 from torch.utils.data import Subset
-from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 from trl import SFTConfig, SFTTrainer
 
 from falldet.data.video_dataset import label2idx as omnifall_label2idx
@@ -72,7 +72,10 @@ def main(cfg: DictConfig) -> None:
     processor = AutoProcessor.from_pretrained(model_path)
 
     logger.info("Loading model")
-    model = Qwen3VLForConditionalGeneration.from_pretrained(model_path, dtype=torch.bfloat16)
+    model_kwargs = {"dtype": torch.bfloat16}
+    if config.training.attn_implementation is not None:
+        model_kwargs["attn_implementation"] = config.training.attn_implementation
+    model = AutoModelForImageTextToText.from_pretrained(model_path, **model_kwargs)
     model.config.use_cache = False
 
     labels = list(omnifall_label2idx.keys())
@@ -157,6 +160,9 @@ def main(cfg: DictConfig) -> None:
         run_name=run_name,
         remove_unused_columns=False,
         dataloader_num_workers=config.num_workers,
+        dataloader_pin_memory=config.pin_memory,
+        dataloader_persistent_workers=config.persistent_workers and config.num_workers > 0,
+        dataloader_prefetch_factor=config.prefetch_factor if config.num_workers > 0 else None,
         completion_only_loss=True,
         dataset_kwargs={"skip_prepare_dataset": True},
         use_liger_kernel=config.training.use_liger_kernel,

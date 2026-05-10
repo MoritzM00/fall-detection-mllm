@@ -7,11 +7,14 @@ defaults:
   - training: quick
   - _self_
 
+model:
+  params: 8B
+
 data:
   seed: null  # train: random per run; val forced to 0 in train.py
   split: cs
   mode: train
-  size: 224
+  size: 448
   max_size: null
   cache_dir: null
   cache_read_only: true
@@ -19,7 +22,10 @@ data:
 
 model_fps: 7.5
 num_frames: 16
-num_workers: 4
+num_workers: 8
+prefetch_factor: 2
+persistent_workers: true
+pin_memory: true
 
 output_dir: outputs/training
 
