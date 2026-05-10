@@ -63,10 +63,18 @@ class PromptMaskedSFTCollator:
         attention_mask = torch.cat((prompt_mask, completion_mask), dim=1)
         completion_only_mask = torch.cat((torch.zeros_like(prompt_mask), completion_mask), dim=1)
 
+        mm_token_type_ids = processed_prompts.get("mm_token_type_ids")
+        if mm_token_type_ids is not None:
+            mm_token_type_ids = torch.cat(
+                (mm_token_type_ids, torch.zeros_like(completion_ids)), dim=1
+            )
+
         if self.max_length is not None and input_ids.shape[1] > self.max_length:
             input_ids = input_ids[:, : self.max_length]
             attention_mask = attention_mask[:, : self.max_length]
             completion_only_mask = completion_only_mask[:, : self.max_length]
+            if mm_token_type_ids is not None:
+                mm_token_type_ids = mm_token_type_ids[:, : self.max_length]
 
         labels = input_ids.clone()
         labels[attention_mask == 0] = -100
@@ -76,4 +84,9 @@ class PromptMaskedSFTCollator:
         batch["input_ids"] = input_ids
         batch["attention_mask"] = attention_mask
         batch["labels"] = labels
+        if mm_token_type_ids is not None:
+            batch["mm_token_type_ids"] = mm_token_type_ids
+            assert mm_token_type_ids.shape == input_ids.shape, (
+                f"mm_token_type_ids {mm_token_type_ids.shape} vs input_ids {input_ids.shape}"
+            )
         return batch
