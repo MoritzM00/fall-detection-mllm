@@ -14,3 +14,4 @@ transformers==4.57.6
 trl==1.4.0
 vllm==0.15.1
 wandb==0.26.1
+datasets==4.8.5
