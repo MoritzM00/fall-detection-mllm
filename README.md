@@ -98,6 +98,7 @@ Common overrides:
 python scripts/train_sft.py model.params=4B     # different model
 python scripts/train_sft.py wandb.mode=offline  # disable W&B sync
 python scripts/train_sft.py training.max_steps=20
+python scripts/train_sft.py training.attn_implementation=null  # disable flash attention 2
 ```
 
 Pair `training=full` with the dataset group you want (splits live in `config/dataset/omnifall/video/`):

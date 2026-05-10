@@ -306,6 +306,7 @@ class LoraTrainConfig(BaseConfig):
 class TrainingHyperparams(BaseConfig):
     """Subset of ``trl.SFTConfig`` knobs we expose via Hydra."""
 
+    attn_implementation: str | None = "flash_attention_2"
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 1
     num_train_epochs: float = 1.0
@@ -384,6 +385,9 @@ class TrainingConfig(BaseConfig):
     model_fps: float = 7.5
     num_frames: int = 16
     num_workers: int = 4
+    prefetch_factor: int = 4
+    persistent_workers: bool = True
+    pin_memory: bool = True
     output_dir: str = "outputs/training"
 
     # Mode-specific dataset overrides (parity with InferenceConfig)
