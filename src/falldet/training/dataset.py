@@ -21,10 +21,10 @@ class SFTConversationDataset(Dataset):
         self.conv = conversation_builder
 
     def __len__(self) -> int:
-        return len(self.base)
+        return len(self.base)  # ty: ignore[invalid-argument-type]
 
-    def __getitem__(self, idx: int) -> dict:
-        sample = self.base[idx]
+    def __getitem__(self, index: int) -> dict:
+        sample = self.base[index]
         conv_data = self.conv.build(sample["video"])
         completion = [
             {
