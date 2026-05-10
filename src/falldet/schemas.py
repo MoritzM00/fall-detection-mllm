@@ -333,6 +333,7 @@ class TrainingHyperparams(BaseConfig):
     report_to: str = "none"
     seed: int = 0
     use_liger_kernel: bool = False
+    optim: str = "adamw_torch_fused"
 
 
 class InferenceConfig(BaseConfig):

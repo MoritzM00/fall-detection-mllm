@@ -160,6 +160,7 @@ def main(cfg: DictConfig) -> None:
         completion_only_loss=True,
         dataset_kwargs={"skip_prepare_dataset": True},
         use_liger_kernel=config.training.use_liger_kernel,
+        optim=config.training.optim,
     )
 
     trainer = SFTTrainer(
