@@ -120,6 +120,19 @@ python scripts/train_sft.py training=full \
 
 Outputs land under `outputs/training/<run_name>/`, with the final adapter at `outputs/training/<run_name>/adapter`. Load it at inference time via the `lora` config group in `inference_config.yaml`.
 
+#### Multi-GPU training
+
+```shell
+accelerate launch --config_file config/accelerate/ddp_bf16.yaml \
+    --num_processes 4 scripts/train_sft.py training=quick
+
+# or:
+torchrun --nproc_per_node=4 scripts/train_sft.py training=quick
+```
+
+`config/accelerate/ddp_bf16.yaml` is a single-node DDP + bf16 setup;
+`--num_processes` overrides the value in the file.
+
 Relevant configs:
 - `config/training_config.yaml` — root config; composes `model`, `prompt`, `dataset`, `lora`, `training`.
 - `config/training/` — `smoke.yaml`, `quick.yaml`, `full.yaml`.

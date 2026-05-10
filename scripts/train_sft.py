@@ -9,6 +9,12 @@ Run from the repo root in the ``falldet-finetune`` conda env:
     python scripts/train_sft.py training=full       # full run preset
     python scripts/train_sft.py training=smoke      # short wiring check
 
+Multi-GPU (single node) via accelerate or torchrun:
+
+    accelerate launch --config_file config/accelerate/ddp_bf16.yaml \\
+        --num_processes 4 scripts/train_sft.py training=quick
+    torchrun --nproc_per_node=4 scripts/train_sft.py training=quick
+
 Outputs land under ``${output_dir}/<run_name>/``; final adapter at
 ``${output_dir}/<run_name>/adapter``.
 """
@@ -20,6 +26,7 @@ from pathlib import Path
 
 import hydra
 import torch
+from accelerate import PartialState
 from omegaconf import DictConfig
 from peft import LoraConfig as PeftLoraConfig
 from torch.utils.data import Subset
@@ -32,7 +39,7 @@ from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset
-from falldet.utils.logging import setup_logging
+from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
 from falldet.utils.wandb import initialize_run_from_config
 
 logger = logging.getLogger(__name__)
@@ -40,11 +47,14 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(config_path="../config", config_name="training_config", version_base=None)
 def main(cfg: DictConfig) -> None:
+    state = PartialState()
     setup_logging(
         log_file="logs/training.log",
         console_level=logging.INFO,
         file_level=logging.DEBUG,
     )
+    disable_logging_for_non_main_process(state.local_process_index)
+    logger.info(f"Distributed state: {state}")
     config: TrainingConfig = from_dictconfig_training(cfg)
     logger.info(config.model_dump_json(indent=2))
 
@@ -53,7 +63,9 @@ def main(cfg: DictConfig) -> None:
 
     output_dir = Path(config.output_dir) / run_name
     adapter_dir = output_dir / "adapter"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if state.is_main_process:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    state.wait_for_everyone()
 
     model_path = config.model.path
     logger.info(f"Loading processor: {model_path}")
@@ -72,32 +84,34 @@ def main(cfg: DictConfig) -> None:
         needs_video_metadata=config.model.needs_video_metadata,
     )
 
-    base = get_video_datasets(
-        config=config,
-        mode=config.data.mode,
-        run=run,
-        return_individual=False,
-        split=config.data.split,
-        size=config.data.size,
-        max_size=config.data.max_size,
-        seed=config.data.seed,
-    )
+    with state.main_process_first():
+        base = get_video_datasets(
+            config=config,
+            mode=config.data.mode,
+            run=run,
+            return_individual=False,
+            split=config.data.split,
+            size=config.data.size,
+            max_size=config.data.max_size,
+            seed=config.data.seed,
+        )
     logger.info(f"Base train dataset: {len(base)} samples")
     train_ds = SFTConversationDataset(base, conv_builder)
     collator = PromptMaskedSFTCollator(processor, max_length=config.training.max_length)
 
     eval_ds = None
     if config.training.eval_strategy != "no":
-        val_base = get_video_datasets(
-            config=config,
-            mode="val",
-            run=run,
-            return_individual=False,
-            split=config.data.split,
-            size=config.data.size,
-            max_size=config.data.max_size,
-            seed=0,  # val is deterministic regardless of data.seed
-        )
+        with state.main_process_first():
+            val_base = get_video_datasets(
+                config=config,
+                mode="val",
+                run=run,
+                return_individual=False,
+                split=config.data.split,
+                size=config.data.size,
+                max_size=config.data.max_size,
+                seed=0,  # val is deterministic regardless of data.seed
+            )
         logger.info(f"Base val dataset: {len(val_base)} samples")
         if config.training.max_eval_samples is not None:
             n = min(config.training.max_eval_samples, len(val_base))
@@ -158,7 +172,7 @@ def main(cfg: DictConfig) -> None:
         processing_class=processor,
     )
 
-    world_size = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
+    world_size = state.num_processes
     effective_batch = (
         config.training.per_device_train_batch_size
         * config.training.gradient_accumulation_steps
@@ -187,7 +201,8 @@ def main(cfg: DictConfig) -> None:
         f"  python scripts/vllm_inference.py "
         f"lora.path={adapter_dir} lora.max_rank={config.lora.r}"
     )
-    run.finish()
+    if state.is_main_process:
+        run.finish()
 
 
 if __name__ == "__main__":

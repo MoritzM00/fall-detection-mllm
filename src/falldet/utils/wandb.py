@@ -6,6 +6,8 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.distributed as dist
+from accelerate import PartialState
 
 import wandb
 from falldet.config import resolve_model_name_from_config
@@ -22,27 +24,58 @@ logger = logging.getLogger(__name__)
 
 
 def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
-    wandb_mode = config.wandb.mode
-    logger.info(f"Initializing W&B in {wandb_mode} mode")
-    run_id = wandb.util.generate_id()
+    """Initialize a W&B run, rank-aware under distributed launchers.
+
+    Under `accelerate launch` / `torchrun` only the main process creates a real
+    W&B run; non-main ranks attach a disabled stub that shares the same
+    ``run_name`` so downstream code (e.g. ``output_dir`` derivation) stays
+    consistent across all ranks.
+    """
+    state = PartialState()
     base_name, tags = create_name_and_tags_from_config(config)
-    run_name = f"{base_name}_{run_id}"
     if isinstance(config, TrainingConfig):
         tags = list(set(tags + ["training", f"lora_r{config.lora.r}"]))
-        # Ensure TRL's own wandb integration attaches to the same run.
+
+    if state.is_main_process:
+        run_id = wandb.util.generate_id()
+        run_name = f"{base_name}_{run_id}"
+    else:
+        run_id, run_name = "", ""
+
+    if state.num_processes > 1 and dist.is_available() and dist.is_initialized():
+        payload = [run_id, run_name]
+        dist.broadcast_object_list(payload, src=0)
+        run_id, run_name = payload[0], payload[1]
+
+    if isinstance(config, TrainingConfig):
+        # Ensure TRL's own wandb integration attaches to the same run on rank 0.
         os.environ["WANDB_RUN_ID"] = run_id
         os.environ["WANDB_PROJECT"] = config.wandb.project
         os.environ["WANDB_NAME"] = run_name
-    run = wandb.init(
-        project=config.wandb.project,
-        id=run_id,
-        name=run_name,
-        tags=tags,
-        config=config.model_dump(),
-        mode=wandb_mode,
-    )
-    logger.info(f"W&B run initialized with name: {run.name}, id: {run.id}")
-    logger.info(f"Run tags: {list(run.tags)}")
+
+    if state.is_main_process:
+        wandb_mode = config.wandb.mode
+        logger.info(f"Initializing W&B in {wandb_mode} mode")
+        run = wandb.init(
+            project=config.wandb.project,
+            id=run_id,
+            name=run_name,
+            tags=tags,
+            config=config.model_dump(),
+            mode=wandb_mode,
+        )
+        logger.info(f"W&B run initialized with name: {run.name}, id: {run.id}")
+        logger.info(f"Run tags: {list(run.tags)}")
+    else:
+        # Disable any wandb activity on non-main ranks (TRL's WandbCallback will
+        # otherwise call wandb.init on every rank).
+        os.environ["WANDB_MODE"] = "disabled"
+        run = wandb.init(
+            project=config.wandb.project,
+            id=run_id,
+            name=run_name,
+            mode="disabled",
+        )
     return run
 
 
