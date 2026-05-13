@@ -130,6 +130,23 @@ def main(cfg: DictConfig) -> None:
         target_modules=list(config.lora.target_modules),
     )
 
+    world_size = state.num_processes
+    effective_batch = (
+        config.training.per_device_train_batch_size
+        * config.training.gradient_accumulation_steps
+        * world_size
+    )
+    steps_per_epoch = max(1, len(train_ds) // effective_batch)
+    if config.training.max_steps > 0:
+        total_steps = config.training.max_steps
+    else:
+        total_steps = int(steps_per_epoch * config.training.num_train_epochs)
+
+    if config.training.warmup_ratio > 0:
+        warmup_steps = int(round(config.training.warmup_ratio * total_steps))
+    else:
+        warmup_steps = config.training.warmup_steps
+
     sft_config = SFTConfig(
         output_dir=str(output_dir),
         per_device_train_batch_size=config.training.per_device_train_batch_size,
@@ -137,7 +154,7 @@ def main(cfg: DictConfig) -> None:
         num_train_epochs=config.training.num_train_epochs,
         max_steps=config.training.max_steps,
         learning_rate=config.training.learning_rate,
-        warmup_steps=config.training.warmup_steps,
+        warmup_steps=warmup_steps,
         weight_decay=config.training.weight_decay,
         lr_scheduler_type=config.training.lr_scheduler_type,
         bf16=config.training.bf16,
@@ -167,6 +184,9 @@ def main(cfg: DictConfig) -> None:
         dataset_kwargs={"skip_prepare_dataset": True},
         use_liger_kernel=config.training.use_liger_kernel,
         optim=config.training.optim,
+        adam_beta1=config.training.adam_beta1,
+        adam_beta2=config.training.adam_beta2,
+        adam_epsilon=config.training.adam_epsilon,
     )
 
     trainer = SFTTrainer(
@@ -179,23 +199,30 @@ def main(cfg: DictConfig) -> None:
         processing_class=processor,
     )
 
-    world_size = state.num_processes
-    effective_batch = (
-        config.training.per_device_train_batch_size
-        * config.training.gradient_accumulation_steps
-        * world_size
-    )
-    steps_per_epoch = max(1, len(train_ds) // effective_batch)
-    if config.training.max_steps > 0:
-        total_steps = config.training.max_steps
-    else:
-        total_steps = int(steps_per_epoch * config.training.num_train_epochs)
     logger.info(
         f"Train samples={len(train_ds)} | effective_batch={effective_batch} "
         f"(per_device={config.training.per_device_train_batch_size} "
         f"x grad_accum={config.training.gradient_accumulation_steps} x world={world_size}) "
-        f"| steps/epoch={steps_per_epoch} | total_steps={total_steps}"
+        f"| steps/epoch={steps_per_epoch} | total_steps={total_steps} "
+        f"| warmup_steps={warmup_steps}"
     )
+
+    if state.is_main_process:
+        trainable_params = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in trainer.model.parameters())
+        run.summary.update(
+            {
+                "effective_batch_size": effective_batch,
+                "world_size": world_size,
+                "steps_per_epoch": steps_per_epoch,
+                "total_steps": total_steps,
+                "train_samples": len(train_ds),
+                "eval_samples": len(eval_ds) if eval_ds is not None else 0,
+                "trainable_params": trainable_params,
+                "total_params": total_params,
+                "trainable_params_pct": 100.0 * trainable_params / max(1, total_params),
+            }
+        )
 
     logger.info("Starting training")
     trainer.train()
@@ -206,6 +233,7 @@ def main(cfg: DictConfig) -> None:
     logger.info(
         "Run vLLM inference with this adapter via:\n"
         f"  python scripts/vllm_inference.py "
+        f"model.params={config.model.params} "
         f"lora.path={adapter_dir} lora.max_rank={config.lora.r}"
     )
     if state.is_main_process:
