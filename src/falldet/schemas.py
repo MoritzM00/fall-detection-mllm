@@ -313,6 +313,7 @@ class TrainingHyperparams(BaseConfig):
     max_steps: int = -1
     learning_rate: float = 2.0e-4
     warmup_steps: int = 0
+    warmup_ratio: float = 0.0
     weight_decay: float = 0.0
     lr_scheduler_type: str = "constant"
     bf16: bool = True
@@ -335,6 +336,9 @@ class TrainingHyperparams(BaseConfig):
     seed: int = 0
     use_liger_kernel: bool = False
     optim: str = "adamw_torch_fused"
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    adam_epsilon: float = 1e-8
 
 
 class InferenceConfig(BaseConfig):
