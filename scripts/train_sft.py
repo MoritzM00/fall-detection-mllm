@@ -39,6 +39,7 @@ from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset
+from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
 from falldet.utils.wandb import initialize_run_from_config
 
@@ -197,6 +198,8 @@ def main(cfg: DictConfig) -> None:
         eval_dataset=eval_ds,
         data_collator=collator,
         processing_class=processor,
+        compute_metrics=build_sft_compute_metrics(processor.tokenizer, omnifall_label2idx),
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 
     logger.info(
