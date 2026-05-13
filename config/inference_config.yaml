@@ -6,7 +6,7 @@ defaults:
   - prompt: default
   - lora: none
   - _self_
-  - experiment: debug
+  - experiment: zeroshot
 
 data:
   # Global data parameters

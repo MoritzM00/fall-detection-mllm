@@ -3,16 +3,20 @@
 # 2-3 epochs over the train split.
 
 attn_implementation: flash_attention_2
-per_device_train_batch_size: 8
-gradient_accumulation_steps: 2  # effective batch = 16 * num_gpus
+per_device_train_batch_size: 16
+gradient_accumulation_steps: 1
 
 num_train_epochs: 3
 max_steps: -1  # let epochs decide; set a positive int to cap
 
-learning_rate: 2.0e-4
-warmup_steps: 10  # ~3% of a few-thousand-step run; raise for longer runs
+learning_rate: 3.0e-4
+warmup_ratio: 0.05  # fraction of total steps used for LR warmup
 weight_decay: 1e-4
 lr_scheduler_type: cosine
+
+adam_beta1: 0.9
+adam_beta2: 0.95
+adam_epsilon: 1.0e-6
 
 bf16: true
 fp16: false
