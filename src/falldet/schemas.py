@@ -337,7 +337,7 @@ class TrainingHyperparams(BaseConfig):
     use_liger_kernel: bool = False
     optim: str = "adamw_torch_fused"
     adam_beta1: float = 0.9
-    adam_beta2: float = 0.999
+    adam_beta2: float = 0.99
     adam_epsilon: float = 1e-8
 
 
