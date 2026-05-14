@@ -18,8 +18,12 @@ from falldet.inference.prompts.parsers import KeywordOutputParser
 from falldet.metrics.base import compute_metrics
 
 
-def preprocess_logits_for_metrics(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+def preprocess_logits_for_metrics(
+    logits: torch.Tensor | tuple, labels: torch.Tensor
+) -> torch.Tensor:
     """Reduce (N, seq_len, vocab_size) logits to (N, seq_len) argmax IDs."""
+    if isinstance(logits, tuple):
+        logits = logits[0]
     return logits.argmax(-1)
 
 
