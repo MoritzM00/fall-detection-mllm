@@ -44,6 +44,10 @@ DATASET_GROUP: dict[str, str] = {
     "oops": "omnifall/video/oops",
     "staged-oops": "omnifall/video/staged-oops",
     "all": "omnifall/video/all",
+    # data-mix ablations (effective_batch=16, cs split for lab, rand for wanfall)
+    "staged": "omnifall/video/staged-cs",
+    "staged-oops-wanfall": "combined/video/wanfall-rand-staged-cs-oops",
+    "wanfall": "wanfall/video/rand",
 }
 
 
@@ -52,8 +56,10 @@ def build_command(
     rank: int,
     dataset: str,
     params: str,
+    model: str,
     num_processes: int,
     alpha_mode: str,
+    per_device_batch_size: int | None = None,
 ) -> list[str]:
     modules = PLACEMENT_MODULES[placement]
     ds_group = DATASET_GROUP[dataset]
@@ -61,13 +67,14 @@ def build_command(
     tags = [
         "ablation",
         "sft",
+        model,
         f"placement-{placement}",
         f"rank-{rank}",
         f"alpha-{alpha_mode}",
         f"data-{dataset}",
     ]
 
-    return [
+    cmd = [
         "accelerate",
         "launch",
         "--config_file",
@@ -76,6 +83,7 @@ def build_command(
         str(num_processes),
         "scripts/train_sft.py",
         "training=full",
+        f"model={model}",
         f"model.params={params}",
         f"dataset={ds_group}",
         f"dataset@dataset_val={ds_group}",
@@ -84,6 +92,9 @@ def build_command(
         f"lora.target_modules=[{','.join(modules)}]",
         f"wandb.tags=[{','.join(tags)}]",
     ]
+    if per_device_batch_size is not None:
+        cmd.append(f"training.per_device_train_batch_size={per_device_batch_size}")
+    return cmd
 
 
 def format_command(cmd: list[str]) -> str:
@@ -130,11 +141,27 @@ def main() -> None:
         default="2r",
         help="LoRA alpha convention: r (scale-invariant) or 2r (default).",
     )
+    parser.add_argument(
+        "--model",
+        default="qwenvl",
+        choices=["qwenvl", "internvl"],
+        help="Hydra model config group to use (default: qwenvl).",
+    )
     parser.add_argument("--params", default="8B", help="model.params override (default: 8B).")
     parser.add_argument(
         "--num-processes", type=int, default=2, help="accelerate --num_processes (default: 2)."
     )
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing.")
+    parser.add_argument(
+        "--per-device-batch-size",
+        type=int,
+        default=None,
+        help=(
+            "Override training.per_device_train_batch_size. "
+            "Effective batch = per_device * grad_accum * num_processes. "
+            "E.g. --per-device-batch-size 8 with --num-processes 2 gives effective batch 16."
+        ),
+    )
     parser.add_argument(
         "--start-from", type=int, default=0, help="Skip first N experiments (0-indexed)."
     )
@@ -157,7 +184,16 @@ def main() -> None:
     for i, (placement, rank, dataset) in enumerate(
         configs[args.start_from :], start=args.start_from
     ):
-        cmd = build_command(placement, rank, dataset, args.params, args.num_processes, args.alpha)
+        cmd = build_command(
+            placement,
+            rank,
+            dataset,
+            args.params,
+            args.model,
+            args.num_processes,
+            args.alpha,
+            args.per_device_batch_size,
+        )
         print(f"\n{'=' * 60}")
         print(
             f"Experiment {i + 1}/{len(configs)}: placement={placement} rank={rank} dataset={dataset}"

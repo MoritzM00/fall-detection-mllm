@@ -22,9 +22,15 @@ def _extract_videos(messages: list[dict]) -> list:
 
 
 class PromptMaskedSFTCollator:
-    def __init__(self, processor, max_length: int | None = None):
+    def __init__(
+        self,
+        processor,
+        max_length: int | None = None,
+        needs_video_metadata: bool = True,
+    ):
         self.processor = processor
         self.max_length = max_length
+        self.needs_video_metadata = needs_video_metadata
 
     def __call__(self, examples: list[dict]) -> dict:
         prompt_texts = [
@@ -37,17 +43,19 @@ class PromptMaskedSFTCollator:
             self.processor.apply_chat_template(e["completion"], tokenize=False) for e in examples
         ]
         videos = [_extract_videos(e["prompt"]) for e in examples]
-        video_metadata = [e["video_metadata"] for e in examples]
 
-        processed_prompts = self.processor(
+        prompt_processor_kwargs: dict = dict(
             text=prompt_texts,
             videos=videos,
-            video_metadata=video_metadata,
             do_sample_frames=False,
             do_resize=False,
             return_tensors="pt",
             padding=True,
         )
+        if self.needs_video_metadata:
+            prompt_processor_kwargs["video_metadata"] = [e["video_metadata"] for e in examples]
+
+        processed_prompts = self.processor(**prompt_processor_kwargs)
         processed_completions = self.processor(
             text=completion_texts,
             return_tensors="pt",

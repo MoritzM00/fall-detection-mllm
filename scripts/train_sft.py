@@ -70,10 +70,10 @@ def main(cfg: DictConfig) -> None:
 
     model_path = config.model.path
     logger.info(f"Loading processor: {model_path}")
-    processor = AutoProcessor.from_pretrained(model_path)
+    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
 
     logger.info("Loading model")
-    model_kwargs = {"dtype": torch.bfloat16}
+    model_kwargs: dict = {"dtype": torch.bfloat16, "trust_remote_code": True}
     if config.training.attn_implementation is not None:
         model_kwargs["attn_implementation"] = config.training.attn_implementation
     model = AutoModelForImageTextToText.from_pretrained(model_path, **model_kwargs)
@@ -101,7 +101,11 @@ def main(cfg: DictConfig) -> None:
         )
     logger.info(f"Base train dataset: {len(base)} samples")
     train_ds = SFTConversationDataset(base, conv_builder)
-    collator = PromptMaskedSFTCollator(processor, max_length=config.training.max_length)
+    collator = PromptMaskedSFTCollator(
+        processor,
+        max_length=config.training.max_length,
+        needs_video_metadata=config.model.needs_video_metadata,
+    )
 
     eval_ds = None
     if config.training.eval_strategy != "no":
@@ -228,7 +232,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     logger.info("Starting training")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
 
     logger.info(f"Saving adapter to {adapter_dir}")
     trainer.save_model(str(adapter_dir))
