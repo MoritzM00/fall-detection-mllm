@@ -33,3 +33,4 @@ max_length: null
 report_to: wandb
 seed: 0
 optim: adamw_torch_fused
+resume_from_checkpoint: null

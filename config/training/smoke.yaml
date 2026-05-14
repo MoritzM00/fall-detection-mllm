@@ -13,6 +13,7 @@ fp16: false
 logging_steps: 1
 save_strategy: "no"
 save_steps: 500
+save_total_limit: null
 eval_strategy: steps
 eval_steps: 3
 eval_on_start: true
@@ -24,3 +25,4 @@ report_to: wandb
 seed: 0
 use_liger_kernel: false
 optim: adamw_torch_fused
+resume_from_checkpoint: null

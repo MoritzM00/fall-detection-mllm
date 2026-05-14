@@ -36,3 +36,4 @@ report_to: wandb
 seed: 0
 use_liger_kernel: true
 optim: adamw_torch_fused
+resume_from_checkpoint: null
