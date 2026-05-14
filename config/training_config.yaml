@@ -34,6 +34,7 @@ wandb:
   project: falldet-mllm-finetune
   name:
   tags:
+  log_model: end  # "end" | "checkpoint" | "false"
 
 hydra:
   job:

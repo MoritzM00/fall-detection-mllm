@@ -22,6 +22,7 @@ Outputs land under ``${output_dir}/<run_name>/``; final adapter at
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import hydra
@@ -58,6 +59,8 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Distributed state: {state}")
     config: TrainingConfig = from_dictconfig_training(cfg)
     logger.info(config.model_dump_json(indent=2))
+
+    os.environ["WANDB_LOG_MODEL"] = config.wandb.log_model
 
     run = initialize_run_from_config(config)
     run_name = run.name
