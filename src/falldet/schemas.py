@@ -245,6 +245,7 @@ class WandbConfig(BaseConfig):
     project: str = "fall-detection-using-mllms"
     name: str | None = None
     tags: list[str] | None = None
+    log_model: Literal["end", "checkpoint", "false"] = "false"
 
 
 class VideoDatasetItemConfig(BaseConfig):

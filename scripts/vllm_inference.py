@@ -6,12 +6,12 @@ from typing import Any, cast
 
 import hydra
 import torch
+import wandb
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
 
-import wandb
 from falldet.config import resolve_model_path_from_config
 from falldet.data.video_dataset import label2idx
 from falldet.data.video_dataset_factory import get_video_datasets

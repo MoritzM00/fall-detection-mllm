@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 import numpy as np
-
 import wandb
+
 from falldet.data.dataset import GenericVideoDataset
 from falldet.metrics.subgroup import compute_subgroup_metrics, print_subgroup_summary
 
