@@ -159,6 +159,36 @@ def _download_predictions_file(
     raise FileNotFoundError(f"No prediction JSONL for run {run_id} found in W&B files")
 
 
+def log_adapter_artifact(
+    run: Any,
+    adapter_dir: Path,
+    run_name: str,
+    log_model: str,
+    best_metric: float | None = None,
+    metric_for_best_model: str | None = None,
+) -> None:
+    """Upload the LoRA adapter directory as a W&B artifact with controlled metadata.
+
+    Uses a fixed small metadata dict to stay under wandb's 100-key artifact limit,
+    which HF's WandbCallback violates when many per-dataset eval metrics accumulate.
+    """
+    metadata: dict[str, Any] = {"final_model": True}
+    if best_metric is not None:
+        metadata["best_metric"] = best_metric
+    if metric_for_best_model is not None:
+        metadata["metric_for_best_model"] = metric_for_best_model
+
+    artifact_name = f"model-{run_name}"
+    artifact = wandb.Artifact(name=artifact_name, type="model", metadata=metadata)
+    artifact.add_dir(str(adapter_dir))
+
+    aliases = ["final_model"]
+    if log_model == "checkpoint":
+        aliases.append("latest")
+    run.log_artifact(artifact, aliases=aliases)
+    logger.info(f"Logged adapter artifact '{artifact_name}' to W&B")
+
+
 def log_videos_with_predictions(
     dataset: GenericVideoDataset | torch.utils.data.Subset,
     predictions: list[str] | list[int] | np.ndarray,

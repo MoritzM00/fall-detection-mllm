@@ -42,7 +42,7 @@ from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset
 from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
-from falldet.utils.wandb import initialize_run_from_config
+from falldet.utils.wandb import initialize_run_from_config, log_adapter_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,10 @@ def main(cfg: DictConfig) -> None:
     config: TrainingConfig = from_dictconfig_training(cfg)
     logger.info(config.model_dump_json(indent=2))
 
-    os.environ["WANDB_LOG_MODEL"] = config.wandb.log_model
+    # Suppress HF's WandbCallback artifact upload: it dumps all numeric summary keys as
+    # artifact metadata, which exceeds wandb's 100-key limit when multiple eval datasets
+    # produce per-class metrics. We do controlled manual upload below instead.
+    os.environ["WANDB_LOG_MODEL"] = "false"
 
     run = initialize_run_from_config(config)
     run_name = run.name
@@ -110,25 +113,52 @@ def main(cfg: DictConfig) -> None:
         needs_video_metadata=config.model.needs_video_metadata,
     )
 
-    eval_ds = None
+    eval_ds: SFTConversationDataset | dict[str, SFTConversationDataset] | None = None
+    eval_total = 0
+    metric_for_best_model = config.training.metric_for_best_model
     if config.training.eval_strategy != "no":
         with state.main_process_first():
-            val_base = get_video_datasets(
+            val_result = get_video_datasets(
                 config=config,
                 mode="val",
                 run=run,
-                return_individual=False,
+                return_individual=True,
                 split=config.data.split,
                 size=config.data.size,
                 max_size=config.data.max_size,
                 seed=0,  # val is deterministic regardless of data.seed
             )
-        logger.info(f"Base val dataset: {len(val_base)} samples")
-        if config.training.max_eval_samples is not None:
-            n = min(config.training.max_eval_samples, len(val_base))
-            val_base = Subset(val_base, list(range(n)))
-            logger.info(f"Capped val dataset to {n} samples")
-        eval_ds = SFTConversationDataset(val_base, conv_builder)
+        individual = val_result["individual"]
+        total_val = sum(len(d) for d in individual.values())
+        logger.info(f"Base val dataset: {total_val} samples across {len(individual)} dataset(s)")
+        if len(individual) > 1:
+            # Multiple datasets: cap each proportionally so every dataset is represented,
+            # then return a dict so Trainer logs per-dataset metrics with name prefix.
+            eval_ds = {}
+            for name, ds in individual.items():
+                if config.training.max_eval_samples is not None:
+                    n = min(
+                        len(ds),
+                        max(1, round(config.training.max_eval_samples * len(ds) / total_val)),
+                    )
+                    ds = Subset(ds, list(range(n)))
+                eval_ds[name] = SFTConversationDataset(ds, conv_builder)
+                eval_total += len(ds)
+                logger.info(f"  Val '{name}': {len(ds)} samples")
+            # Trainer prefixes dict-eval metrics as eval_{key}_{metric}; update accordingly.
+            if config.training.metric_for_best_model is not None:
+                first_key = next(iter(eval_ds))
+                base = config.training.metric_for_best_model.removeprefix("eval_")
+                metric_for_best_model = f"eval_{first_key}_{base}"
+                logger.info(f"metric_for_best_model updated to '{metric_for_best_model}'")
+        else:
+            val_base = next(iter(individual.values()))
+            if config.training.max_eval_samples is not None:
+                n = min(config.training.max_eval_samples, len(val_base))
+                val_base = Subset(val_base, list(range(n)))
+                logger.info(f"Capped val dataset to {n} samples")
+            eval_ds = SFTConversationDataset(val_base, conv_builder)
+            eval_total = len(eval_ds)
 
     peft_lora = PeftLoraConfig(
         r=config.lora.r,
@@ -176,7 +206,7 @@ def main(cfg: DictConfig) -> None:
         eval_on_start=config.training.eval_on_start,
         per_device_eval_batch_size=config.training.per_device_eval_batch_size,
         load_best_model_at_end=config.training.load_best_model_at_end,
-        metric_for_best_model=config.training.metric_for_best_model,
+        metric_for_best_model=metric_for_best_model,
         greater_is_better=config.training.greater_is_better,
         gradient_checkpointing=config.training.gradient_checkpointing,
         max_length=config.training.max_length,
@@ -227,7 +257,7 @@ def main(cfg: DictConfig) -> None:
                 "steps_per_epoch": steps_per_epoch,
                 "total_steps": total_steps,
                 "train_samples": len(train_ds),
-                "eval_samples": len(eval_ds) if eval_ds is not None else 0,
+                "eval_samples": eval_total,
                 "trainable_params": trainable_params,
                 "total_params": total_params,
                 "trainable_params_pct": 100.0 * trainable_params / max(1, total_params),
@@ -239,6 +269,18 @@ def main(cfg: DictConfig) -> None:
 
     logger.info(f"Saving adapter to {adapter_dir}")
     trainer.save_model(str(adapter_dir))
+
+    if state.is_main_process and config.wandb.log_model != "false":
+        log_adapter_artifact(
+            run=run,
+            adapter_dir=adapter_dir,
+            run_name=run_name,
+            log_model=config.wandb.log_model,
+            best_metric=trainer.state.best_metric,
+            metric_for_best_model=metric_for_best_model
+            if config.training.metric_for_best_model
+            else None,
+        )
 
     logger.info(
         "Run vLLM inference with this adapter via:\n"
