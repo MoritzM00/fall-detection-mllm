@@ -9,7 +9,7 @@ product of:
     --dataset    {oops, staged-oops, all}
 
 Validation set is always forced to match the training set; the existing
-`training.max_eval_samples` downsampling in `config/training/full.yaml` is
+`training.max_eval_samples_per_ds` downsampling in `config/training/full.yaml` is
 inherited. Every other hyperparameter (LR, epochs, frames, ...) stays at
 the values configured by `training=full` + `lora/train.yaml`.
 
