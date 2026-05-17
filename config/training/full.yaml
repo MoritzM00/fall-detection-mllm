@@ -19,10 +19,12 @@ fp16: false
 
 logging_steps: 10
 
-save_strategy: epoch
+save_strategy: steps
+save_steps: 100
 save_total_limit: 5
 
-eval_strategy: epoch
+eval_strategy: steps
+eval_steps: 100
 eval_on_start: true
 per_device_eval_batch_size: 16
 max_eval_samples: 1000

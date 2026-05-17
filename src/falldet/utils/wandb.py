@@ -99,7 +99,7 @@ def create_name_and_tags_from_config(
         frame_count = config.num_frames
         model_fps = config.model_fps
 
-        dataset_info = f"F{frame_count}@{model_fps}"
+        dataset_info = f"F{frame_count}at{model_fps}"
         base_name = f"{model_info}-{dataset_info}"
 
     tags = list(config.wandb.tags) if config.wandb.tags else []
