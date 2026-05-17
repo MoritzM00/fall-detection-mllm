@@ -40,6 +40,7 @@ from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset
+from falldet.training.eval_sampling import stratified_sample_indices
 from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
 from falldet.utils.wandb import initialize_run_from_config, log_adapter_artifact
@@ -132,16 +133,13 @@ def main(cfg: DictConfig) -> None:
         total_val = sum(len(d) for d in individual.values())
         logger.info(f"Base val dataset: {total_val} samples across {len(individual)} dataset(s)")
         if len(individual) > 1:
-            # Multiple datasets: cap each proportionally so every dataset is represented,
-            # then return a dict so Trainer logs per-dataset metrics with name prefix.
+            # Multiple datasets: cap each independently and return a dict so Trainer
+            # logs per-dataset metrics with name prefix.
             eval_ds = {}
             for name, ds in individual.items():
-                if config.training.max_eval_samples is not None:
-                    n = min(
-                        len(ds),
-                        max(1, round(config.training.max_eval_samples * len(ds) / total_val)),
-                    )
-                    ds = Subset(ds, list(range(n)))
+                if config.training.max_eval_samples_per_ds is not None:
+                    n = min(config.training.max_eval_samples_per_ds, len(ds))
+                    ds = Subset(ds, stratified_sample_indices(ds, n, seed=0))
                 eval_ds[name] = SFTConversationDataset(ds, conv_builder)
                 eval_total += len(ds)
                 logger.info(f"  Val '{name}': {len(ds)} samples")
@@ -153,10 +151,10 @@ def main(cfg: DictConfig) -> None:
                 logger.info(f"metric_for_best_model updated to '{metric_for_best_model}'")
         else:
             val_base = next(iter(individual.values()))
-            if config.training.max_eval_samples is not None:
-                n = min(config.training.max_eval_samples, len(val_base))
-                val_base = Subset(val_base, list(range(n)))
-                logger.info(f"Capped val dataset to {n} samples")
+            if config.training.max_eval_samples_per_ds is not None:
+                n = min(config.training.max_eval_samples_per_ds, len(val_base))
+                val_base = Subset(val_base, stratified_sample_indices(val_base, n, seed=0))
+                logger.info(f"Capped val dataset to {n} samples (stratified by label)")
             eval_ds = SFTConversationDataset(val_base, conv_builder)
             eval_total = len(eval_ds)
 

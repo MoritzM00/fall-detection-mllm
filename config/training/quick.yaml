@@ -24,7 +24,7 @@ eval_strategy: steps
 eval_steps: 100
 eval_on_start: true
 per_device_eval_batch_size: 8
-max_eval_samples: 500
+max_eval_samples_per_ds: 300
 load_best_model_at_end: true
 metric_for_best_model: eval_loss
 greater_is_better: false

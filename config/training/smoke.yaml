@@ -18,7 +18,7 @@ eval_strategy: steps
 eval_steps: 3
 eval_on_start: true
 per_device_eval_batch_size: 1
-max_eval_samples: 8
+max_eval_samples_per_ds: 8
 gradient_checkpointing: false
 max_length: null
 report_to: wandb
