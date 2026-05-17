@@ -339,7 +339,7 @@ class TrainingHyperparams(BaseConfig):
     use_liger_kernel: bool = False
     optim: str = "adamw_torch_fused"
     adam_beta1: float = 0.9
-    adam_beta2: float = 0.99
+    adam_beta2: float = 0.999
     adam_epsilon: float = 1e-8
     resume_from_checkpoint: str | None = None
 
@@ -391,8 +391,8 @@ class TrainingConfig(BaseConfig):
 
     model_fps: float = 7.5
     num_frames: int = 16
-    num_workers: int = 4
-    prefetch_factor: int = 4
+    num_workers: int = 8
+    prefetch_factor: int = 2
     persistent_workers: bool = True
     pin_memory: bool = True
     output_dir: str = "outputs/training"
