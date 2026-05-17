@@ -11,7 +11,7 @@ max_steps: -1  # let epochs decide; set a positive int to cap
 
 learning_rate: 3.0e-4
 warmup_ratio: 0.05  # fraction of total steps used for LR warmup
-weight_decay: 1e-4
+weight_decay: 1e-3
 lr_scheduler_type: cosine
 
 bf16: true
