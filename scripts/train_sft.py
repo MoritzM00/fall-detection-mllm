@@ -15,6 +15,14 @@ Multi-GPU (single node) via accelerate or torchrun:
         --num_processes 4 scripts/train_sft.py training=quick
     torchrun --nproc_per_node=4 scripts/train_sft.py training=quick
 
+DeepSpeed ZeRO-2 (memory savings via optimizer/gradient sharding):
+
+    accelerate launch --config_file config/accelerate/deepspeed_zero2.yaml \\
+        --num_processes 4 scripts/train_sft.py training=full
+    # or pass the JSON directly without an accelerate config:
+    torchrun --nproc_per_node=4 scripts/train_sft.py training=full \\
+        training.deepspeed=config/deepspeed/zero2.json
+
 Outputs land under ``${output_dir}/<run_name>/``; final adapter at
 ``${output_dir}/<run_name>/adapter``.
 """
@@ -224,6 +232,7 @@ def main(cfg: DictConfig) -> None:
         adam_beta1=config.training.adam_beta1,
         adam_beta2=config.training.adam_beta2,
         adam_epsilon=config.training.adam_epsilon,
+        deepspeed=config.training.deepspeed,
     )
 
     trainer = SFTTrainer(

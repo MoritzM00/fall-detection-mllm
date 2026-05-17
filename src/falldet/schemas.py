@@ -342,6 +342,7 @@ class TrainingHyperparams(BaseConfig):
     adam_beta2: float = 0.999
     adam_epsilon: float = 1e-8
     resume_from_checkpoint: str | None = None
+    deepspeed: str | None = None
 
 
 class InferenceConfig(BaseConfig):
