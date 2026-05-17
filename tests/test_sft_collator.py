@@ -5,6 +5,7 @@ from falldet.training.collator import PromptMaskedSFTCollator
 
 class FakeTokenizer:
     pad_token_id = 0
+    eos_token = "<eos>"
 
 
 class FakeProcessor:
@@ -86,8 +87,9 @@ def test_collator_masks_prompt_and_pad_keeps_completion():
     assert "pixel_values_videos" in batch  # videos forwarded through processor
 
     # Each row's surviving (non -100) labels equal its completion length
+    # (raw answer text + eos, tokenized by whitespace split)
     for i, ex in enumerate(examples):
-        comp_text = processor.apply_chat_template(ex["completion"], tokenize=False)
+        comp_text = ex["completion"][0]["content"][0]["text"] + processor.tokenizer.eos_token
         comp_len = len(comp_text.split())
         assert int((batch["labels"][i] != -100).sum()) == comp_len
 
@@ -106,6 +108,30 @@ def test_collator_masks_prompt_and_pad_keeps_completion():
     # Pad positions (where attention_mask == 0) are -100
     pad_positions = batch["attention_mask"] == 0
     assert torch.all(batch["labels"][pad_positions] == -100)
+
+
+def test_completion_labels_have_no_assistant_header():
+    """Labels must not contain a second assistant-role wrapper.
+
+    Regression test: rendering the completion with apply_chat_template duplicated
+    the assistant header (the prompt already ends with one via add_generation_prompt),
+    causing the model to be trained to emit '<|im_start|>assistant\\n' itself.
+    """
+    processor = FakeProcessor()
+    collator = PromptMaskedSFTCollator(processor)
+
+    ex = _example("fall")
+    batch = collator([ex])
+
+    unmasked_ids = batch["input_ids"][0][batch["labels"][0] != -100].tolist()
+    id_to_tok = {v: k for k, v in processor.vocab.items()}
+    decoded = [id_to_tok[i] for i in unmasked_ids]
+
+    # No token in the unmasked region should carry the "assistant:" role prefix
+    assert not any(t.startswith("assistant:") for t in decoded), decoded
+    # The unmasked stream is exactly the raw answer + eos, whitespace-split
+    expected = (ex["completion"][0]["content"][0]["text"] + processor.tokenizer.eos_token).split()
+    assert decoded == expected
 
 
 def test_collator_truncates_to_max_length():

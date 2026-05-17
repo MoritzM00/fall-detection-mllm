@@ -39,9 +39,8 @@ class PromptMaskedSFTCollator:
             )
             for e in examples
         ]
-        completion_texts = [
-            self.processor.apply_chat_template(e["completion"], tokenize=False) for e in examples
-        ]
+        eos = self.processor.tokenizer.eos_token
+        completion_texts = [e["completion"][0]["content"][0]["text"] + eos for e in examples]
         videos = [_extract_videos(e["prompt"]) for e in examples]
 
         prompt_processor_kwargs: dict = dict(

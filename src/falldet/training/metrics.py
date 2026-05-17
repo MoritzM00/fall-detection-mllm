@@ -21,10 +21,17 @@ from falldet.metrics.base import compute_metrics
 def preprocess_logits_for_metrics(
     logits: torch.Tensor | tuple, labels: torch.Tensor
 ) -> torch.Tensor:
-    """Reduce (N, seq_len, vocab_size) logits to (N, seq_len) argmax IDs."""
+    """Reduce (N, seq_len, vocab_size) logits to (N, seq_len) argmax IDs.
+
+    Shifts predictions right by one so ``preds[i]`` aligns with ``labels[i]``
+    (since ``logits[i]`` predicts token ``i+1`` in a causal LM).
+    """
     if isinstance(logits, tuple):
         logits = logits[0]
-    return logits.argmax(-1)
+    preds = logits.argmax(-1)
+    shifted = torch.zeros_like(preds)
+    shifted[:, 1:] = preds[:, :-1]
+    return shifted
 
 
 def build_sft_compute_metrics(tokenizer, label2idx: dict[str, int]):

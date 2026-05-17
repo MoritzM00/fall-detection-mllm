@@ -62,14 +62,18 @@ class TestPreprocessLogits:
         out = preprocess_logits_for_metrics(logits, labels)
         assert out.shape == (N, seq_len)
 
-    def test_argmax_values(self):
+    def test_argmax_values_are_shifted(self):
+        """logits[i] predicts token i+1, so argmax should land at position i+1."""
         logits = torch.zeros(2, 5, 10)
-        logits[0, 2, 7] = 10.0  # sample 0, pos 2 → token 7
-        logits[1, 4, 3] = 10.0  # sample 1, pos 4 → token 3
+        logits[0, 2, 7] = 10.0  # prediction for position 3 should be token 7
+        logits[1, 3, 3] = 10.0  # prediction for position 4 should be token 3
         labels = torch.zeros(2, 5, dtype=torch.long)
         out = preprocess_logits_for_metrics(logits, labels)
-        assert out[0, 2].item() == 7
+        assert out[0, 3].item() == 7
         assert out[1, 4].item() == 3
+        # Position 0 is unobservable (no logits[-1]); should be filled, not leak preds
+        assert out[0, 0].item() == 0
+        assert out[1, 0].item() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +146,35 @@ class TestBuildSftComputeMetrics:
             pred_ids, label_ids = _make_batch([label], [label])
             metrics = self.compute((pred_ids, label_ids))
             assert metrics["accuracy"] == pytest.approx(1.0), f"failed for {label}"
+
+    def test_end_to_end_with_shifted_logits(self):
+        """Full pipeline: raw logits → preprocess_logits → compute_metrics.
+
+        Builds logits where logits[i] perfectly predicts label[i+1]
+        (the causal-LM convention). After preprocess_logits_for_metrics applies
+        its shift, predictions must align with labels and yield 100% accuracy.
+
+        Regression test for the off-by-one that produced fragments like 'stand'
+        instead of 'stand_up'.
+        """
+        true_labels = ["walk", "fall", "sit_down", "stand_up"]
+        _, label_ids = _make_batch(true_labels, true_labels)
+        label_ids_t = torch.tensor(label_ids)
+
+        N, seq_len = label_ids_t.shape
+        vocab = 100
+        logits = torch.full((N, seq_len, vocab), -1e4)
+        # logits[i] must argmax to label[i+1]
+        for n in range(N):
+            for i in range(seq_len - 1):
+                next_tok = int(label_ids_t[n, i + 1].item())
+                if next_tok == -100:
+                    continue
+                logits[n, i, next_tok] = 10.0
+
+        preds = preprocess_logits_for_metrics(logits, label_ids_t).numpy()
+        metrics = self.compute((preds, label_ids))
+        assert metrics["accuracy"] == pytest.approx(1.0)
 
     def test_returns_standard_keys(self):
         pred_ids, label_ids = _make_batch(["walk"], ["walk"])
