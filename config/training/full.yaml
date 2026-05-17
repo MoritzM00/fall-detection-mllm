@@ -9,9 +9,10 @@ gradient_accumulation_steps: 1
 num_train_epochs: 10
 max_steps: -1  # let epochs decide; set a positive int to cap
 
-learning_rate: 2e-5
-warmup_ratio: 0.03  # fraction of total steps used for LR warmup
-weight_decay: 1e-3
+learning_rate: 5e-5
+warmup_ratio: 0.05  # fraction of total steps used for LR warmup
+weight_decay: 1e-4
+max_grad_norm: 1.0
 lr_scheduler_type: cosine
 
 bf16: true
@@ -27,7 +28,7 @@ eval_strategy: steps
 eval_steps: 100
 eval_on_start: true
 per_device_eval_batch_size: 16
-max_eval_samples_per_ds: 300
+max_eval_samples_per_ds: 1000
 load_best_model_at_end: true
 metric_for_best_model: eval_loss
 greater_is_better: false

@@ -316,6 +316,7 @@ class TrainingHyperparams(BaseConfig):
     warmup_steps: int = 0
     warmup_ratio: float = 0.0
     weight_decay: float = 0.0
+    max_grad_norm: float = 1.0
     lr_scheduler_type: str = "constant"
     bf16: bool = True
     fp16: bool = False

@@ -192,6 +192,7 @@ def main(cfg: DictConfig) -> None:
         learning_rate=config.training.learning_rate,
         warmup_steps=warmup_steps,
         weight_decay=config.training.weight_decay,
+        max_grad_norm=config.training.max_grad_norm,
         lr_scheduler_type=config.training.lr_scheduler_type,
         bf16=config.training.bf16,
         fp16=config.training.fp16,
