@@ -1,0 +1,25 @@
+name: "wanfall-oops-cmdfall"
+video_datasets:
+  - name: "wanfall"
+    video_root: "${oc.env:WANFALL_ROOT}/video"
+    annotations_file: "hf://simplexsigil2/wanfall/labels/wanfall.csv"
+    dataset_fps: 16.0
+    split_root: "hf://simplexsigil2/wanfall/splits/random"
+
+  - name: "OOPS"
+    video_root: "${oc.env:OMNIFALL_ROOT}/OOPS/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/OOPS.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "cmdfall"
+    video_root: "${oc.env:OMNIFALL_ROOT}/cmdfall/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/cmdfall.csv"
+    dataset_fps: 20.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+# Common parameters
+target_fps: ${model_fps}
+vid_frame_count: ${model.num_frames}
+num_classes: 16
+path_format: "{video_root}/{video_path}{ext}"
