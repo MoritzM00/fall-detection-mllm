@@ -42,10 +42,17 @@ DATASET_GROUP: dict[str, str] = {
     "wanfall": "wanfall/video/rand",
 }
 
-# When staged data is in the training mix, evaluate on cmdfall as the
-# representative staged benchmark instead of the training split.
-STAGED_DATASETS = {"staged-oops", "staged", "staged-oops-wanfall", "all"}
-CMDFALL_GROUP = "omnifall/video/cmdfall"
+# Eval group for each training dataset: staged splits are replaced by cmdfall
+# as the representative staged benchmark. Mixed datasets mirror the training
+# composition but swap the staged component for cmdfall.
+DATASET_VAL_GROUP: dict[str, str] = {
+    "oops": "omnifall/video/oops",
+    "staged": "omnifall/video/cmdfall",
+    "staged-oops": "omnifall/video/oops-cmdfall",
+    "staged-oops-wanfall": "combined/video/wanfall-oops-cmdfall",
+    "wanfall": "wanfall/video/rand",
+    "all": "combined/video/wanfall-oops-cmdfall",
+}
 
 
 def build_command(
@@ -60,7 +67,7 @@ def build_command(
 ) -> list[str]:
     modules = PLACEMENT_MODULES[placement]
     ds_group = DATASET_GROUP[dataset]
-    val_group = CMDFALL_GROUP if dataset in STAGED_DATASETS else ds_group
+    val_group = DATASET_VAL_GROUP.get(dataset, ds_group)
     alpha = rank if alpha_mode == "r" else 2 * rank
     tags = [
         "ablation",
