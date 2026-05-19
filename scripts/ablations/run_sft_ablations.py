@@ -42,6 +42,11 @@ DATASET_GROUP: dict[str, str] = {
     "wanfall": "wanfall/video/rand",
 }
 
+# When staged data is in the training mix, evaluate on cmdfall as the
+# representative staged benchmark instead of the training split.
+STAGED_DATASETS = {"staged-oops", "staged", "staged-oops-wanfall", "all"}
+CMDFALL_GROUP = "omnifall/video/cmdfall"
+
 
 def build_command(
     placement: str,
@@ -55,6 +60,7 @@ def build_command(
 ) -> list[str]:
     modules = PLACEMENT_MODULES[placement]
     ds_group = DATASET_GROUP[dataset]
+    val_group = CMDFALL_GROUP if dataset in STAGED_DATASETS else ds_group
     alpha = rank if alpha_mode == "r" else 2 * rank
     tags = [
         "ablation",
@@ -78,7 +84,7 @@ def build_command(
         f"model={model}",
         f"model.params={params}",
         f"dataset={ds_group}",
-        f"dataset@dataset_val={ds_group}",
+        f"dataset@dataset_val={val_group}",
         f"lora.r={rank}",
         f"lora.lora_alpha={alpha}",
         f"lora.target_modules=[{','.join(modules)}]",
