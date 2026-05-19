@@ -20,7 +20,6 @@ help:
 	@echo "  make clean     - Remove build artifacts and caches"
 	@echo ""
 	@echo "Environment: $(ENV_NAME)"
-	@echo "Flash-attn max jobs: $(MAX_JOBS)"
 
 # Create conda environment
 env:
