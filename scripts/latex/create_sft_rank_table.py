@@ -25,8 +25,14 @@ TRAIN_PROJECT = "falldet-mllm-finetune"
 DATASET = "OOPS"
 SPLIT = "cs"
 
-# Run IDs for the rank sweep (r=4 / r=8 / r=16 / r=32)
-RUN_IDS = ["ke61urej", "1hi0by2a", "mdfkl0jd", "wo7nud57"]
+# Explicit mapping: run_id -> LoRA rank r (inference run tags are unreliable)
+RUN_RANKS: dict[str, int] = {
+    "1hi0by2a": 4,
+    "mdfkl0jd": 8,
+    "a5nz8f5v": 16,
+    "wo7nud57": 32,
+}
+
 
 METRICS: list[tuple[str, str]] = [
     ("bacc", f"{DATASET}_{SPLIT}_balanced_accuracy"),
@@ -45,38 +51,23 @@ DEFAULT_OUTPUT = Path("~/thesis-overleaf/tables/sft_lora_rank.tex").expanduser()
 METRIC_KEYS = [name for name, _ in METRICS]
 
 
-def _rank_from_tags(tags: list[str]) -> int:
-    for tag in tags:
-        if tag.startswith("rank-"):
-            return int(tag.split("-", 1)[1])
-    raise ValueError(f"No rank tag found in {tags}")
-
-
-def _train_run_id_from_lora_path(lora_path: str) -> str | None:
-    import re
-
-    m = re.search(r"F16at7\.5_([a-z0-9]+)/", lora_path)
-    return m.group(1) if m else None
-
-
 def fetch_data(api: wandb.Api) -> list[dict]:
     records: list[dict] = []
-    for rid in RUN_IDS:
-        logger.info(f"Fetching inference run {rid}")
+    for rid, rank in RUN_RANKS.items():
+        logger.info(f"Fetching inference run {rid} (rank {rank})")
         run = api.run(f"{ENTITY}/{PROJECT}/{rid}")
-        rank = _rank_from_tags(list(run.tags))
         record: dict = {"rank": rank}
         for name, key in METRICS:
             val = run.summary.get(key)
             record[name] = float(val) * 100.0 if val is not None else None
 
-        # Fetch trainable_params_pct from the originating training run
         lora_path = (run.config.get("lora") or {}).get("path", "")
-        train_id = _train_run_id_from_lora_path(lora_path)
+        train_run_name = Path(lora_path).parent.name  # e.g. Qwen3-VL-8B-Instruct-F16at7.5_pjmzzx8i
+        train_run_id = train_run_name.rsplit("_", 1)[-1] if train_run_name else None
         record["trainable_M"] = None
-        if train_id:
-            logger.info(f"  Fetching training run {train_id}")
-            train_run = api.run(f"{ENTITY}/{TRAIN_PROJECT}/{train_id}")
+        if train_run_id:
+            logger.info(f"  Fetching training run {train_run_id} from lora path")
+            train_run = api.run(f"{ENTITY}/{TRAIN_PROJECT}/{train_run_id}")
             params = train_run.summary.get("trainable_params")
             record["trainable_M"] = float(params) / 1e6 if params is not None else None
 

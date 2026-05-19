@@ -28,8 +28,13 @@ logger = logging.getLogger(__name__)
 WANDB_ENTITY = "moritzm00"
 WANDB_PROJECT = "fall-detection-zeroshot-v4"
 
-# Run IDs for the rank sweep (rank-4 / rank-8 / rank-16 / rank-32)
-RUN_IDS = ["ke61urej", "1hi0by2a", "mdfkl0jd", "wo7nud57"]
+# Explicit mapping: run_id -> LoRA rank r (inference run tags are unreliable)
+RUN_RANKS: dict[str, int] = {
+    "1hi0by2a": 4,
+    "mdfkl0jd": 8,
+    "a5nz8f5v": 16,
+    "wo7nud57": 32,
+}
 
 METRIC_KEYS = {
     "Balanced Acc.": "OOPS_cs_balanced_accuracy",
@@ -48,25 +53,12 @@ _METRIC_STYLES: list[dict] = [
 DEFAULT_OUTPUT = Path("outputs/plots/sft_rank_ablation.pdf")
 
 
-def _rank_from_tags(tags: list[str]) -> int | None:
-    for tag in tags:
-        if tag.startswith("rank-"):
-            try:
-                return int(tag.split("-", 1)[1])
-            except ValueError:
-                pass
-    return None
-
-
-def fetch_runs(run_ids: list[str]) -> list[dict]:
+def fetch_runs() -> list[dict]:
     api = wandb.Api()
     records: list[dict] = []
-    for rid in run_ids:
-        logger.info(f"Fetching run {rid}")
+    for rid, rank in RUN_RANKS.items():
+        logger.info(f"Fetching run {rid} (rank {rank})")
         run = api.run(f"{WANDB_ENTITY}/{WANDB_PROJECT}/{rid}")
-        rank = _rank_from_tags(list(run.tags))
-        if rank is None:
-            raise ValueError(f"Could not determine rank from tags {run.tags} for run {rid}")
         record: dict = {"run_id": rid, "rank": rank}
         for label, key in METRIC_KEYS.items():
             value = run.summary.get(key)
@@ -123,7 +115,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_args()
-    records = fetch_runs(RUN_IDS)
+    records = fetch_runs()
     for rec in records:
         logger.info(
             f"rank={rec['rank']:2d}  "
