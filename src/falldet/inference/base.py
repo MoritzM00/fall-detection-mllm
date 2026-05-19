@@ -64,7 +64,7 @@ def load_video_clip(
         ``clip_end_sec``, ``shift_sec``, and ``actual_frames``.
     """
     try:
-        from video_reader import PyVideoReader
+        from video_reader import PyVideoReader  # type: ignore[import]
     except ImportError as e:
         raise ImportError(
             "PyVideoReader is required for load_video_clip. Please install it via "

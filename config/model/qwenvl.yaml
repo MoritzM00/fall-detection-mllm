@@ -2,7 +2,7 @@
 # Override via CLI: model.variant=Thinking, model.params=8B, etc.
 org: Qwen
 family: Qwen
-version: 3
+version: 3.5
 variant: Instruct  # Options: "Instruct", "Thinking"
 params: 4B  # Total parameters (e.g., "4B", "8B", "30B")
 
