@@ -29,7 +29,7 @@ WANDB_ENTITY = "moritzm00"
 WANDB_PROJECT = "fall-detection-zeroshot-v4"
 
 # Run IDs for the rank sweep (rank-4 / rank-8 / rank-16 / rank-32)
-RUN_IDS = ["ke61urej", "a5nz8f5v", "mdfkl0jd", "wo7nud57"]
+RUN_IDS = ["ke61urej", "1hi0by2a", "mdfkl0jd", "wo7nud57"]
 
 METRIC_KEYS = {
     "Balanced Acc.": "OOPS_cs_balanced_accuracy",

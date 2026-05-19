@@ -26,7 +26,7 @@ DATASET = "OOPS"
 SPLIT = "cs"
 
 # Run IDs for the rank sweep (r=4 / r=8 / r=16 / r=32)
-RUN_IDS = ["ke61urej", "a5nz8f5v", "mdfkl0jd", "wo7nud57"]
+RUN_IDS = ["ke61urej", "1hi0by2a", "mdfkl0jd", "wo7nud57"]
 
 METRICS: list[tuple[str, str]] = [
     ("bacc", f"{DATASET}_{SPLIT}_balanced_accuracy"),
