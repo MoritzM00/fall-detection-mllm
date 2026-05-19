@@ -25,8 +25,8 @@ eval_steps: 100
 eval_on_start: true
 per_device_eval_batch_size: 8
 max_eval_samples_per_ds: 300
-load_best_model_at_end: true
-metric_for_best_model: eval_macro_f1
+load_best_model_at_end: false
+metric_for_best_model: null
 greater_is_better: true
 gradient_checkpointing: true
 max_length: null

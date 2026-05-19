@@ -1,4 +1,4 @@
 # Default: no LoRA adapter. vLLM is started without `enable_lora`.
 path: null
 name: adapter
-max_rank: 16
+max_rank: 32
