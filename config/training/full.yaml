@@ -11,7 +11,7 @@ max_steps: 500 # -1 for no max steps, otherwise it overrides num_train_epochs
 
 learning_rate: 1e-4
 warmup_ratio: 0.1  # fraction of total steps used for LR warmup
-weight_decay: 3e-4
+weight_decay: 1e-3
 max_grad_norm: 1.0
 lr_scheduler_type: cosine
 
