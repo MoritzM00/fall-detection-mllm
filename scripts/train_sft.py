@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
+import sys
 from pathlib import Path
 
 import hydra
@@ -272,32 +274,70 @@ def main(cfg: DictConfig) -> None:
             }
         )
 
-    logger.info("Starting training")
-    trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
+    # Stop cleanly on Ctrl-C or SIGTERM: finish the current step, then fall
+    # through to the finally block which saves the adapter and closes W&B.
+    _second_signal = False
 
-    logger.info(f"Saving adapter to {adapter_dir}")
-    trainer.save_model(str(adapter_dir))
-
-    if state.is_main_process and config.wandb.log_model != "false":
-        log_adapter_artifact(
-            run=run,
-            adapter_dir=adapter_dir,
-            run_name=run_name,
-            log_model=config.wandb.log_model,
-            best_metric=trainer.state.best_metric,
-            metric_for_best_model=metric_for_best_model
-            if config.training.metric_for_best_model
-            else None,
+    def _signal_handler(signum: int, _frame: object) -> None:
+        nonlocal _second_signal
+        sig_name = signal.Signals(signum).name
+        if _second_signal:
+            logger.warning(f"Second {sig_name} received — forcing exit.")
+            sys.exit(1)
+        _second_signal = True
+        logger.warning(
+            f"Received {sig_name}. Stopping after current step "
+            "(send signal again to force-quit without saving)."
         )
+        raise KeyboardInterrupt
 
-    logger.info(
-        "Run vLLM inference with this adapter via:\n"
-        f"  python scripts/vllm_inference.py "
-        f"model.params={config.model.params} "
-        f"lora.path={adapter_dir} lora.max_rank={config.lora.r}"
-    )
-    if state.is_main_process:
-        run.finish()
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    training_completed = False
+    try:
+        logger.info("Starting training")
+        trainer.train(resume_from_checkpoint=config.training.resume_from_checkpoint)
+        training_completed = True
+    except KeyboardInterrupt:
+        logger.warning(f"Training stopped at step {trainer.state.global_step} / {total_steps}.")
+    finally:
+        # Restore default handlers so post-training I/O isn't affected.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+        if trainer.state.global_step > 0:
+            logger.info(f"Saving adapter (step {trainer.state.global_step}) → {adapter_dir}")
+            trainer.save_model(str(adapter_dir))
+        else:
+            logger.warning("No training steps completed — adapter not saved.")
+
+        if state.is_main_process:
+            if (
+                training_completed
+                and trainer.state.global_step > 0
+                and config.wandb.log_model != "false"
+            ):
+                log_adapter_artifact(
+                    run=run,
+                    adapter_dir=adapter_dir,
+                    run_name=run_name,
+                    log_model=config.wandb.log_model,
+                    best_metric=trainer.state.best_metric,
+                    metric_for_best_model=metric_for_best_model
+                    if config.training.metric_for_best_model
+                    else None,
+                )
+            exit_code = 0 if training_completed else 130
+            run.finish(exit_code=exit_code)
+
+    if training_completed and trainer.state.global_step > 0:
+        logger.info(
+            "Run vLLM inference with this adapter via:\n"
+            f"  python scripts/vllm_inference.py "
+            f"model.params={config.model.params} "
+            f"lora.path={adapter_dir} lora.max_rank={config.lora.r}"
+        )
 
 
 if __name__ == "__main__":
