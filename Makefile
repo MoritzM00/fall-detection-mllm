@@ -30,7 +30,9 @@ env:
 # Install all pip dependencies (must be run in active conda env)
 install:
 	@echo "Installing vLLM..."
-	uv pip install vllm==0.20.0 --torch-backend=cu130
+	uv pip install vllm==0.20.1 --torch-backend=cu130
+	@echo "Installing flash-attn (this may take a while)..."
+	MAX_JOBS=$(MAX_JOBS) uv pip install flash-attn==2.8.3 --no-build-isolation
 	@echo "Installing requirements..."
 	uv pip install -r requirements.txt
 	@echo "Installing dev requirements..."
@@ -38,12 +40,6 @@ install:
 	@echo "Installing package in editable mode..."
 	uv pip install -e .
 	@echo "Installation complete!"
-
-install_new:
-	uv pip install vllm --torch-backend=cu130
-	uv pip install accelerate json-repair jupyter matplotlib seaborn pandas scikit-learn rich plotext hydra-core "wandb[media]" pydantic numpy
-	uv pip install -r requirements-dev.txt
-	uv pip install -e .
 
 # Run tests
 test:

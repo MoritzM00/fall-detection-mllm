@@ -82,6 +82,110 @@ python scripts/vllm_inference.py experiment=embed
 This uses the Qwen3-VL-Embedding model and saves embeddings to `outputs/embeddings/`.
 
 
+### Fine-tuning
+
+Supervised fine-tuning of Qwen3-VL with LoRA via TRL `SFTTrainer`, driven by Hydra.
+
+```shell
+python scripts/train_sft.py                     # default: training=quick
+python scripts/train_sft.py training=full       # full run preset
+python scripts/train_sft.py training=smoke      # short wiring check
+```
+
+Common overrides:
+
+```shell
+python scripts/train_sft.py model.params=4B     # different model
+python scripts/train_sft.py wandb.mode=offline  # disable W&B sync
+python scripts/train_sft.py training.max_steps=20
+python scripts/train_sft.py training.attn_implementation=null  # disable flash attention 2
+```
+
+Pair `training=full` with the dataset group you want. Single-source splits live
+in `config/dataset/omnifall/video/`; multi-source mixes live in
+`config/dataset/combined/video/`:
+
+```shell
+python scripts/train_sft.py training=full dataset=omnifall/video/oops
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-cs
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-cv
+python scripts/train_sft.py training=full dataset=omnifall/video/staged-oops
+python scripts/train_sft.py training=full dataset=omnifall/video/all
+python scripts/train_sft.py training=full dataset=combined/video/wanfall-rand-staged-cs-oops
+```
+
+By default `dataset_val` mirrors `dataset` (see `config/training_config.yaml`).
+To override the val set independently:
+
+```shell
+python scripts/train_sft.py training=full \
+    dataset=omnifall/video/staged-cs \
+    dataset@dataset_val=omnifall/video/cmdfall
+```
+
+For staged-only training, eval on `cmdfall` (the representative staged
+benchmark) avoids leakage; mixed-training runs use the matching
+`*-cmdfall` eval groups (`omnifall/video/oops-cmdfall`,
+`combined/video/wanfall-oops-cmdfall`).
+
+Outputs land under `outputs/training/<run_name>/`, with the final adapter at `outputs/training/<run_name>/adapter`. Load it at inference time via the `lora` config group in `inference_config.yaml`:
+
+```shell
+python scripts/vllm_inference.py \
+    model.params=8B \
+    lora.path=outputs/training/<run_name>/adapter \
+    lora.max_rank=8
+```
+
+#### LoRA-rank ablation runner
+
+`scripts/ablations/run_sft_ablations.py` sweeps LoRA `r` (alpha = 2·r) across
+placements (`attn`, `mlp`, `both`) and dataset groups:
+
+```shell
+# dry run: print every accelerate launch command
+python scripts/ablations/run_sft_ablations.py --dry-run
+
+# default sweep (r in {4,8,16,32}, placement=both, dataset=oops)
+python scripts/ablations/run_sft_ablations.py
+
+# data-mix ablation
+python scripts/ablations/run_sft_ablations.py \
+    --rank 16 --dataset staged staged-oops staged-oops-wanfall
+```
+
+#### Multi-GPU training
+
+```shell
+accelerate launch --config_file config/accelerate/ddp_bf16.yaml \
+    --num_processes 4 scripts/train_sft.py training=quick
+
+# or:
+torchrun --nproc_per_node=4 scripts/train_sft.py training=quick
+```
+
+`config/accelerate/ddp_bf16.yaml` is a single-node DDP + bf16 setup;
+`--num_processes` overrides the value in the file.
+
+For larger models or longer sequences, run with DeepSpeed ZeRO-2 (optimizer +
+gradient sharding):
+
+```shell
+accelerate launch --config_file config/accelerate/deepspeed_zero2.yaml \
+    --num_processes 4 scripts/train_sft.py training=full
+
+# or pass the JSON directly without an accelerate config:
+torchrun --nproc_per_node=4 scripts/train_sft.py training=full \
+    training.deepspeed=config/deepspeed/zero2.json
+```
+
+Relevant configs:
+- `config/training_config.yaml` — root config; composes `model`, `prompt`, `dataset`, `lora`, `training`.
+- `config/training/` — `smoke.yaml`, `quick.yaml`, `full.yaml`.
+- `config/lora/train.yaml` — PEFT LoRA hyperparameters.
+- `config/accelerate/` — `ddp_bf16.yaml`, `deepspeed_zero2.yaml`.
+- `config/deepspeed/zero2.json` — DeepSpeed ZeRO-2 config consumed by the above.
+
 ### Configuration options
 
 Besides settings experiments, the main configuration options are
@@ -117,14 +221,18 @@ We use the [vLLM](https://docs.vllm.ai/en/latest/) inference engine, optimized f
 2. Run
 ```shell
 make env
-conda activate cu129_vllm15
+conda activate cu130_vllm20_py312
 ```
 3. Install additional dependencies using uv (installed inside conda environment)
 ```shell
 make install
 ```
 
-At the time of writing, vLLM is compiled for cu129 by default. If you need a different version of
+This installs vLLM + flash-attn, the inference and fine-tuning Python deps
+(`transformers`, `peft`, `trl`, `accelerate`, `datasets`, ...), dev tools, and
+the package itself in editable mode.
+
+At the time of writing, vLLM is compiled for cu130 by default. If you need a different version of
 CUDA, you have to install vLLM from source.
 
 ## Environment variables

@@ -115,6 +115,12 @@ def main(cfg: DictConfig):
     llm = create_llm_engine(config)
     sampling_params = create_sampling_params(config)
 
+    lora_request = None
+    if config.lora.path is not None and not config.vllm.use_mock:
+        from vllm.lora.request import LoRARequest
+
+        lora_request = LoRARequest(config.lora.name, 1, config.lora.path)
+
     is_embed = config.task == "embed"
 
     if is_embed:
@@ -154,10 +160,15 @@ def main(cfg: DictConfig):
             batch_inputs.append(inputs)
             global_sample_idx += 1
 
+        gen_kwargs: dict[str, Any] = {}
+        if lora_request is not None:
+            gen_kwargs["lora_request"] = lora_request
         if is_embed:
-            batch_outputs = llm.embed(batch_inputs)
+            batch_outputs = llm.embed(batch_inputs, **gen_kwargs)
         else:
-            batch_outputs = llm.generate(batch_inputs, sampling_params=sampling_params)
+            batch_outputs = llm.generate(
+                batch_inputs, sampling_params=sampling_params, **gen_kwargs
+            )
         all_outputs.extend(batch_outputs)
         all_samples.extend(batch_samples)
 

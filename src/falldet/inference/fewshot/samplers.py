@@ -52,7 +52,7 @@ class ExemplarSampler(ABC):
     def log_cache_stats(self) -> None:
         """Log cache stats from the exemplar corpus, if available."""
         if hasattr(self.corpus, "log_cache_stats"):
-            self.corpus.log_cache_stats()  # type: ignore[union-attr]
+            self.corpus.log_cache_stats()  # ty: ignore[call-non-callable]
 
     def get_batch_exemplars(self, query_indices: list[int]) -> list[list[dict]]:
         """Load exemplars for multiple queries in a single thread pool.
@@ -87,8 +87,8 @@ class ExemplarSampler(ABC):
 def _build_class_to_indices(corpus: Dataset) -> dict[str, list[int]]:
     """Build a mapping from class label strings to corpus indices."""
     class_to_indices: dict[str, list[int]] = {}
-    for idx in range(len(corpus)):  # type: ignore[arg-type]
-        label: str = corpus.video_segments[idx]["label_str"]  # type: ignore[union-attr]
+    for idx in range(len(corpus)):  # ty: ignore[invalid-argument-type]
+        label: str = corpus.video_segments[idx]["label_str"]  # ty: ignore[unresolved-attribute]
         class_to_indices.setdefault(label, []).append(idx)
     return class_to_indices
 
@@ -144,7 +144,7 @@ class RandomSampler(ExemplarSampler):
 
     def sample(self, query_index: int) -> list[int]:
         """Return freshly sampled random indices (``query_index`` ignored)."""
-        n = len(self.corpus)  # type: ignore[arg-type]
+        n = len(self.corpus)  # ty: ignore[invalid-argument-type]
         k = min(self.num_shots, n)
         return self.rng.choice(n, size=k, replace=False).tolist()
 
@@ -214,7 +214,7 @@ class BalancedRandomSampler(ExemplarSampler):
         elif self.exemplar_ordering in (ExemplarOrdering.ASCENDING, ExemplarOrdering.DESCENDING):
             freq = {cls: len(idxs) for cls, idxs in class_to_indices.items()}
             label_of = {
-                idx: self.corpus.video_segments[idx]["label_str"]  # type: ignore[union-attr]
+                idx: self.corpus.video_segments[idx]["label_str"]  # ty: ignore[unresolved-attribute]
                 for idx in indices
             }
             indices.sort(
@@ -248,7 +248,7 @@ class SimilaritySampler(_PrecomputedSampler):
             raise ValueError(
                 "SimilaritySampler requires both query_embeddings and corpus_embeddings."
             )
-        assert len(corpus) == corpus_embeddings.shape[0], (  # type: ignore[arg-type]
+        assert len(corpus) == corpus_embeddings.shape[0], (  # ty: ignore[invalid-argument-type]
             "Corpus embeddings must match corpus size."
         )
         assert query_embeddings.shape[1] == corpus_embeddings.shape[1], (
@@ -299,7 +299,7 @@ class PerClassSimilaritySampler(_PrecomputedSampler):
             raise ValueError(
                 "PerClassSimilaritySampler requires both query_embeddings and corpus_embeddings."
             )
-        assert len(corpus) == corpus_embeddings.shape[0], (  # type: ignore[arg-type]
+        assert len(corpus) == corpus_embeddings.shape[0], (  # ty: ignore[invalid-argument-type]
             "Corpus embeddings must match corpus size."
         )
         assert query_embeddings.shape[1] == corpus_embeddings.shape[1], (
@@ -448,7 +448,7 @@ def setup_fewshot_sampler(
         return_individual=True,
     )
     train_datasets = cast(dict[str, object], train_datasets)
-    train_dataset = list(train_datasets["individual"].values())[0]  # type: ignore[union-attr]
+    train_dataset = list(train_datasets["individual"].values())[0]  # ty: ignore[unresolved-attribute]
     logger.info(f"Train dataset loaded: {len(train_dataset)} samples for exemplar access")
 
     # Enable in-memory caching for the exemplar corpus only (not the test dataset).

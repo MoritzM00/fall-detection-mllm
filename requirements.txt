@@ -1,16 +1,34 @@
-accelerate
-json-repair
-jupyter
-matplotlib
-pandas==3.0.0
-scikit-learn==1.8.0
-torch-c-dlpack-ext==0.1.5
-rich
-plotext
+# Inference + fine-tuning runtime deps.
+# vLLM, flash-attn and torch are installed separately by `make install`.
+# Versions pinned from a known-good cu130_vllm20_py312 environment.
+
+# Core ML + config
+accelerate==1.13.0
+huggingface-hub==1.14.0
 hydra-core==1.3.2
-wandb[media]==0.25.0
-seaborn
-pydantic==2.12.5
-video-reader-rs-next
-hnne==2.0.1
-umap-learn==0.5.11
+pydantic==2.13.4
+transformers==5.8.0
+
+# Fine-tuning (TRL SFTTrainer + LoRA)
+datasets==4.8.5
+liger-kernel==0.8.0
+peft==0.19.1
+trl==1.3.0
+
+# Data / metrics
+json-repair==0.59.5
+pandas==3.0.2
+scikit-learn==1.8.0
+
+# Logging / W&B
+plotext==5.3.2
+rich==15.0.0
+wandb==0.26.1
+
+# Plotting
+matplotlib==3.10.9
+plotly==6.7.0
+seaborn==0.13.2
+
+# Notebooks
+jupyter==1.1.1

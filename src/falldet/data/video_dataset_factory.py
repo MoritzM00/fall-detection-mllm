@@ -7,7 +7,7 @@ configurations, handling multiple dataset types, splits, and evaluation groups.
 import logging
 from typing import Any
 
-from falldet.schemas import DatasetConfig, InferenceConfig
+from falldet.schemas import DatasetConfig, InferenceConfig, TrainingConfig
 
 from .multi_video_dataset import MultiVideoDataset
 from .video_dataset import OmnifallVideoDataset
@@ -16,7 +16,7 @@ from .wanfall_video_dataset import WanfallVideoDataset
 logger = logging.getLogger(__name__)
 
 
-def _select_dataset_config(config: InferenceConfig, mode: str) -> DatasetConfig:
+def _select_dataset_config(config: InferenceConfig | TrainingConfig, mode: str) -> DatasetConfig:
     """Return the appropriate DatasetConfig for the given mode, falling back to default."""
     if mode == "train" and config.dataset_train is not None:
         return config.dataset_train
@@ -28,7 +28,7 @@ def _select_dataset_config(config: InferenceConfig, mode: str) -> DatasetConfig:
 
 
 def get_video_datasets(
-    config: InferenceConfig,
+    config: InferenceConfig | TrainingConfig,
     mode: str,
     run: Any | None = None,
     return_individual: bool = False,
