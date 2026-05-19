@@ -1,32 +1,24 @@
 #!/usr/bin/env python
-"""Run SFT fine-tuning ablations over LoRA placement, LoRA rank, and dataset.
+"""Run SFT fine-tuning LoRA rank ablations on OOPS.
 
-Wraps `scripts/train_sft.py` with Hydra overrides. Sweeps the cartesian
-product of:
+Wraps `scripts/train_sft.py` with Hydra overrides. Default sweep:
 
-    --placement  {attn, mlp, both}     # which linear modules LoRA touches
-    --rank       {4, 8, 16, 32, 64}    # LoRA rank r (alpha = 2r)
-    --dataset    {oops, staged-oops, all}
+    --placement  both                  # all attention + MLP modules
+    --rank       {4, 8, 16, 32}        # LoRA rank r (alpha = 2r)
+    --dataset    oops                  # OOPS training split
 
 Validation set is always forced to match the training set; the existing
 `training.max_eval_samples_per_ds` downsampling in `config/training/full.yaml` is
-inherited. Every other hyperparameter (LR, epochs, frames, ...) stays at
+inherited. Every other hyperparameter (LR, steps, frames, ...) stays at
 the values configured by `training=full` + `lora/train.yaml`.
 
 Examples:
 
-    # Default: placement=both, r=8, dataset=oops (single run)
+    # Default rank sweep: placement=both, r in {4,8,16,32}, dataset=oops
     python scripts/ablations/run_sft_ablations.py --dry-run
 
-    # LoRA placement sweep at r=8, OOPS only
-    python scripts/ablations/run_sft_ablations.py \\
-        --placement attn mlp both
-
-    # Full grid from docs/ABLATIONS.md
-    python scripts/ablations/run_sft_ablations.py \\
-        --placement attn mlp both \\
-        --rank 4 8 16 32 64 \\
-        --dataset oops staged-oops all
+    # Single rank
+    python scripts/ablations/run_sft_ablations.py --rank 8
 """
 
 from __future__ import annotations
@@ -125,8 +117,8 @@ def main() -> None:
         "--rank",
         nargs="+",
         type=int,
-        default=[8],
-        help="LoRA rank(s) to sweep; alpha is set to 2*r (default: 8).",
+        default=[4, 8, 16, 32],
+        help="LoRA rank(s) to sweep; alpha is set to 2*r (default: 4 8 16 32).",
     )
     parser.add_argument(
         "--dataset",
