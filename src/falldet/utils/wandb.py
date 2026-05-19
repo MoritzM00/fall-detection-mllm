@@ -113,6 +113,9 @@ def create_name_and_tags_from_config(
     if config.prompt.cot:
         tags.append("cot")
 
+    if hasattr(config, "lora") and hasattr(config.lora, "path") and config.lora.path is not None:
+        tags.append("sft")
+
     tags = [tag.lower() for tag in tags]
     tags = list(set(tags))  # Ensure uniqueness
     return base_name, tags
