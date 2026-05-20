@@ -159,7 +159,7 @@ def generate_latex() -> None:
         union_cmidrule = ""
         union_sub_header = ""
 
-    section_header_spec = "@{}l" + " r" * (num_cols - 1)
+    section_header_spec = "@{}l" + " r" * (num_cols - 1)  # noqa: F841
 
     full_table = f"""
 \\begingroup
