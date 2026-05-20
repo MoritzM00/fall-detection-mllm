@@ -132,14 +132,3 @@ def test_completion_labels_have_no_assistant_header():
     # The unmasked stream is exactly the raw answer + eos, whitespace-split
     expected = (ex["completion"][0]["content"][0]["text"] + processor.tokenizer.eos_token).split()
     assert decoded == expected
-
-
-def test_collator_truncates_to_max_length():
-    processor = FakeProcessor()
-    collator = PromptMaskedSFTCollator(processor, max_length=4)
-
-    batch = collator([_example("fall")])
-
-    assert batch["input_ids"].shape[1] == 4
-    assert batch["labels"].shape[1] == 4
-    assert batch["attention_mask"].shape[1] == 4

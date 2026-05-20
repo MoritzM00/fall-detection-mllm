@@ -25,11 +25,9 @@ class PromptMaskedSFTCollator:
     def __init__(
         self,
         processor,
-        max_length: int | None = None,
         needs_video_metadata: bool = True,
     ):
         self.processor = processor
-        self.max_length = max_length
         self.needs_video_metadata = needs_video_metadata
 
     def __call__(self, examples: list[dict]) -> dict:
@@ -59,6 +57,7 @@ class PromptMaskedSFTCollator:
             text=completion_texts,
             return_tensors="pt",
             padding=True,
+            add_special_tokens=False,
         )
 
         prompt_ids = processed_prompts["input_ids"]
@@ -75,13 +74,6 @@ class PromptMaskedSFTCollator:
             mm_token_type_ids = torch.cat(
                 (mm_token_type_ids, torch.zeros_like(completion_ids)), dim=1
             )
-
-        if self.max_length is not None and input_ids.shape[1] > self.max_length:
-            input_ids = input_ids[:, : self.max_length]
-            attention_mask = attention_mask[:, : self.max_length]
-            completion_only_mask = completion_only_mask[:, : self.max_length]
-            if mm_token_type_ids is not None:
-                mm_token_type_ids = mm_token_type_ids[:, : self.max_length]
 
         labels = input_ids.clone()
         labels[attention_mask == 0] = -100

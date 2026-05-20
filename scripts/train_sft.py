@@ -120,7 +120,6 @@ def main(cfg: DictConfig) -> None:
     train_ds = SFTConversationDataset(base, conv_builder)
     collator = PromptMaskedSFTCollator(
         processor,
-        max_length=config.training.max_length,
         needs_video_metadata=config.model.needs_video_metadata,
     )
 
@@ -156,8 +155,8 @@ def main(cfg: DictConfig) -> None:
             # Trainer prefixes dict-eval metrics as eval_{key}_{metric}; update accordingly.
             if config.training.metric_for_best_model is not None:
                 first_key = next(iter(eval_ds))
-                base = config.training.metric_for_best_model.removeprefix("eval_")
-                metric_for_best_model = f"eval_{first_key}_{base}"
+                metric_base = config.training.metric_for_best_model.removeprefix("eval_")
+                metric_for_best_model = f"eval_{first_key}_{metric_base}"
                 logger.info(f"metric_for_best_model updated to '{metric_for_best_model}'")
         else:
             val_base = next(iter(individual.values()))

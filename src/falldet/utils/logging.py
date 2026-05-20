@@ -201,4 +201,5 @@ def disable_logging_for_non_main_process(local_rank: int):
         root.addHandler(stderr_handler)
         root.setLevel(logging.ERROR)
 
-        sys.stdout = open(os.devnull, "w")  # noqa: SIM115
+        _devnull = open(os.devnull, "w")  # noqa: SIM115
+        sys.stdout = _devnull
