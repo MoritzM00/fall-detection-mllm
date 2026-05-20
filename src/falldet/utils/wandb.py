@@ -6,12 +6,14 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.distributed as dist
+from accelerate import PartialState
 
 import wandb
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
-from falldet.schemas import InferenceConfig
+from falldet.schemas import InferenceConfig, TrainingConfig
 from falldet.utils.predictions import (
     load_predictions_jsonl,
     prediction_jsonl_path,
@@ -21,26 +23,65 @@ from falldet.utils.predictions import (
 logger = logging.getLogger(__name__)
 
 
-def initialize_run_from_config(config: InferenceConfig):
-    wandb_mode = config.wandb.mode
-    logger.info(f"Initializing W&B in {wandb_mode} mode")
-    run_id = wandb.util.generate_id()
+def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
+    """Initialize a W&B run, rank-aware under distributed launchers.
+
+    Under `accelerate launch` / `torchrun` only the main process creates a real
+    W&B run; non-main ranks attach a disabled stub that shares the same
+    ``run_name`` so downstream code (e.g. ``output_dir`` derivation) stays
+    consistent across all ranks.
+    """
+    state = PartialState()
     base_name, tags = create_name_and_tags_from_config(config)
-    run_name = f"{base_name}_{run_id}"
-    run = wandb.init(
-        project=config.wandb.project,
-        id=run_id,
-        name=run_name,
-        tags=tags,
-        config=config.model_dump(),
-        mode=wandb_mode,
-    )
-    logger.info(f"W&B run initialized with name: {run.name}, id: {run.id}")
-    logger.info(f"Run tags: {list(run.tags)}")
+    if isinstance(config, TrainingConfig):
+        tags = list(set(tags + ["training", f"lora_r{config.lora.r}"]))
+
+    if state.is_main_process:
+        run_id = wandb.util.generate_id()
+        run_name = f"{base_name}_{run_id}"
+    else:
+        run_id, run_name = "", ""
+
+    if state.num_processes > 1 and dist.is_available() and dist.is_initialized():
+        payload = [run_id, run_name]
+        dist.broadcast_object_list(payload, src=0)
+        run_id, run_name = payload[0], payload[1]
+
+    if isinstance(config, TrainingConfig):
+        # Ensure TRL's own wandb integration attaches to the same run on rank 0.
+        os.environ["WANDB_RUN_ID"] = run_id
+        os.environ["WANDB_PROJECT"] = config.wandb.project
+        os.environ["WANDB_NAME"] = run_name
+
+    if state.is_main_process:
+        wandb_mode = config.wandb.mode
+        logger.info(f"Initializing W&B in {wandb_mode} mode")
+        run = wandb.init(
+            project=config.wandb.project,
+            id=run_id,
+            name=run_name,
+            tags=tags,
+            config=config.model_dump(),
+            mode=wandb_mode,
+        )
+        logger.info(f"W&B run initialized with name: {run.name}, id: {run.id}")
+        logger.info(f"Run tags: {list(run.tags)}")
+    else:
+        # Disable any wandb activity on non-main ranks (TRL's WandbCallback will
+        # otherwise call wandb.init on every rank).
+        os.environ["WANDB_MODE"] = "disabled"
+        run = wandb.init(
+            project=config.wandb.project,
+            id=run_id,
+            name=run_name,
+            mode="disabled",
+        )
     return run
 
 
-def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list[str]]:
+def create_name_and_tags_from_config(
+    config: InferenceConfig | TrainingConfig,
+) -> tuple[str, list[str]]:
     """Create a W&B base run name and tags based on the configuration.
 
     Args:
@@ -58,7 +99,7 @@ def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list
         frame_count = config.num_frames
         model_fps = config.model_fps
 
-        dataset_info = f"F{frame_count}@{model_fps}"
+        dataset_info = f"F{frame_count}at{model_fps}"
         base_name = f"{model_info}-{dataset_info}"
 
     tags = list(config.wandb.tags) if config.wandb.tags else []
@@ -71,6 +112,9 @@ def create_name_and_tags_from_config(config: InferenceConfig) -> tuple[str, list
 
     if config.prompt.cot:
         tags.append("cot")
+
+    if hasattr(config, "lora") and hasattr(config.lora, "path") and config.lora.path is not None:
+        tags.append("sft")
 
     tags = [tag.lower() for tag in tags]
     tags = list(set(tags))  # Ensure uniqueness
@@ -116,6 +160,36 @@ def _download_predictions_file(
             return metadata, predictions
 
     raise FileNotFoundError(f"No prediction JSONL for run {run_id} found in W&B files")
+
+
+def log_adapter_artifact(
+    run: Any,
+    adapter_dir: Path,
+    run_name: str,
+    log_model: str,
+    best_metric: float | None = None,
+    metric_for_best_model: str | None = None,
+) -> None:
+    """Upload the LoRA adapter directory as a W&B artifact with controlled metadata.
+
+    Uses a fixed small metadata dict to stay under wandb's 100-key artifact limit,
+    which HF's WandbCallback violates when many per-dataset eval metrics accumulate.
+    """
+    metadata: dict[str, Any] = {"final_model": True}
+    if best_metric is not None:
+        metadata["best_metric"] = best_metric
+    if metric_for_best_model is not None:
+        metadata["metric_for_best_model"] = metric_for_best_model
+
+    artifact_name = f"model-{run_name}"
+    artifact = wandb.Artifact(name=artifact_name, type="model", metadata=metadata)
+    artifact.add_dir(str(adapter_dir))
+
+    aliases = ["final_model"]
+    if log_model == "checkpoint":
+        aliases.append("latest")
+    run.log_artifact(artifact, aliases=aliases)
+    logger.info(f"Logged adapter artifact '{artifact_name}' to W&B")
 
 
 def log_videos_with_predictions(

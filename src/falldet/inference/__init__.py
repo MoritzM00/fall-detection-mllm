@@ -6,10 +6,7 @@ from falldet.inference.conversation import (
 )
 from falldet.inference.engine import create_llm_engine, create_sampling_params
 
-from .base import load_video_clip
-
 __all__ = [
-    "load_video_clip",
     "create_llm_engine",
     "create_sampling_params",
     "ConversationBuilder",

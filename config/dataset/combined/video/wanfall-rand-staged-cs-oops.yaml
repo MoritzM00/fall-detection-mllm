@@ -1,0 +1,85 @@
+name: "wanfall-rand-staged-cs-oops"
+video_datasets:
+    # Combined training dataset: WanFall random split + Omnifall CS split (staged + OOPS)
+    # ~11470 train samples (staged-cs: 1663, OOPS: 206, wanfall: 9601)
+
+  # ========== WanFall Random Split ==========
+  - name: "wanfall"
+    split: "rand"
+    video_root: "${oc.env:WANFALL_ROOT}/video"
+    annotations_file: "hf://simplexsigil2/wanfall/labels/wanfall.csv"
+    dataset_fps: 16.0
+    split_root: "hf://simplexsigil2/wanfall/splits/random"
+
+  # ========== Omnifall CS Split (8 staged datasets) ==========
+  - name: "cmdfall"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/cmdfall/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/cmdfall.csv"
+    dataset_fps: 20.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "up_fall"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/up_fall/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/up_fall.csv"
+    dataset_fps: 18.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "le2i"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/le2i/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/le2i.csv"
+    dataset_fps: 25.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "gmdcsa24"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/GMDCSA24/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/GMDCSA24.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "edf"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/edf/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/edf.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "occu"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/occu/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/occu.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "caucafall"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/caucafall/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/caucafall.csv"
+    dataset_fps: 20.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  - name: "mcfd"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/mcfd/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/mcfd.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+  # ========== OOPS CS Split ==========
+  - name: "OOPS"
+    split: "cs"
+    video_root: "${oc.env:OMNIFALL_ROOT}/OOPS/video"
+    annotations_file: "hf://simplexsigil2/omnifall/labels/OOPS.csv"
+    dataset_fps: 30.0
+    split_root: "hf://simplexsigil2/omnifall/splits"
+
+# Common parameters
+target_fps: ${model_fps}
+vid_frame_count: ${num_frames}
+num_classes: 16
+path_format: "{video_root}/{video_path}{ext}"
+
+create_all_combined: false

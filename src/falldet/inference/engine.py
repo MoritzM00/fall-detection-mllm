@@ -103,6 +103,14 @@ def create_llm_engine(config: InferenceConfig) -> LLM | MockLLM:
         enable_prefix_caching=enable_prefix_caching,
     )
 
+    if not use_mock and config.lora.path is not None:
+        vllm_kwargs["enable_lora"] = True
+        vllm_kwargs["max_lora_rank"] = config.lora.max_rank
+        logger.info(
+            f"LoRA enabled: adapter='{config.lora.path}' "
+            f"name='{config.lora.name}' max_rank={config.lora.max_rank}"
+        )
+
     # Add CoT flag and output format for mock mode
     if use_mock:
         vllm_kwargs["cot"] = config.prompt.cot

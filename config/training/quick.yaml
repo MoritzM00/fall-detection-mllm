@@ -1,0 +1,36 @@
+# Bounded short run: validates real dataloading + memory on whatever dataset is selected.
+
+attn_implementation: flash_attention_2
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+# 1 - 3
+num_train_epochs: 3
+max_steps: 200
+
+# typically 2e-4 (0.0002) to 5e-6 (0.000005)
+learning_rate: 2.0e-4
+
+# typically 5-10% of total steps
+warmup_steps: 10
+weight_decay: 0.0
+lr_scheduler_type: cosine
+bf16: true
+fp16: false
+logging_steps: 5
+save_strategy: steps
+save_steps: 100
+save_total_limit: 2
+eval_strategy: steps
+eval_steps: 100
+eval_on_start: true
+per_device_eval_batch_size: 8
+max_eval_samples_per_ds: 300
+load_best_model_at_end: false
+metric_for_best_model: null
+greater_is_better: true
+gradient_checkpointing: true
+max_length: null
+report_to: wandb
+seed: 0
+optim: adamw_torch_fused
+resume_from_checkpoint: null

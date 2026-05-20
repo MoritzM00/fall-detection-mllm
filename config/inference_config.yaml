@@ -4,8 +4,9 @@ defaults:
   - sampling: qwen3_instruct
   - model: qwenvl
   - prompt: default
+  - lora: none
   - _self_
-  - experiment: debug
+  - experiment: zeroshot
 
 data:
   # Global data parameters

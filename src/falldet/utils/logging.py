@@ -172,7 +172,16 @@ def reconfigure_logging_after_wandb(
 
 def disable_logging_for_non_main_process(local_rank: int):
     """
-    Disable logging on non-main processes in distributed training.
+    Quiet non-main processes in distributed training while preserving errors.
+
+    On non-main ranks:
+      - Replaces the rank-0 console/file handlers (which write through a
+        Rich console bound to stdout, and to a shared log file) with a
+        single stderr-only handler at ERROR level. This guarantees genuine
+        errors and rank-specific failures still surface.
+      - Redirects ``stdout`` to ``/dev/null`` to silence Trainer's
+        ``print``-based metric output. ``stderr`` is left untouched so
+        tracebacks, NCCL warnings, and the new error handler all flow.
 
     Args:
         local_rank: The local rank of the process (0 = main process)
@@ -181,12 +190,16 @@ def disable_logging_for_non_main_process(local_rank: int):
         import os
         import sys
 
-        # Disable all logging
-        logging.getLogger().handlers = []
-        logging.getLogger().addHandler(logging.NullHandler())
+        root = logging.getLogger()
+        root.handlers = []
+        stderr_handler = logging.StreamHandler(stream=sys.__stderr__)
+        stderr_handler.setLevel(logging.ERROR)
+        stderr_handler.setFormatter(
+            RankFormatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+        )
+        stderr_handler.addFilter(RankAndModuleFilter())
+        root.addHandler(stderr_handler)
+        root.setLevel(logging.ERROR)
 
-        # Redirect stdout and stderr to /dev/null to suppress print statements
-        # This prevents the Trainer from printing metrics on non-main processes
-        devnull = open(os.devnull, "w")  # noqa: SIM115
-        sys.stdout = devnull
-        sys.stderr = devnull
+        _devnull = open(os.devnull, "w")  # noqa: SIM115
+        sys.stdout = _devnull
