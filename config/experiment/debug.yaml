@@ -2,7 +2,6 @@
 
 # Debug experiment - quick testing with small sample size
 defaults:
-  - /dataset/omnifall/video@dataset: oops
   - override /vllm: debug
   - override /prompt: default
 

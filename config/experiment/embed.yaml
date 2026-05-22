@@ -1,7 +1,6 @@
 # @package _global_
 
 defaults:
-  - /dataset/omnifall/video@dataset: oops
   - override /prompt: embed
   - override /model: qwenvl_embed
 

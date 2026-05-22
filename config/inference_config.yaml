@@ -1,5 +1,5 @@
 defaults:
-  # dataset specified by experiment config
+  - dataset: omnifall/video/oops
   - vllm: default
   - sampling: qwen3_instruct
   - model: qwenvl
