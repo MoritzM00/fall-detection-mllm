@@ -39,9 +39,9 @@ MIX_DISPLAY: dict[str, str] = {
 # Declared training run IDs per mix — fill these in before running
 TRAIN_RUN_IDS: dict[str, str] = {
     "ItW": "pjmzzx8i",
-    "Sta": "TODO",
-    "Syn": "TODO",
-    "All": "TODO",
+    "Sta": "ya7dqqyu",
+    "Syn": "sletu100",
+    "All": "77r47xiw",
 }
 
 # Eval blocks: display label, W&B metric dataset prefix, split key
@@ -53,9 +53,9 @@ EVAL_BLOCKS: list[dict] = [
 
 # Inference run IDs: eval_block_key -> mix -> run_id (12 total — fill these in)
 EVAL_RUN_IDS: dict[str, dict[str, str]] = {
-    "Sta": {"ItW": "TODO", "Sta": "TODO", "Syn": "TODO", "All": "TODO"},
-    "Syn": {"ItW": "TODO", "Sta": "TODO", "Syn": "TODO", "All": "TODO"},
-    "ItW": {"ItW": "a5nz8f5v", "Sta": "TODO", "Syn": "TODO", "All": "TODO"},
+    "Sta": {"ItW": "siyw9wfh", "Sta": "0t0khm9o", "Syn": "8i92so3u", "All": "z0uo30e7"},
+    "Syn": {"ItW": "t3w0dwg5", "Sta": "ezvmeln3", "Syn": "7p6l371w", "All": "9tio4kk2"},
+    "ItW": {"ItW": "a5nz8f5v", "Sta": "94ehgtjb", "Syn": "zu1yjotn", "All": "2965he1k"},
 }
 
 METRIC_SUFFIXES: list[tuple[str, str]] = [
@@ -139,6 +139,9 @@ def fetch_all(api: wandb.Api) -> dict[str, list[dict]]:
     return results
 
 
+GRADIENT_METRICS: frozenset[str] = frozenset({"bacc", "macro_f1", "fall_f1", "fallen_f1"})
+
+
 def _block_bests(records: list[dict]) -> dict[str, float | None]:
     bests: dict[str, float | None] = {}
     for name in METRIC_KEYS:
@@ -147,22 +150,48 @@ def _block_bests(records: list[dict]) -> dict[str, float | None]:
     return bests
 
 
-def _fmt(val: float | None, best: float | None) -> str:
+def _block_ranges(records: list[dict]) -> dict[str, tuple[float, float] | None]:
+    ranges: dict[str, tuple[float, float] | None] = {}
+    for name in METRIC_KEYS:
+        vals = [r[name] for r in records if r[name] is not None]
+        ranges[name] = (min(vals), max(vals)) if len(vals) >= 2 else None
+    return ranges
+
+
+def _opacity(val: float, min_val: float, max_val: float) -> int:
+    if max_val == min_val:
+        return 55
+    return max(10, min(100, round((val - min_val) / (max_val - min_val) * 90 + 10)))
+
+
+def _fmt(
+    val: float | None,
+    best: float | None,
+    val_range: tuple[float, float] | None = None,
+    gradient: bool = False,
+) -> str:
     if val is None:
         return "--"
     s = f"{val:.1f}"
     if best is not None and round(val, 1) == round(best, 1):
-        return f"\\textbf{{{s}}}"
+        s = f"\\textbf{{{s}}}"
+    if gradient and val_range is not None:
+        op = _opacity(val, val_range[0], val_range[1])
+        return f"\\gc{{{op}}}{{{s}}}"
     return s
 
 
 def _build_block_rows(block: dict, records: list[dict]) -> str:
     bests = _block_bests(records)
+    ranges = _block_ranges(records)
     label = block["label"]
     lines: list[str] = []
     for i, (mix, rec) in enumerate(zip(MIXES, records)):
         mix_label = MIX_DISPLAY[mix]
-        metric_cells = [_fmt(rec[name], bests[name]) for name in METRIC_KEYS]
+        metric_cells = [
+            _fmt(rec[name], bests[name], ranges[name], name in GRADIENT_METRICS)
+            for name in METRIC_KEYS
+        ]
         if i == 0:
             row_label = (
                 f"\\multirow{{4}}{{*}}{{\\rotatebox[origin=c]{{90}}{{\\textbf{{{label}}}}}}}"
@@ -194,6 +223,7 @@ def generate_latex(block_data: dict[str, list[dict]]) -> str:
         "and combined (Sta{+}Syn{+}ItW) training mixes. As a representative of the staged partition\n"
         "we report results on CMDFall, the largest of the eight staged datasets.\n"
         "The best result per column within each evaluation block is highlighted in \\textbf{bold}.\n"
+        "Darker blue cells indicate better performance for BAcc and F1 metrics.\n"
         "Metrics are denoted as \\textbf{B}alanced \\textbf{Acc}uracy, \\textbf{Acc}uracy,\n"
         "\\textbf{Se}nsitivity, and \\textbf{Sp}ecificity.}\n"
         "\\label{tab:sft_lora_data_mix}\n"
