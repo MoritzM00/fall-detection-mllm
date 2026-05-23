@@ -139,9 +139,6 @@ def fetch_all(api: wandb.Api) -> dict[str, list[dict]]:
     return results
 
 
-GRADIENT_METRICS: frozenset[str] = frozenset({"bacc", "macro_f1", "fall_f1", "fallen_f1"})
-
-
 def _block_bests(records: list[dict]) -> dict[str, float | None]:
     bests: dict[str, float | None] = {}
     for name in METRIC_KEYS:
@@ -150,48 +147,31 @@ def _block_bests(records: list[dict]) -> dict[str, float | None]:
     return bests
 
 
-def _block_ranges(records: list[dict]) -> dict[str, tuple[float, float] | None]:
-    ranges: dict[str, tuple[float, float] | None] = {}
-    for name in METRIC_KEYS:
-        vals = [r[name] for r in records if r[name] is not None]
-        ranges[name] = (min(vals), max(vals)) if len(vals) >= 2 else None
-    return ranges
-
-
-def _opacity(val: float, min_val: float, max_val: float) -> int:
-    if max_val == min_val:
-        return 55
-    return max(10, min(100, round((val - min_val) / (max_val - min_val) * 90 + 10)))
-
-
-def _fmt(
-    val: float | None,
-    best: float | None,
-    val_range: tuple[float, float] | None = None,
-    gradient: bool = False,
-) -> str:
+def _fmt(val: float | None, best: float | None) -> str:
     if val is None:
         return "--"
     s = f"{val:.1f}"
     if best is not None and round(val, 1) == round(best, 1):
         s = f"\\textbf{{{s}}}"
-    if gradient and val_range is not None:
-        op = _opacity(val, val_range[0], val_range[1])
-        return f"\\gc{{{op}}}{{{s}}}"
     return s
+
+
+def _is_ood(block_key: str, mix: str) -> bool:
+    return mix != "All" and mix != block_key
+
+
+def _oodcell(content: str, is_ood: bool) -> str:
+    return f"\\oodcell{{{content}}}" if is_ood else content
 
 
 def _build_block_rows(block: dict, records: list[dict]) -> str:
     bests = _block_bests(records)
-    ranges = _block_ranges(records)
     label = block["label"]
     lines: list[str] = []
     for i, (mix, rec) in enumerate(zip(MIXES, records)):
-        mix_label = MIX_DISPLAY[mix]
-        metric_cells = [
-            _fmt(rec[name], bests[name], ranges[name], name in GRADIENT_METRICS)
-            for name in METRIC_KEYS
-        ]
+        is_ood = _is_ood(block["key"], mix)
+        mix_label = _oodcell(MIX_DISPLAY[mix], is_ood)
+        metric_cells = [_oodcell(_fmt(rec[name], bests[name]), is_ood) for name in METRIC_KEYS]
         if i == 0:
             row_label = (
                 f"\\multirow{{4}}{{*}}{{\\rotatebox[origin=c]{{90}}{{\\textbf{{{label}}}}}}}"
@@ -216,16 +196,17 @@ def generate_latex(block_data: dict[str, list[dict]]) -> str:
     return (
         "\\begingroup\n"
         "\\renewcommand{\\arraystretch}{1.1}\n"
+        "\\newcommand{\\oodcell}[1]{\\cellcolor{blue!6}#1}\n"
         "\\begin{table}[htp]\n"
         "\\centering\n"
+        "\\begin{threeparttable}\n"
         "\\caption[SFT+LoRA data-mix results]{\\textbf{Fine-tuning results across training data mixes.}\n"
         "Qwen3-VL-8B fine-tuned with LoRA on the in-the-wild (ItW), staged (Sta), synthetic (Syn),\n"
         "and combined (Sta{+}Syn{+}ItW) training mixes. As a representative of the staged partition\n"
         "we report results on CMDFall, the largest of the eight staged datasets.\n"
         "The best result per column within each evaluation block is highlighted in \\textbf{bold}.\n"
-        "Darker blue cells indicate better performance for BAcc and F1 metrics.\n"
         "Metrics are denoted as \\textbf{B}alanced \\textbf{Acc}uracy, \\textbf{Acc}uracy,\n"
-        "\\textbf{Se}nsitivity, and \\textbf{Sp}ecificity.}\n"
+        "\\textbf{F1} score, \\textbf{Se}nsitivity, and \\textbf{Sp}ecificity.}\n"
         "\\label{tab:sft_lora_data_mix}\n"
         "\n"
         "\\begin{tabular}{@{}cl rrr rrr rrr@{}}\n"
@@ -242,6 +223,11 @@ def generate_latex(block_data: dict[str, list[dict]]) -> str:
         f"{body}\n"
         "\\bottomrule\n"
         "\\end{tabular}\n"
+        "\\begin{tablenotes}\n"
+        "\\scriptsize\n"
+        "\\item[] \\colorbox{blue!6}{Shaded} cells mark cross-domain rows where the training mix does not include data from the evaluation domain.\n"
+        "\\end{tablenotes}\n"
+        "\\end{threeparttable}\n"
         "\\end{table}\n"
         "\\endgroup\n"
     )
