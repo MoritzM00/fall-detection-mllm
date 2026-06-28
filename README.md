@@ -16,17 +16,24 @@ The codebase supports four main workflows:
 ## Repository Layout
 
 ```text
-src/falldet/              Python package for data loading, prompting, inference, metrics, and plots
-scripts/vllm_inference.py Hydra entrypoint for vLLM inference and embedding generation
-scripts/train_sft.py      Hydra entrypoint for LoRA supervised fine-tuning
-scripts/build_tensor_cache.py
-                          Utility for precomputing deterministic video tensors
-scripts/ablations/        Experiment sweep runners
-scripts/latex/            Table generation utilities for thesis/report outputs
-scripts/plot/             Plotting utilities for saved runs and metrics
-config/                   Hydra config groups for datasets, models, prompts, training, and vLLM
-tests/                    Pytest suite
-notebooks/                Exploratory analysis and development notebooks
+config/          Hydra config groups: datasets, models, prompts, sampling, training, vLLM, LoRA, accelerate
+scripts/         Experiment runners and utilities
+  vllm_inference.py     vLLM inference and embedding generation (Hydra entrypoint)
+  train_sft.py          LoRA supervised fine-tuning (Hydra entrypoint)
+  build_tensor_cache.py Precompute deterministic video tensors
+  ablations/    Sweep runners (SFT rank, few-shot shots/format/selection, prompt, size)
+  latex/        LaTeX table generators for thesis output
+  plot/         Plotting utilities for saved runs and metrics
+src/falldet/    Main Python package
+  data/         Dataset loading, video preprocessing, and tensor caching
+  inference/    vLLM engine wrapper, prompt building, few-shot sampling
+  evaluation/   Evaluation orchestration, subgroup analysis, visual summaries
+  metrics/      Classification and subgroup-stratified metric computation
+  training/     SFT data pipeline: dataset, collator, eval sampling, metrics
+  plot/         Confusion matrices, metric charts, video grids
+  utils/        Shared helpers: formatting, LaTeX, logging, predictions, W&B
+tests/          pytest test suite
+notebooks/      Exploratory analysis and development notebooks
 ```
 
 ## Setup
@@ -147,6 +154,93 @@ Evaluation results are written under:
 
 ```text
 outputs/evaluation_results/<wandb-project>/
+```
+
+## Prompt Construction
+
+Prompts are assembled from modular components by `PromptBuilder`
+(`src/falldet/inference/prompts/builder.py`), driven entirely by the `prompt`
+config group (`config/prompt/`). Every field maps to a `PromptConfig` attribute
+(`src/falldet/schemas.py`). Changing a variant swaps one text block in or out;
+the builder never edits the others.
+
+### Zero-Shot Assembly Order
+
+`build_prompt()` concatenates the following sections with blank lines between
+them. Optional sections are skipped entirely when their selector is `null`/`false`:
+
+1. **Role** — included only if `role_variant` is set. Expert-persona preamble.
+2. **Task** — always included. The instruction telling the model to classify the
+   primary action and assign exactly one label.
+3. **Clip-overlap note** — included only if `clip_overlap_note=true`. Tells the
+   model to classify the action in the *first* part of a multi-action clip.
+4. **Labels** — always included. The allowed-label list, formatted per
+   `labels_variant`.
+5. **Definitions & decision rules** — included only if `definitions_variant` is set.
+6. **Chain-of-thought instruction** — included only if `cot=true`.
+7. **Output format** — included unless `output_format=null` (embed mode). Tells
+   the model whether to answer as `text` (`The best answer is: <label>`) or `json`.
+
+The **system message** is resolved separately by `get_system_message()`:
+an explicit `prompt.system_instruction` wins; otherwise InternVL with `cot=true`
+auto-injects the R1 thinking preamble; otherwise there is no system message.
+
+### Variant Selectors
+
+| Field | Values | Effect on the prompt |
+|-------|--------|----------------------|
+| `role_variant` | `null`, `standard`, `specialized`, `video_specialized` | Omit the role block, or use the generic HAR persona / a fall-detection-specialized / a video-analyst-specialized persona. |
+| `task_variant` | `standard`, `extended` | Short two-line task instruction vs. a longer one that explicitly mentions posture, motion dynamics, and environmental cues. |
+| `clip_overlap_note` | `true`, `false` | Add/remove the "focus on the first action in a multi-action clip" note. |
+| `labels_variant` | `bulleted`, `comma`, `grouped`, `numbered` | Formatting of the allowed-label list: bulleted/numbered lists, a comma-separated line, or Core/Extended groups. |
+| `definitions_variant` | `null`, `standard`, `extended` | Omit decision rules, include the core fall/lying/sitting disambiguation rules, or the extended rule set that also covers locomotion and low postures. |
+| `cot` | `true`, `false` | Add the "reason step-by-step" instruction and wrap the parser in a CoT parser that strips `cot_start_tag`/`cot_end_tag` (`<think>`/`</think>`) before reading the label. |
+| `output_format` | `text`, `json`, `null` | Choose the answer format / parser, or drop the format block entirely for embedding runs. |
+
+The variant text lives in `src/falldet/inference/prompts/components.py`; the
+registries (`ROLE_VARIANTS`, `TASK_VARIANTS`, `DEFINITIONS_VARIANTS`,
+`LABEL_FORMAT_VARIANTS`, `OUTPUT_FORMAT_VARIANTS`) map each selector value to its
+block.
+
+### Few-Shot Assembly
+
+When `num_shots > 0`, `Conversation` (`src/falldet/inference/conversation.py`)
+builds an in-context-learning prompt instead. `build_fewshot_preamble()` reuses
+the same role/task/labels/definitions blocks, then appends a demonstrations
+explanation (and, for InternVL, a "do not think" instruction). Exemplar turns and
+the query turn are then laid out according to these fields:
+
+| Field | Values | Effect |
+|-------|--------|--------|
+| `num_shots` | int (`0` = zero-shot) | Number of in-context exemplars. CoT and few-shot are mutually exclusive (validated in `PromptConfig`). |
+| `shot_selection` | `random`, `balanced`, `similarity`, `per_class_similarity` | How exemplars are sampled: uniform random, class-balanced, nearest-neighbor by embedding, or nearest-neighbor per class. The two similarity modes require precomputed embeddings (`experiment=fewshot_similarity`). |
+| `exemplar_seed` | int | Seed for reproducible exemplar sampling. |
+| `exemplar_ordering` | `ascending`, `descending`, `random` | Orders exemplars by similarity score (ignored for `random` selection). |
+| `fewshot_preamble` | `system`, `user` | Whether the role/task/labels preamble goes in the system message or as the first user turn. |
+| `fewshot_response` | `inline`, `assistant` | `inline` keeps each exemplar's answer inside the same user turn (`[REQUEST n] … [RESPONSE n] …`); `assistant` splits each exemplar into a user turn plus a real `assistant` answer turn (`[DEMONSTRATION n]`). |
+
+### Prompt Presets
+
+The `config/prompt/*.yaml` files are ready-made selector bundles wired to the
+experiment presets:
+
+- `default.yaml` — zero-shot baseline used by `experiment=zeroshot`: standard role,
+  standard task, clip-overlap note on, bulleted labels, no definitions, text output.
+- `baseline.yaml` — the minimal reference point for component ablations: no role,
+  standard task, no clip-overlap note, no definitions, text output.
+- `cot.yaml` — zero-shot chain-of-thought (`cot=true`), used by `experiment=zeroshot_cot`.
+- `fewshot.yaml` — five balanced exemplars, ascending order, user preamble,
+  assistant-style responses; used by `experiment=fewshot` and `fewshot_similarity`.
+- `embed.yaml` — embedding pass: `output_format=null`, no role, with an explicit
+  `system_instruction`; used by `experiment=embed`.
+
+Override any field on the command line, e.g.:
+
+```shell
+python scripts/vllm_inference.py experiment=zeroshot \
+    prompt.role_variant=specialized \
+    prompt.definitions_variant=extended \
+    prompt.output_format=json
 ```
 
 ## Video Tensor Caching
@@ -295,21 +389,97 @@ Relevant training configs:
 
 ## Ablation Runners
 
-The LoRA-rank ablation runner sweeps LoRA rank, placement, and dataset choices.
+`scripts/ablations/` holds standalone sweep runners. Each one builds Hydra CLI
+commands for `vllm_inference.py` or `train_sft.py`, tags every run with
+descriptive W&B tags, and (except the size shell script) supports `--dry-run` to
+print commands without executing and `--start-from N` to resume a partially
+completed sweep. The Python runners default to `--model qwenvl --params 8B`.
+
+### `run_component_ablations.py` — one-at-a-time prompt components
+
+Holds every prompt component at the `baseline.yaml` reference point
+(no role, standard task, bulleted labels, no definitions, text output) and sweeps
+**one component at a time**, so each run differs from the baseline in a single
+field. Sweeps `role_variant` (`null`, `standard`, `specialized`,
+`video_specialized`), `task_variant` (`standard`, `extended`), `labels_variant`
+(`bulleted`, `numbered`, `grouped`, `comma`), and `definitions_variant`
+(`null`, `standard`, `extended`). Duplicate baselines are deduplicated, giving
+10 unique runs. Base experiment `zeroshot`, tags `[ablation, component, …]`.
 
 ```shell
-# Print every accelerate launch command without running it
+python scripts/ablations/run_component_ablations.py --dry-run
+```
+
+### `run_prompt_ablations.py` — full prompt grid
+
+Runs the **full cross-product** of `role_variant` (`null`, `standard`),
+`definitions_variant` (`null`, `standard`), and `output_format` (`json`, `text`)
+= 8 combinations. Base experiment `zeroshot`, `wandb.project=prompt-ablations`,
+tags `[ablation, prompt, …]`.
+
+```shell
+python scripts/ablations/run_prompt_ablations.py --dry-run
+```
+
+### `run_fewshot_ablations.py` — exemplar count / selection / ordering
+
+Sweeps `num_shots` (default `1 2 3 5`), `shot_selection` (default `balanced`;
+choices `random`, `balanced`, `similarity`, `per_class_similarity`), and
+`exemplar_ordering` (default `ascending`; choices `ascending`, `descending`,
+`random`). `random` selection collapses to a single ordering. Similarity-based
+selections automatically switch to `experiment=fewshot_similarity` (which expects
+precomputed embeddings); everything else uses `experiment=fewshot`. Accepts
+multiple `--model` values (models vary slowest). Tags `[ablation, fewshot, shots-N, selection-S, ordering-O]`.
+
+```shell
+# Full default sweep across shot counts
+python scripts/ablations/run_fewshot_ablations.py --dry-run
+
+# Compare selection strategies at 5 shots
+python scripts/ablations/run_fewshot_ablations.py \
+    --shots 5 --selection balanced similarity per_class_similarity
+```
+
+### `run_fewshot_format_ablations.py` — exemplar layout
+
+Sweeps the in-context layout: `fewshot_preamble` (`system`, `user`) ×
+`fewshot_response` (`inline`, `assistant`) = 4 combinations per model. Base
+experiment `fewshot`. Tags `[ablation, fewshot_format, preamble-P, response-R]`.
+
+```shell
+python scripts/ablations/run_fewshot_format_ablations.py --dry-run
+```
+
+### `run_sft_ablations.py` — LoRA fine-tuning sweep
+
+Wraps `accelerate launch … scripts/train_sft.py training=full` and sweeps LoRA
+`--rank` (default `4 8 16 32`, with `alpha = 2r` unless `--alpha r`), `--placement`
+(`attn`, `mlp`, `both`; default `both`), and `--dataset` (default `oops`;
+also `staged`, `staged-oops`, `staged-oops-wanfall`, `wanfall`, `all`). The
+validation group is auto-selected per dataset (staged training datasets evaluate
+on `cmdfall` to avoid leakage). `--num-processes` sets the accelerate process
+count and `--per-device-batch-size` overrides the per-device batch.
+
+```shell
+# Default sweep: r in {4, 8, 16, 32}, placement=both, dataset=oops
 python scripts/ablations/run_sft_ablations.py --dry-run
 
-# Default sweep: r in {4, 8, 16, 32}, placement=both, dataset=oops
-python scripts/ablations/run_sft_ablations.py
-
-# Data-mix ablation
+# Data-mix ablation at fixed rank
 python scripts/ablations/run_sft_ablations.py \
     --rank 16 --dataset staged staged-oops staged-oops-wanfall
 ```
 
-Other experiment and analysis runners live under `scripts/ablations/`, `scripts/analysis/`, `scripts/latex/`, and `scripts/plot/`.
+### `run_size_ablation.sh` — input resolution
+
+A small bash loop over `data.size` (`224`, `448`, `768`) for the model(s) listed
+in the script, using `experiment=zeroshot prompt=baseline`. Edit the `SIZES`/`MODELS`
+arrays in the script to change the sweep. Tags `[ablation, input_size]`.
+
+```shell
+bash scripts/ablations/run_size_ablation.sh
+```
+
+Other experiment and analysis runners live under `scripts/analysis/`, `scripts/latex/`, and `scripts/plot/`.
 
 ## Configuration Reference
 
