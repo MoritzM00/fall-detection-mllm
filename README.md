@@ -6,6 +6,8 @@ This repository contains the code for my master's thesis on video-based fall det
 It evaluates whether video-language models can identify fall events, fallen states, and general human activity classes such as `walking`, `standing`, and `sit_down`
 on the OmniFall benchmark [paper](https://arxiv.org/abs/2505.19889).
 
+The full thesis PDF is available as a [GitHub release](https://github.com/MoritzM00/fall-detection-mllm/releases/tag/v1.0.0).
+
 The codebase supports four main workflows:
 
 - Zero-shot inference with task instructions only.
