@@ -16,24 +16,52 @@ The codebase supports four main workflows:
 ## Repository Layout
 
 ```text
-config/          Hydra config groups: datasets, models, prompts, sampling, training, vLLM, LoRA, accelerate
-scripts/         Experiment runners and utilities
-  vllm_inference.py     vLLM inference and embedding generation (Hydra entrypoint)
-  train_sft.py          LoRA supervised fine-tuning (Hydra entrypoint)
-  build_tensor_cache.py Precompute deterministic video tensors
-  ablations/    Sweep runners (SFT rank, few-shot shots/format/selection, prompt, size)
-  latex/        LaTeX table generators for thesis output
-  plot/         Plotting utilities for saved runs and metrics
-src/falldet/    Main Python package
-  data/         Dataset loading, video preprocessing, and tensor caching
-  inference/    vLLM engine wrapper, prompt building, few-shot sampling
-  evaluation/   Evaluation orchestration, subgroup analysis, visual summaries
-  metrics/      Classification and subgroup-stratified metric computation
-  training/     SFT data pipeline: dataset, collator, eval sampling, metrics
-  plot/         Confusion matrices, metric charts, video grids
-  utils/        Shared helpers: formatting, LaTeX, logging, predictions, W&B
-tests/          pytest test suite
-notebooks/      Exploratory analysis and development notebooks
+fall-detection-mllm/
+├── config/                          # Hydra configuration files
+│   ├── inference_config.yaml        # Main inference config
+│   ├── training_config.yaml         # Main training config
+│   ├── dataset/                     # Dataset + split definitions (omnifall, wanfall, combined)
+│   ├── model/                       # Model configs (qwenvl, internvl, molmo, keyevl)
+│   ├── prompt/                      # Prompt presets (default, baseline, cot, fewshot, embed)
+│   ├── sampling/                    # Decoding configs (greedy, nucleus, low_temp, qwen3)
+│   ├── lora/                        # LoRA configs (none, train)
+│   ├── training/                    # Training presets (smoke, quick, full)
+│   ├── vllm/                        # vLLM engine settings
+│   ├── accelerate/                  # DDP / DeepSpeed launch configs
+│   ├── deepspeed/                   # DeepSpeed ZeRO configs
+│   └── experiment/                  # End-to-end presets (debug, zeroshot, fewshot, embed)
+│
+├── scripts/                         # Experiment runners and utilities
+│   ├── vllm_inference.py            # vLLM inference + embedding generation (Hydra entrypoint)
+│   ├── train_sft.py                 # LoRA supervised fine-tuning (Hydra entrypoint)
+│   ├── build_tensor_cache.py        # Precompute deterministic video tensors
+│   ├── run_oops_experiments.py      # OOPS zero-shot experiment runner
+│   ├── ablations/                   # Sweep runners (component, prompt, fewshot, SFT, size)
+│   ├── analysis/                    # Analysis scripts
+│   ├── latex/                       # LaTeX table generators for thesis output
+│   └── plot/                        # Plotting utilities for saved runs and metrics
+│
+├── src/falldet/                     # Main Python package
+│   ├── data/                        # Dataset loading, video preprocessing, tensor caching
+│   ├── inference/                   # vLLM engine wrapper, prompt building, few-shot sampling
+│   │   └── prompts/                 # Prompt builder, components, parsers
+│   ├── evaluation/                  # Evaluation orchestration + subgroup analysis
+│   ├── metrics/                     # Classification and subgroup-stratified metric computation
+│   ├── training/                    # SFT data pipeline: dataset, collator, eval sampling
+│   ├── plot/                        # Confusion matrices, metric charts, video grids
+│   ├── utils/                       # Shared helpers: formatting, LaTeX, logging, W&B
+│   ├── schemas.py                   # Pydantic / dataclass schemas
+│   ├── config.py                    # Hydra config dataclasses
+│   └── embeddings.py                # Embedding utilities
+│
+├── tests/                           # pytest test suite
+├── notebooks/                       # Exploratory analysis and development notebooks
+├── README.md
+├── Makefile
+├── pyproject.toml                   # Package configuration
+├── environment.yml                  # Conda environment
+├── requirements.txt                 # Production dependencies
+└── requirements-dev.txt             # Development dependencies
 ```
 
 ## Setup
@@ -173,7 +201,7 @@ them. Optional sections are skipped entirely when their selector is `null`/`fals
 2. **Task** — always included. The instruction telling the model to classify the
    primary action and assign exactly one label.
 3. **Clip-overlap note** — included only if `clip_overlap_note=true`. Tells the
-   model to classify the action in the *first* part of a multi-action clip.
+   model to classify the action in the _first_ part of a multi-action clip.
 4. **Labels** — always included. The allowed-label list, formatted per
    `labels_variant`.
 5. **Definitions & decision rules** — included only if `definitions_variant` is set.
@@ -187,15 +215,15 @@ auto-injects the R1 thinking preamble; otherwise there is no system message.
 
 ### Variant Selectors
 
-| Field | Values | Effect on the prompt |
-|-------|--------|----------------------|
-| `role_variant` | `null`, `standard`, `specialized`, `video_specialized` | Omit the role block, or use the generic HAR persona / a fall-detection-specialized / a video-analyst-specialized persona. |
-| `task_variant` | `standard`, `extended` | Short two-line task instruction vs. a longer one that explicitly mentions posture, motion dynamics, and environmental cues. |
-| `clip_overlap_note` | `true`, `false` | Add/remove the "focus on the first action in a multi-action clip" note. |
-| `labels_variant` | `bulleted`, `comma`, `grouped`, `numbered` | Formatting of the allowed-label list: bulleted/numbered lists, a comma-separated line, or Core/Extended groups. |
-| `definitions_variant` | `null`, `standard`, `extended` | Omit decision rules, include the core fall/lying/sitting disambiguation rules, or the extended rule set that also covers locomotion and low postures. |
-| `cot` | `true`, `false` | Add the "reason step-by-step" instruction and wrap the parser in a CoT parser that strips `cot_start_tag`/`cot_end_tag` (`<think>`/`</think>`) before reading the label. |
-| `output_format` | `text`, `json`, `null` | Choose the answer format / parser, or drop the format block entirely for embedding runs. |
+| Field                 | Values                                                 | Effect on the prompt                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `role_variant`        | `null`, `standard`, `specialized`, `video_specialized` | Omit the role block, or use the generic HAR persona / a fall-detection-specialized / a video-analyst-specialized persona.                                                |
+| `task_variant`        | `standard`, `extended`                                 | Short two-line task instruction vs. a longer one that explicitly mentions posture, motion dynamics, and environmental cues.                                              |
+| `clip_overlap_note`   | `true`, `false`                                        | Add/remove the "focus on the first action in a multi-action clip" note.                                                                                                  |
+| `labels_variant`      | `bulleted`, `comma`, `grouped`, `numbered`             | Formatting of the allowed-label list: bulleted/numbered lists, a comma-separated line, or Core/Extended groups.                                                          |
+| `definitions_variant` | `null`, `standard`, `extended`                         | Omit decision rules, include the core fall/lying/sitting disambiguation rules, or the extended rule set that also covers locomotion and low postures.                    |
+| `cot`                 | `true`, `false`                                        | Add the "reason step-by-step" instruction and wrap the parser in a CoT parser that strips `cot_start_tag`/`cot_end_tag` (`<think>`/`</think>`) before reading the label. |
+| `output_format`       | `text`, `json`, `null`                                 | Choose the answer format / parser, or drop the format block entirely for embedding runs.                                                                                 |
 
 The variant text lives in `src/falldet/inference/prompts/components.py`; the
 registries (`ROLE_VARIANTS`, `TASK_VARIANTS`, `DEFINITIONS_VARIANTS`,
@@ -210,14 +238,14 @@ the same role/task/labels/definitions blocks, then appends a demonstrations
 explanation (and, for InternVL, a "do not think" instruction). Exemplar turns and
 the query turn are then laid out according to these fields:
 
-| Field | Values | Effect |
-|-------|--------|--------|
-| `num_shots` | int (`0` = zero-shot) | Number of in-context exemplars. CoT and few-shot are mutually exclusive (validated in `PromptConfig`). |
-| `shot_selection` | `random`, `balanced`, `similarity`, `per_class_similarity` | How exemplars are sampled: uniform random, class-balanced, nearest-neighbor by embedding, or nearest-neighbor per class. The two similarity modes require precomputed embeddings (`experiment=fewshot_similarity`). |
-| `exemplar_seed` | int | Seed for reproducible exemplar sampling. |
-| `exemplar_ordering` | `ascending`, `descending`, `random` | Orders exemplars by similarity score (ignored for `random` selection). |
-| `fewshot_preamble` | `system`, `user` | Whether the role/task/labels preamble goes in the system message or as the first user turn. |
-| `fewshot_response` | `inline`, `assistant` | `inline` keeps each exemplar's answer inside the same user turn (`[REQUEST n] … [RESPONSE n] …`); `assistant` splits each exemplar into a user turn plus a real `assistant` answer turn (`[DEMONSTRATION n]`). |
+| Field               | Values                                                     | Effect                                                                                                                                                                                                              |
+| ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `num_shots`         | int (`0` = zero-shot)                                      | Number of in-context exemplars. CoT and few-shot are mutually exclusive (validated in `PromptConfig`).                                                                                                              |
+| `shot_selection`    | `random`, `balanced`, `similarity`, `per_class_similarity` | How exemplars are sampled: uniform random, class-balanced, nearest-neighbor by embedding, or nearest-neighbor per class. The two similarity modes require precomputed embeddings (`experiment=fewshot_similarity`). |
+| `exemplar_seed`     | int                                                        | Seed for reproducible exemplar sampling.                                                                                                                                                                            |
+| `exemplar_ordering` | `ascending`, `descending`, `random`                        | Orders exemplars by similarity score (ignored for `random` selection).                                                                                                                                              |
+| `fewshot_preamble`  | `system`, `user`                                           | Whether the role/task/labels preamble goes in the system message or as the first user turn.                                                                                                                         |
+| `fewshot_response`  | `inline`, `assistant`                                      | `inline` keeps each exemplar's answer inside the same user turn (`[REQUEST n] … [RESPONSE n] …`); `assistant` splits each exemplar into a user turn plus a real `assistant` answer turn (`[DEMONSTRATION n]`).      |
 
 ### Prompt Presets
 
@@ -294,7 +322,7 @@ Then run retrieval-based few-shot inference:
 python scripts/vllm_inference.py experiment=fewshot_similarity
 ```
 
-The preset reads embeddings from `outputs/embeddings` and uses `embedding_model_name=Qwen3-VL-Embedding-2B` unless overridden. 
+The preset reads embeddings from `outputs/embeddings` and uses `embedding_model_name=Qwen3-VL-Embedding-2B` unless overridden.
 Embedding filenames are derived from the dataset name, mode, frame count, model FPS, embedding model name, and input size, for example:
 
 ```text
@@ -342,6 +370,58 @@ python scripts/train_sft.py training=full \
 
 For staged-only training, evaluating on `cmdfall` avoids leakage through the staged train split. Mixed-training runs can use the matching `*-cmdfall` evaluation groups, such as `omnifall/video/oops-cmdfall` or `combined/video/wanfall-oops-cmdfall`.
 
+### Validation Metrics and Best-Model Selection
+
+Validation is enabled whenever `training.eval_strategy != "no"` (it is `steps`
+in the `quick`, `full`, and `smoke` presets, evaluating every
+`training.eval_steps` and also once before training when
+`training.eval_on_start=true`). The validation set is loaded with `mode="val"`
+and a fixed `seed=0`, so it is deterministic regardless of `data.seed`. Each
+validation dataset is capped independently to `training.max_eval_samples_per_ds`
+samples via `stratified_sample_indices` (`src/falldet/training/eval_sampling.py`),
+which stratifies by label and guarantees at least one sample per class so rare
+classes such as `fall` and `lie_down` are never dropped. When `dataset_val`
+resolves to more than one dataset, each is evaluated separately and the Trainer
+logs per-dataset metrics under the `eval_{dataset}_{metric}` prefix.
+
+**How the metrics are computed.** Validation metrics are *teacher-forced*, not
+free-running generation. For each eval batch the model produces logits over the
+ground-truth completion; `preprocess_logits_for_metrics`
+(`src/falldet/training/metrics.py`) reduces the `(N, seq_len, vocab)` logits to
+`(N, seq_len)` next-token argmax IDs (shifted by one so a prediction aligns with
+its target) to keep CPU memory bounded. The `compute_metrics` callback then
+decodes only the unmasked completion tokens (those not set to `-100`) for both
+predictions and labels, parses each decoded string into a class label with
+`KeywordOutputParser`, and delegates to the project-wide
+`falldet.metrics.base.compute_metrics`. That produces the same metric suite used
+at inference time: `accuracy`, `balanced_accuracy`, `macro_f1`, the binary
+fall / fallen / fall∪fallen sensitivity-specificity-F1 triples, per-class
+metrics, and class-distribution / sample-count diagnostics. All metrics are
+logged to W&B (`report_to=wandb`).
+
+Note that these validation metrics are **not directly comparable** to the real
+(autoregressive) inference metrics. Because each position's argmax is
+conditioned on the ground-truth prefix, the decoded tokens can form a label that
+generation would never produce, so `KeywordOutputParser` falls back to the
+`other` class and logs `No valid label found in text. Defaulting to 'other'.`.
+These warnings are expected and far more frequent during teacher-forced
+validation than at inference time; treat the validation numbers as a proxy for
+tracking relative progress across steps, not as a substitute for the inference
+evaluation.
+
+**Best-model tracking — no automatic early stopping.** No
+`EarlyStoppingCallback` is registered, so training always runs to `max_steps`
+(or `num_train_epochs` when `max_steps <= 0`); validation does not halt a run.
+Best-model selection is driven by `metric_for_best_model` (e.g. `eval_macro_f1`,
+with `greater_is_better=true`). When `dataset_val` has multiple datasets, the
+metric key is automatically rebased onto the first dataset
+(`eval_{first_dataset}_{metric}`). The best value seen is recorded in
+`trainer.state.best_metric` and attached to the logged adapter artifact. The
+preset default is `load_best_model_at_end: false`, so the *final-step* adapter is
+what gets saved unless you opt in by setting `training.load_best_model_at_end=true`
+(which requires `save_strategy`/`eval_strategy` to agree on cadence). Checkpoints
+are written per `save_strategy`/`save_steps` and pruned to `save_total_limit`.
+
 Training outputs are written to:
 
 ```text
@@ -358,18 +438,18 @@ python scripts/vllm_inference.py \
     lora.max_rank=8
 ```
 
-## Multi-GPU Training
+### Multi-GPU Training
+
+The main fine-tuning runs were launched on 2 GPUs with the following command through the lora `run_sft_ablations.py` script (see [ablation runners](#ablation-runners))
 
 Single-node DDP with bf16:
 
 ```shell
 accelerate launch --config_file config/accelerate/ddp_bf16.yaml \
-    --num_processes 4 scripts/train_sft.py training=quick
-
-torchrun --nproc_per_node=4 scripts/train_sft.py training=quick
+    --num_processes 2 scripts/train_sft.py training=full
 ```
 
-DeepSpeed ZeRO-2 with optimizer and gradient sharding:
+Supported but not well tested: DeepSpeed ZeRO-2 with optimizer and gradient sharding:
 
 ```shell
 accelerate launch --config_file config/accelerate/deepspeed_zero2.yaml \
