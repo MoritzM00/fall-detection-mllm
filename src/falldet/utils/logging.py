@@ -95,7 +95,7 @@ def setup_logging(
         tracebacks_show_locals=False,
         show_time=False,  # No timestamps in console
         show_path=False,
-        markup=True,
+        markup=False,
         omit_repeated_times=False,
         show_level=True,  # Show log level
     )
