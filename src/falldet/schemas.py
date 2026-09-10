@@ -412,7 +412,7 @@ class PreferenceConfig(BaseConfig):
 class DPOHyperparams(TrainingHyperparams):
     """Supported TRL DPO configuration for the first video milestone."""
 
-    sft_adapter_path: str
+    sft_adapter_path: str | None = None
     beta: float = Field(0.1, gt=0.0)
     loss_type: Literal["sigmoid"] = "sigmoid"
     precompute_ref_log_probs: Literal[False] = False
@@ -424,7 +424,7 @@ class DPOHyperparams(TrainingHyperparams):
 
 
 class DPOTrainingConfig(BaseConfig):
-    """Root configuration for DPO from an existing SFT LoRA adapter."""
+    """Root configuration for DPO from pretrained Instruct or an SFT LoRA adapter."""
 
     model: ModelConfig
     data: DataConfig
@@ -432,6 +432,7 @@ class DPOTrainingConfig(BaseConfig):
     dataset: DatasetConfig
     dataset_val: DatasetConfig
     wandb: WandbConfig
+    lora: LoraTrainConfig
     preference: PreferenceConfig
     dpo: DPOHyperparams
 

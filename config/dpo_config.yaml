@@ -3,6 +3,7 @@ defaults:
   - prompt: default
   - dataset: wanfall/video/rand
   - dataset@dataset_val: wanfall/video/rand
+  - lora: train
   - dpo: smoke
   - preference: random
   - _self_

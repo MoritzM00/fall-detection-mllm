@@ -1,4 +1,8 @@
-"""Hydra-driven video DPO from an existing Qwen3-VL SFT LoRA adapter."""
+"""Hydra-driven video DPO for Qwen3-VL Instruct.
+
+With ``dpo.sft_adapter_path=null``, training starts from the pretrained Instruct
+model with a fresh LoRA. Set the path to continue from an existing SFT LoRA.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,8 @@ import hydra
 import torch
 from accelerate import PartialState
 from omegaconf import DictConfig
-from peft import LoraConfig, PeftConfig, PeftModel
+from peft import LoraConfig as PeftLoraConfig
+from peft import PeftConfig, PeftModel
 from torch.utils.data import Dataset, Subset
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from trl import DPOConfig
@@ -31,11 +36,11 @@ from falldet.utils.wandb import initialize_run_from_config, log_adapter_artifact
 logger = logging.getLogger(__name__)
 
 
-def _validate_adapter(path: Path, expected_base: str) -> LoraConfig:
+def _validate_adapter(path: Path, expected_base: str) -> PeftLoraConfig:
     if not path.is_dir():
         raise ValueError(f"SFT adapter directory does not exist: {path}")
     config = PeftConfig.from_pretrained(path)
-    if not isinstance(config, LoraConfig):
+    if not isinstance(config, PeftLoraConfig):
         raise ValueError(f"DPO supports standard LoRA adapters, got {config.peft_type}")
     if config.base_model_name_or_path != expected_base:
         raise ValueError(
@@ -66,7 +71,7 @@ def _label_counts(dataset: Dataset) -> dict[str, int]:
     return dict(Counter(label_for_index(dataset, index) for index in range(length)))
 
 
-def _adapter_rank(config: LoraConfig) -> int:
+def _adapter_rank(config: PeftLoraConfig) -> int:
     ranks = [config.r, *(config.rank_pattern or {}).values()]
     return max(int(rank) for rank in ranks)
 
@@ -83,9 +88,15 @@ def main(cfg: DictConfig) -> None:
     config: DPOTrainingConfig = from_dictconfig_dpo(cfg)
     logger.info(config.model_dump_json(indent=2))
 
-    adapter_path = Path(config.dpo.sft_adapter_path).expanduser().resolve()
-    adapter_config = _validate_adapter(adapter_path, config.model.path)
-    rank = _adapter_rank(adapter_config)
+    adapter_path = (
+        Path(config.dpo.sft_adapter_path).expanduser().resolve()
+        if config.dpo.sft_adapter_path is not None
+        else None
+    )
+    adapter_config = (
+        _validate_adapter(adapter_path, config.model.path) if adapter_path is not None else None
+    )
+    rank = _adapter_rank(adapter_config) if adapter_config is not None else config.lora.r
 
     run = initialize_run_from_config(config)
     run_name = run.name
@@ -102,7 +113,20 @@ def main(cfg: DictConfig) -> None:
         model_kwargs["attn_implementation"] = config.dpo.attn_implementation
     base_model = AutoModelForImageTextToText.from_pretrained(config.model.path, **model_kwargs)
     base_model.config.use_cache = False
-    model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True)
+    if adapter_path is not None:
+        model = PeftModel.from_pretrained(base_model, adapter_path, is_trainable=True)
+        peft_config = None
+        initialization_source = "sft_adapter"
+    else:
+        model = base_model
+        peft_config = PeftLoraConfig(
+            r=config.lora.r,
+            lora_alpha=config.lora.lora_alpha,
+            lora_dropout=config.lora.lora_dropout,
+            bias=config.lora.bias,
+            target_modules=list(config.lora.target_modules),
+        )
+        initialization_source = "pretrained_instruct"
 
     prompt_config = config.prompt.model_copy(
         update={"labels": list(label2idx), "output_format": "text", "num_shots": 0, "cot": False}
@@ -233,7 +257,7 @@ def main(cfg: DictConfig) -> None:
     trainer = VideoDPOTrainer(
         model=model,
         ref_model=None,
-        peft_config=None,
+        peft_config=peft_config,
         args=args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
@@ -252,7 +276,8 @@ def main(cfg: DictConfig) -> None:
     if state.is_main_process:
         run.summary.update(
             {
-                "parent_sft_adapter": str(adapter_path),
+                "initialization_source": initialization_source,
+                "parent_sft_adapter": str(adapter_path) if adapter_path is not None else None,
                 "lora_rank": rank,
                 "preference_seed": config.preference.seed,
                 "train_pairs": len(train_dataset),
@@ -281,7 +306,8 @@ def main(cfg: DictConfig) -> None:
         if state.is_main_process:
             policy.save_pretrained(adapter_dir, selected_adapters=["default"])
             metadata = {
-                "parent_sft_adapter": str(adapter_path),
+                "initialization_source": initialization_source,
+                "parent_sft_adapter": str(adapter_path) if adapter_path is not None else None,
                 "base_model": config.model.path,
                 "selected_checkpoint": selected_checkpoint,
                 "selected_step": selected_step,
