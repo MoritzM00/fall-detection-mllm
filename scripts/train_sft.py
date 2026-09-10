@@ -49,7 +49,7 @@ from falldet.data.video_dataset_factory import get_video_datasets
 from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.training.collator import PromptMaskedSFTCollator
-from falldet.training.dataset import SFTConversationDataset
+from falldet.training.dataset import SFTConversationDataset, as_lazy_hf_dataset
 from falldet.training.eval_sampling import stratified_sample_indices
 from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
@@ -117,13 +117,13 @@ def main(cfg: DictConfig) -> None:
             seed=config.data.seed,
         )
     logger.info(f"Base train dataset: {len(base)} samples")
-    train_ds = SFTConversationDataset(base, conv_builder)
+    train_ds = as_lazy_hf_dataset(SFTConversationDataset(base, conv_builder))
     collator = PromptMaskedSFTCollator(
         processor,
         needs_video_metadata=config.model.needs_video_metadata,
     )
 
-    eval_ds: SFTConversationDataset | dict[str, SFTConversationDataset] | None = None
+    eval_ds = None
     eval_total = 0
     metric_for_best_model = config.training.metric_for_best_model
     if config.training.eval_strategy != "no":
@@ -149,7 +149,7 @@ def main(cfg: DictConfig) -> None:
                 if config.training.max_eval_samples_per_ds is not None:
                     n = min(config.training.max_eval_samples_per_ds, len(ds))
                     ds = Subset(ds, stratified_sample_indices(ds, n, seed=0))
-                eval_ds[name] = SFTConversationDataset(ds, conv_builder)
+                eval_ds[name] = as_lazy_hf_dataset(SFTConversationDataset(ds, conv_builder))
                 eval_total += len(ds)
                 logger.info(f"  Val '{name}': {len(ds)} samples")
             # Trainer prefixes dict-eval metrics as eval_{key}_{metric}; update accordingly.
@@ -164,7 +164,7 @@ def main(cfg: DictConfig) -> None:
                 n = min(config.training.max_eval_samples_per_ds, len(val_base))
                 val_base = Subset(val_base, stratified_sample_indices(val_base, n, seed=0))
                 logger.info(f"Capped val dataset to {n} samples (stratified by label)")
-            eval_ds = SFTConversationDataset(val_base, conv_builder)
+            eval_ds = as_lazy_hf_dataset(SFTConversationDataset(val_base, conv_builder))
             eval_total = len(eval_ds)
 
     peft_lora = PeftLoraConfig(
