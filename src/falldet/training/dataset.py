@@ -17,6 +17,16 @@ from datasets import Dataset as HFDataset
 from torch.utils.data import Dataset
 
 from falldet.inference.conversation import ConversationBuilder
+from falldet.training.preferences import NegativeSelector, canonicalize_label, label_for_index
+
+
+def _assistant_answer(label: str) -> list[dict]:
+    return [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": f"The best answer is: {label}"}],
+        }
+    ]
 
 
 class SFTConversationDataset(Dataset):
@@ -30,16 +40,49 @@ class SFTConversationDataset(Dataset):
     def __getitem__(self, index: int) -> dict:
         sample = self.base[index]
         conv_data = self.conv.build(sample["video"])
-        completion = [
-            {
-                "role": "assistant",
-                "content": [{"type": "text", "text": f"The best answer is: {sample['label_str']}"}],
-            }
-        ]
+        completion = _assistant_answer(canonicalize_label(sample["label_str"]))
         return {
             "prompt": list(conv_data.messages),
             "completion": completion,
             "video_metadata": [v.metadata for v in conv_data.videos],
+        }
+
+
+class DPOConversationDataset(Dataset):
+    """Build one chosen/rejected label pair for each base video row."""
+
+    def __init__(
+        self,
+        base: Dataset,
+        conversation_builder: ConversationBuilder,
+        negative_selector: NegativeSelector,
+    ):
+        self.base = base
+        self.conv = conversation_builder
+        self.negative_selector = negative_selector
+
+    def __len__(self) -> int:
+        return len(self.base)  # ty: ignore[invalid-argument-type]
+
+    def __getitem__(self, index: int) -> dict:
+        expected_positive = label_for_index(self.base, index)
+        sample = self.base[index]
+        positive = canonicalize_label(sample["label_str"])
+        if positive != expected_positive:
+            raise RuntimeError(
+                "Video dataset returned a replacement row after a decode failure; "
+                "DPO requires stable row identity"
+            )
+        negative = self.negative_selector.select(index, positive)
+        if negative == positive:
+            raise ValueError("Chosen and rejected labels must differ")
+
+        conv_data = self.conv.build(sample["video"])
+        return {
+            "prompt": list(conv_data.messages),
+            "chosen": _assistant_answer(positive),
+            "rejected": _assistant_answer(negative),
+            "video_metadata": [video.metadata for video in conv_data.videos],
         }
 
 

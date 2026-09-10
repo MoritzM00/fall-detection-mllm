@@ -404,6 +404,81 @@ class TrainingConfig(BaseConfig):
     dataset_test: DatasetConfig | None = None
 
 
+class PreferenceConfig(BaseConfig):
+    strategy: Literal["random"] = "random"
+    seed: int = Field(0, ge=0)
+
+
+class DPOHyperparams(TrainingHyperparams):
+    """Supported TRL DPO configuration for the first video milestone."""
+
+    sft_adapter_path: str
+    beta: float = Field(0.1, gt=0.0)
+    loss_type: Literal["sigmoid"] = "sigmoid"
+    precompute_ref_log_probs: Literal[False] = False
+    padding_free: Literal[False] = False
+    remove_unused_columns: Literal[False] = False
+    use_liger_kernel: Literal[False] = False
+    max_length: Literal[None] = None
+    resume_from_checkpoint: Literal[None] = None
+
+
+class DPOTrainingConfig(BaseConfig):
+    """Root configuration for DPO from an existing SFT LoRA adapter."""
+
+    model: ModelConfig
+    data: DataConfig
+    prompt: PromptConfig
+    dataset: DatasetConfig
+    dataset_val: DatasetConfig
+    wandb: WandbConfig
+    preference: PreferenceConfig
+    dpo: DPOHyperparams
+
+    model_fps: float = 7.5
+    num_frames: int = 16
+    num_workers: int = 8
+    prefetch_factor: int = 2
+    persistent_workers: bool = True
+    pin_memory: bool = True
+    output_dir: str = "outputs/dpo"
+    dataset_train: DatasetConfig | None = None
+    dataset_test: DatasetConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_first_milestone(self) -> "DPOTrainingConfig":
+        if self.model.family.lower() != "qwen" or self.model.variant != "Instruct":
+            raise ValueError("DPO currently supports only Qwen3-VL Instruct")
+        if self.prompt.num_shots != 0 or self.prompt.cot:
+            raise ValueError("DPO currently supports only zero-shot prompts without CoT")
+        if len(self.dataset.video_datasets) != 1:
+            raise ValueError("DPO requires exactly one training dataset")
+        if len(self.dataset_val.video_datasets) != 1:
+            raise ValueError("DPO requires exactly one validation dataset")
+        if self.dpo.eval_strategy == "no":
+            raise ValueError("DPO requires validation to select the policy checkpoint")
+        if self.dpo.save_strategy != self.dpo.eval_strategy:
+            raise ValueError("DPO save and evaluation strategies must match")
+        if self.dpo.save_strategy == "steps" and self.dpo.save_steps != self.dpo.eval_steps:
+            raise ValueError("DPO save_steps and eval_steps must match")
+        if not self.dpo.load_best_model_at_end:
+            raise ValueError("DPO requires load_best_model_at_end=true")
+        if self.dpo.metric_for_best_model not in {"eval_loss", "loss"}:
+            raise ValueError("DPO selects checkpoints using eval_loss")
+        if self.dpo.greater_is_better is not False:
+            raise ValueError("DPO eval_loss selection requires greater_is_better=false")
+        return self
+
+
+def from_dictconfig_dpo(cfg: DictConfig) -> DPOTrainingConfig:
+    """Convert a composed Hydra DPO config to its validated schema."""
+
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    assert isinstance(raw, dict)
+    raw.pop("hydra", None)
+    return DPOTrainingConfig.model_validate(raw)
+
+
 def from_dictconfig_training(cfg: DictConfig) -> TrainingConfig:
     """Convert an OmegaConf DictConfig to a validated TrainingConfig."""
     raw = OmegaConf.to_container(cfg, resolve=True)

@@ -1,0 +1,40 @@
+defaults:
+  - model: qwenvl
+  - prompt: default
+  - dataset: wanfall/video/rand
+  - dataset@dataset_val: wanfall/video/rand
+  - dpo: smoke
+  - preference: random
+  - _self_
+
+model:
+  params: 8B
+
+data:
+  seed: 0
+  split: cs
+  mode: train
+  size: 448
+  max_size: null
+  cache_dir: null
+  cache_read_only: true
+  cache_in_memory: false
+
+model_fps: 7.5
+num_frames: 16
+num_workers: 8
+prefetch_factor: 2
+persistent_workers: true
+pin_memory: true
+output_dir: outputs/dpo
+
+wandb:
+  mode: online
+  project: falldet-mllm-finetune
+  name: null
+  tags: [dpo]
+  log_model: end
+
+hydra:
+  job:
+    chdir: false

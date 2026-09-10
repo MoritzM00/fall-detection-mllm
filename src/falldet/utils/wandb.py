@@ -13,7 +13,7 @@ import wandb
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
-from falldet.schemas import InferenceConfig, TrainingConfig
+from falldet.schemas import DPOTrainingConfig, InferenceConfig, TrainingConfig
 from falldet.utils.predictions import (
     load_predictions_jsonl,
     prediction_jsonl_path,
@@ -23,7 +23,7 @@ from falldet.utils.predictions import (
 logger = logging.getLogger(__name__)
 
 
-def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
+def initialize_run_from_config(config: InferenceConfig | TrainingConfig | DPOTrainingConfig):
     """Initialize a W&B run, rank-aware under distributed launchers.
 
     Under `accelerate launch` / `torchrun` only the main process creates a real
@@ -35,6 +35,8 @@ def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
     base_name, tags = create_name_and_tags_from_config(config)
     if isinstance(config, TrainingConfig):
         tags = list(set(tags + ["training", f"lora_r{config.lora.r}"]))
+    elif isinstance(config, DPOTrainingConfig):
+        tags = list(set(tags + ["training", "dpo"]))
 
     if state.is_main_process:
         run_id = wandb.util.generate_id()
@@ -47,7 +49,7 @@ def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
         dist.broadcast_object_list(payload, src=0)
         run_id, run_name = payload[0], payload[1]
 
-    if isinstance(config, TrainingConfig):
+    if isinstance(config, (TrainingConfig, DPOTrainingConfig)):
         # Ensure TRL's own wandb integration attaches to the same run on rank 0.
         os.environ["WANDB_RUN_ID"] = run_id
         os.environ["WANDB_PROJECT"] = config.wandb.project
@@ -80,7 +82,7 @@ def initialize_run_from_config(config: InferenceConfig | TrainingConfig):
 
 
 def create_name_and_tags_from_config(
-    config: InferenceConfig | TrainingConfig,
+    config: InferenceConfig | TrainingConfig | DPOTrainingConfig,
 ) -> tuple[str, list[str]]:
     """Create a W&B base run name and tags based on the configuration.
 
