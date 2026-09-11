@@ -405,8 +405,22 @@ class TrainingConfig(BaseConfig):
 
 
 class PreferenceConfig(BaseConfig):
-    strategy: Literal["random"] = "random"
+    strategy: Literal["random", "similarity"] = "random"
     seed: int = Field(0, ge=0)
+    train_embeddings_path: str | None = None
+    validation_embeddings_path: str | None = None
+    chunk_size: int = Field(256, gt=0)
+
+    @model_validator(mode="after")
+    def validate_embedding_paths(self) -> "PreferenceConfig":
+        if self.strategy == "similarity" and (
+            self.train_embeddings_path is None or self.validation_embeddings_path is None
+        ):
+            raise ValueError(
+                "Similarity preferences require train_embeddings_path and "
+                "validation_embeddings_path"
+            )
+        return self
 
 
 class DPOHyperparams(TrainingHyperparams):

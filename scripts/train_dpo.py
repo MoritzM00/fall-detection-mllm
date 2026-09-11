@@ -23,13 +23,21 @@ from trl import DPOConfig
 
 from falldet.data.video_dataset import label2idx
 from falldet.data.video_dataset_factory import get_video_datasets
+from falldet.embeddings import load_embeddings
 from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import DPOTrainingConfig, from_dictconfig_dpo
 from falldet.training.collator import VideoPreferenceCollator
 from falldet.training.dataset import DPOConversationDataset, as_lazy_hf_dataset
 from falldet.training.dpo_trainer import VideoDPOTrainer
 from falldet.training.eval_sampling import stratified_sample_indices
-from falldet.training.preferences import RandomNegativeSelector, label_for_index, observed_labels
+from falldet.training.preferences import (
+    EmbeddingSimilarityNegativeSelector,
+    NegativeSelector,
+    RandomNegativeSelector,
+    align_embeddings_to_dataset,
+    label_for_index,
+    observed_labels,
+)
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
 from falldet.utils.wandb import initialize_run_from_config, log_adapter_artifact
 
@@ -74,6 +82,111 @@ def _label_counts(dataset: Dataset) -> dict[str, int]:
 def _adapter_rank(config: PeftLoraConfig) -> int:
     ranks = [config.r, *(config.rank_pattern or {}).values()]
     return max(int(rank) for rank in ranks)
+
+
+def _labels_for_rows(dataset: Dataset) -> tuple[str, ...]:
+    length = len(dataset)  # ty: ignore[invalid-argument-type]
+    return tuple(label_for_index(dataset, index) for index in range(length))
+
+
+def _similarity_summary(
+    train_selector: EmbeddingSimilarityNegativeSelector,
+    validation_selector: EmbeddingSimilarityNegativeSelector,
+    train_path: Path,
+    validation_path: Path,
+) -> dict:
+    return {
+        "preference_strategy": "similarity",
+        "train_embeddings_path": str(train_path),
+        "validation_embeddings_path": str(validation_path),
+        "train_negative_similarity_mean": sum(train_selector.scores) / len(train_selector.scores),
+        "validation_negative_similarity_mean": sum(validation_selector.scores)
+        / len(validation_selector.scores),
+        "train_negative_similarity_min": min(train_selector.scores),
+        "train_negative_similarity_max": max(train_selector.scores),
+        "validation_negative_similarity_min": min(validation_selector.scores),
+        "validation_negative_similarity_max": max(validation_selector.scores),
+    }
+
+
+def _write_similarity_manifest(
+    output_dir: Path,
+    train_selector: EmbeddingSimilarityNegativeSelector,
+    validation_selector: EmbeddingSimilarityNegativeSelector,
+) -> Path:
+    path = output_dir / "preference_mining.jsonl"
+    with path.open("w") as file:
+        for split, selector in (
+            ("train", train_selector),
+            ("validation", validation_selector),
+        ):
+            for query_index, (positive, negative, corpus_index, score) in enumerate(
+                zip(
+                    selector.query_labels,
+                    selector.negative_labels,
+                    selector.corpus_indices,
+                    selector.scores,
+                    strict=True,
+                )
+            ):
+                record = {
+                    "split": split,
+                    "query_index": query_index,
+                    "positive_label": positive,
+                    "corpus_index": corpus_index,
+                    "negative_label": negative,
+                    "cosine_similarity": score,
+                }
+                file.write(json.dumps(record) + "\n")
+    return path
+
+
+def _build_negative_selectors(
+    config: DPOTrainingConfig,
+    train_dataset: Dataset,
+    validation_dataset: Dataset,
+) -> tuple[NegativeSelector, NegativeSelector, dict]:
+    train_labels = _labels_for_rows(train_dataset)
+    validation_labels = _labels_for_rows(validation_dataset)
+    label_universe = tuple(sorted(set(train_labels), key=label2idx.__getitem__))
+
+    if config.preference.strategy == "random":
+        return (
+            RandomNegativeSelector(label_universe, seed=config.preference.seed),
+            RandomNegativeSelector(label_universe, seed=config.preference.seed),
+            {"preference_strategy": "random"},
+        )
+
+    assert config.preference.train_embeddings_path is not None
+    assert config.preference.validation_embeddings_path is not None
+    train_path = Path(config.preference.train_embeddings_path).expanduser().resolve()
+    validation_path = Path(config.preference.validation_embeddings_path).expanduser().resolve()
+    train_embeddings, train_samples = load_embeddings(train_path)
+    validation_embeddings, validation_samples = load_embeddings(validation_path)
+    train_embeddings = align_embeddings_to_dataset(train_dataset, train_embeddings, train_samples)
+    validation_embeddings = align_embeddings_to_dataset(
+        validation_dataset, validation_embeddings, validation_samples
+    )
+
+    train_selector = EmbeddingSimilarityNegativeSelector(
+        query_embeddings=train_embeddings,
+        corpus_embeddings=train_embeddings,
+        query_labels=train_labels,
+        corpus_labels=train_labels,
+        chunk_size=config.preference.chunk_size,
+    )
+    validation_selector = EmbeddingSimilarityNegativeSelector(
+        query_embeddings=validation_embeddings,
+        corpus_embeddings=train_embeddings,
+        query_labels=validation_labels,
+        corpus_labels=train_labels,
+        chunk_size=config.preference.chunk_size,
+    )
+    return (
+        train_selector,
+        validation_selector,
+        _similarity_summary(train_selector, validation_selector, train_path, validation_path),
+    )
 
 
 @hydra.main(config_path="../config", config_name="dpo_config", version_base=None)
@@ -179,8 +292,18 @@ def main(cfg: DictConfig) -> None:
             f"Validation labels absent from the training label universe: {sorted(missing_labels)}"
         )
 
-    train_selector = RandomNegativeSelector(train_labels, seed=config.preference.seed)
-    validation_selector = RandomNegativeSelector(train_labels, seed=config.preference.seed)
+    train_selector, validation_selector, preference_summary = _build_negative_selectors(
+        config, train_base, val_base
+    )
+    if (
+        state.is_main_process
+        and isinstance(train_selector, EmbeddingSimilarityNegativeSelector)
+        and isinstance(validation_selector, EmbeddingSimilarityNegativeSelector)
+    ):
+        mining_manifest = _write_similarity_manifest(
+            output_dir, train_selector, validation_selector
+        )
+        preference_summary["preference_mining_manifest"] = str(mining_manifest)
     train_dataset = as_lazy_hf_dataset(
         DPOConversationDataset(train_base, conversation_builder, train_selector)
     )
@@ -280,6 +403,7 @@ def main(cfg: DictConfig) -> None:
                 "parent_sft_adapter": str(adapter_path) if adapter_path is not None else None,
                 "lora_rank": rank,
                 "preference_seed": config.preference.seed,
+                **preference_summary,
                 "train_pairs": len(train_dataset),
                 "validation_pairs": len(eval_dataset),
                 "train_label_distribution": _label_counts(train_base),
@@ -313,6 +437,7 @@ def main(cfg: DictConfig) -> None:
                 "selected_step": selected_step,
                 "lora_rank": rank,
                 "preference_seed": config.preference.seed,
+                **preference_summary,
             }
             (adapter_dir / "dpo_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
             run.summary.update(metadata | {"final_adapter": str(adapter_dir)})
