@@ -434,7 +434,7 @@ class DPOHyperparams(TrainingHyperparams):
     remove_unused_columns: Literal[False] = False
     use_liger_kernel: Literal[False] = False
     max_length: Literal[None] = None
-    resume_from_checkpoint: Literal[None] = None
+    resume_from_checkpoint: str | None = None
 
 
 class DPOTrainingConfig(BaseConfig):

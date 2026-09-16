@@ -39,3 +39,16 @@ def test_similarity_preference_config_requires_and_accepts_embedding_paths():
 def test_similarity_preference_rejects_missing_embedding_paths():
     with pytest.raises(ValueError, match="require train_embeddings_path"):
         PreferenceConfig(strategy="similarity")
+
+
+def test_dpo_config_accepts_resume_checkpoint_path():
+    config_dir = str(Path(__file__).parents[1] / "config")
+    checkpoint = "/tmp/dpo/checkpoint-102"
+    with initialize_config_dir(config_dir=config_dir, version_base=None):
+        cfg = compose(
+            config_name="dpo_config",
+            overrides=[f"dpo.resume_from_checkpoint={checkpoint}"],
+        )
+
+    config = from_dictconfig_dpo(cfg)
+    assert config.dpo.resume_from_checkpoint == checkpoint

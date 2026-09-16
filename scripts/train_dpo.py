@@ -401,6 +401,7 @@ def main(cfg: DictConfig) -> None:
             {
                 "initialization_source": initialization_source,
                 "parent_sft_adapter": str(adapter_path) if adapter_path is not None else None,
+                "resume_from_checkpoint": config.dpo.resume_from_checkpoint,
                 "lora_rank": rank,
                 "preference_seed": config.preference.seed,
                 **preference_summary,
@@ -414,7 +415,7 @@ def main(cfg: DictConfig) -> None:
 
     training_completed = False
     try:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=config.dpo.resume_from_checkpoint)
         training_completed = True
     except KeyboardInterrupt:
         logger.warning("DPO interrupted; no final adapter will be exported")
@@ -432,6 +433,7 @@ def main(cfg: DictConfig) -> None:
             metadata = {
                 "initialization_source": initialization_source,
                 "parent_sft_adapter": str(adapter_path) if adapter_path is not None else None,
+                "resume_from_checkpoint": config.dpo.resume_from_checkpoint,
                 "base_model": config.model.path,
                 "selected_checkpoint": selected_checkpoint,
                 "selected_step": selected_step,
