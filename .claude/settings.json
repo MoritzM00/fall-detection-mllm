@@ -13,20 +13,6 @@
     ]
   },
   "model": "opusplan",
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ruff check --fix && ruff format",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
     "pyright-lsp@claude-plugins-official": true,
     "huggingface-skills@claude-plugins-official": true
