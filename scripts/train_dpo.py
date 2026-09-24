@@ -148,7 +148,7 @@ def _build_negative_selectors(
 ) -> tuple[NegativeSelector, NegativeSelector, dict]:
     train_labels = _labels_for_rows(train_dataset)
     validation_labels = _labels_for_rows(validation_dataset)
-    label_universe = tuple(sorted(set(train_labels), key=label2idx.__getitem__))
+    label_universe = tuple(label2idx)
 
     if config.preference.strategy == "random":
         return (
@@ -287,7 +287,7 @@ def main(cfg: DictConfig) -> None:
     train_labels = observed_labels(train_base)
     validation_labels = set(observed_labels(val_base))
     missing_labels = validation_labels - set(train_labels)
-    if missing_labels:
+    if missing_labels and config.preference.strategy == "similarity":
         raise ValueError(
             f"Validation labels absent from the training label universe: {sorted(missing_labels)}"
         )
@@ -369,7 +369,7 @@ def main(cfg: DictConfig) -> None:
         dataloader_persistent_workers=config.persistent_workers and config.num_workers > 0,
         dataloader_prefetch_factor=config.prefetch_factor if config.num_workers > 0 else None,
         precompute_ref_log_probs=False,
-        use_liger_kernel=False,
+        use_liger_kernel=config.dpo.use_liger_kernel,
         padding_free=False,
         optim=config.dpo.optim,
         adam_beta1=config.dpo.adam_beta1,

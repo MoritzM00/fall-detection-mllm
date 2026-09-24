@@ -432,7 +432,7 @@ class DPOHyperparams(TrainingHyperparams):
     precompute_ref_log_probs: Literal[False] = False
     padding_free: Literal[False] = False
     remove_unused_columns: Literal[False] = False
-    use_liger_kernel: Literal[False] = False
+    use_liger_kernel: bool = False
     max_length: Literal[None] = None
     resume_from_checkpoint: str | None = None
 
