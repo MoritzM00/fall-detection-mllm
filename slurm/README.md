@@ -33,11 +33,14 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 
 | Location | Path | Properties | Suggested use |
 | --- | --- | --- | --- |
-| `$HOME` | `/home/ka_anthropomatik/ka_dt0662` | 50 GB, 2M inodes | code, uv venv (~10–15 GB) |
-| `$PROJECT` | `/hfs2/data/project/hk-project-p0029156/ka_dt0662` | permanent, backed up, quota; one private subdir per member of the project group | results / software — **check with supervisor** |
+| `$HOME` | `/home/ka_anthropomatik/ka_dt0662` | 50 GB, 2M inodes | dotfiles, CLI tools |
+| `$PROJECT` | `/hfs2/data/project/hk-project-p0029156/ka_dt0662` | permanent, backed up, 10 TB shared quota; one private subdir per member of the project group | repo + uv venv, `.cache/uv`, `.cache/huggingface` (HF_HOME) |
 | Workspace | `ws_allocate <name> <days>` | no backup, 60 days, 3× extendable | datasets, HF cache, tensor cache |
 | `$TMPDIR` (job) | node-local NVMe | fast, wiped after job | stage dataset / tensor cache per job |
 
+- Repo, venv and caches live together in `$PROJECT`: `$HOME` and `$PROJECT` are the same GPFS
+  filesystem but different filesets, so hardlinks (uv cache → `.venv`) fail across them and uv
+  would copy every file. `UV_CACHE_DIR` / `HF_HOME` are set in `~/.bashrc` and `~/.zshrc`.
 - No workspaces exist yet.
 - Shared `/hfs2/data/dataset/datasets` only holds ERA5 → OmniFall / WanFall must be copied over.
 
@@ -64,8 +67,8 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
      `torch.cuda.device_count()`, which respects the allocation — no code change needed.
 3. **Ablation runners** (`scripts/ablations/*.py`) run sweeps sequentially via `subprocess`;
    convert to one job per run, e.g. a Slurm job array fed from the `--dry-run` command list.
-4. **Paths**: `outputs/` and `logs/` are repo-relative (repo lives in `$HOME`, 50 GB) → symlink or
-   redirect to workspace / `$PROJECT`. Point `HF_HOME` and dataset roots at the chosen data location.
+4. **Paths**: `outputs/` and `logs/` are repo-relative; with the repo in `$PROJECT` they no longer
+   hit the `$HOME` quota. `HF_HOME` → `$PROJECT/.cache/huggingface`; point dataset roots at the chosen data location.
    Transfer datasets via `rsync`.
 5. **Minor**: `curl` deny in `.claude/settings.json` blocks installers/connectivity checks;
    LaTeX scripts write to `~/thesis-overleaf/...` (irrelevant on cluster).
