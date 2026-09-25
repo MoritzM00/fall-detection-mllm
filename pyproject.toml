@@ -23,7 +23,7 @@ packages = ["src/falldet"]
 [tool.ruff]
 line-length = 100
 extend-exclude = ["src/falldet/__init__.py"]
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint.extend-per-file-ignores]
 # Also ignore `E402` in all `__init__.py` files.
@@ -78,7 +78,7 @@ exclude = [
 ]
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.12"
 
 [tool.ty.analysis]
 # Allow unresolved imports for third-party packages during initial setup
