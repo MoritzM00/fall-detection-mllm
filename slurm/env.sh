@@ -12,8 +12,9 @@ if ! type module >/dev/null 2>&1 && [ -n "${LMOD_PKG:-}" ]; then
     fi
 fi
 
-# Empty when a job runs with --export=NONE
-if [ -z "${MODULEPATH:-}" ]; then
+# Empty when a job runs with --export=NONE; some nodes (e.g. dev-gpu-h100)
+# report CLUSTER=hk and get a stale HoreKa 1 MODULEPATH from the system profile
+if [[ "${MODULEPATH:-}" != *"/software/easybuild/"* ]]; then
     _arch="$(uname -m)"
     export MODULEPATH="/software/easybuild/$_arch/modules/all/:/software/commercial/$_arch/modules/:/software/community/$_arch/modules/"
     unset _arch

@@ -76,7 +76,7 @@ conda activate cu130_vllm20_py312
 make install
 ```
 
-At the time of writing, `make install` installs `vllm==0.20.1` with the `cu130` torch backend and `flash-attn==2.8.3`. If you need a different CUDA stack, adjust the install commands in the `Makefile` or install vLLM from source.
+At the time of writing, `make install` installs `vllm==0.20.2` with the `cu130` torch backend and `flash-attn==2.8.3`. If you need a different CUDA stack, adjust the install commands in the `Makefile` or install vLLM from source.
 
 Useful development commands:
 

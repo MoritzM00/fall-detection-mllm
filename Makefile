@@ -33,7 +33,7 @@ env:
 # Install all pip dependencies (must be run in active conda env)
 install:
 	@echo "Installing vLLM..."
-	uv pip install vllm==0.20.1 --torch-backend=cu130
+	uv pip install vllm==0.20.2 --torch-backend=cu130
 	@echo "Installing flash-attn (this may take a while)..."
 	MAX_JOBS=$(MAX_JOBS) uv pip install flash-attn==2.8.3 --no-build-isolation
 	@echo "Installing requirements..."
@@ -46,7 +46,7 @@ install:
 
 # HoreKa 2: Lmod modules (CUDA 12.9) + uv venv instead of conda. See slurm/README.md.
 HK_ENV := . slurm/env.sh
-VLLM_CU129_WHEEL := https://github.com/vllm-project/vllm/releases/download/v0.20.1/vllm-0.20.1%2Bcu129-cp38-abi3-manylinux_2_31_x86_64.whl
+VLLM_CU129_WHEEL := https://github.com/vllm-project/vllm/releases/download/v0.20.2/vllm-0.20.2%2Bcu129-cp38-abi3-manylinux_2_31_x86_64.whl
 
 env-hk:
 	$(HK_ENV) && uv venv --python "$$(command -v python3)" .venv
@@ -59,9 +59,10 @@ install-hk:
 
 # Only needed for SFT (attn_implementation=flash_attention_2); vLLM ships its own kernels.
 # No prebuilt wheel for torch 2.11, so this compiles with nvcc: run it in a job with enough CPUs.
+# H100 only (sm_90); uv caches the built wheel, so later reinstalls skip the compile.
 flash-attn-hk:
 	$(HK_ENV) && uv pip install ninja psutil packaging
-	$(HK_ENV) && MAX_JOBS=$${SLURM_CPUS_PER_TASK:-$(MAX_JOBS)} uv pip install flash-attn==2.8.3 --no-build-isolation
+	$(HK_ENV) && FLASH_ATTN_CUDA_ARCHS=90 MAX_JOBS=$${SLURM_CPUS_PER_TASK:-$(MAX_JOBS)} uv pip install flash-attn==2.8.3 --no-build-isolation
 
 # Run tests
 test:
