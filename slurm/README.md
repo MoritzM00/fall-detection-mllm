@@ -50,7 +50,7 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 2. ~~**NVIDIA driver version**~~ — resolved 2026-09-25 on `dev-gpu-h100` (hkn0901): driver 595.71.05,
    CUDA 13.2 → `cu130` wheels would also work; current env (torch 2.11.0+cu129) runs fine.
 3. ~~**Internet access from compute nodes**~~ — resolved 2026-09-25: huggingface.co, pypi.org and
-   api.wandb.ai are reachable from `dev-gpu-h100`. `slurm/smoke_gpu.sbatch` passes (torch CUDA + vLLM
+   api.wandb.ai are reachable from `dev-gpu-h100`. A GPU smoke test passed (torch CUDA + vLLM
    generate with Qwen2.5-0.5B).
 4. **`dev-gpu-h100` nodes report `CLUSTER=hk`**, so the system profile sets a stale HoreKa 1
    `MODULEPATH`; `env.sh` now overrides it whenever `/software/easybuild/` is missing.
