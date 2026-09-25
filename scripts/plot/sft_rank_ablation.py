@@ -18,8 +18,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 import wandb
+
 from falldet.plot.base import compute_publication_figsize, set_publication_rc_defaults
 from falldet.plot.metrics import COLORS
 

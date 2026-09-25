@@ -3,7 +3,6 @@
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TypeAlias
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ from falldet.metrics.base import compute_metrics
 
 logger = logging.getLogger(__name__)
 
-LabelSequence: TypeAlias = list[str] | list[int] | np.ndarray
+type LabelSequence = list[str] | list[int] | np.ndarray
 
 COLORS: dict[str, str] = {
     "primary": "#0173B2",

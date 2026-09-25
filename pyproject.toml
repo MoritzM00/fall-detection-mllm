@@ -50,6 +50,10 @@ extend-ignore = [
     "SIM108",   # dont always prefer ternary operator
 ]
 
+[tool.ruff.lint.isort]
+# A local wandb/ run directory would otherwise make ruff treat wandb as first-party
+known-third-party = ["wandb"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 

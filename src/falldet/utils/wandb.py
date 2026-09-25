@@ -7,9 +7,9 @@ from typing import Any
 import numpy as np
 import torch
 import torch.distributed as dist
+import wandb
 from accelerate import PartialState
 
-import wandb
 from falldet.config import resolve_model_name_from_config
 from falldet.data.dataset import GenericVideoDataset
 from falldet.data.video_dataset import label2idx
