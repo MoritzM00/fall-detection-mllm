@@ -38,9 +38,10 @@ export UV_PYTHON_DOWNLOADS=never
 export HF_HOME="$PROJECT/.cache/huggingface"
 export VLLM_CONFIGURE_LOGGING=0
 
-# TODO: set once the data location is decided (see slurm/README.md)
-# export OMNIFALL_ROOT=...
-# export WANFALL_ROOT=...
+# Datasets live on the LSDF, which is only mounted in jobs with --constraint=LSDF
+export LSDF="${LSDF:-/lsdf/kit/anthropomatik/projects/cvhci}"
+export OMNIFALL_ROOT="$LSDF/data/activity/fall_detection/cvhci_fall"
+export WANFALL_ROOT="$LSDF/data/activity/WanFall"
 
 if [ -f "$FALLDET_REPO/.venv/bin/activate" ]; then
     . "$FALLDET_REPO/.venv/bin/activate"

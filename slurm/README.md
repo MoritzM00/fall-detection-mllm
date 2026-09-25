@@ -42,11 +42,17 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
   filesystem but different filesets, so hardlinks (uv cache → `.venv`) fail across them and uv
   would copy every file. `UV_CACHE_DIR` / `HF_HOME` are set in `~/.bashrc` and `~/.zshrc`.
 - No workspaces exist yet.
-- Shared `/hfs2/data/dataset/datasets` only holds ERA5 → OmniFall / WanFall must be copied over.
+- **Datasets stay on the LSDF** (`/lsdf` → `/gfse/data/LSDF/lsdf01/lsdfos`). It is mounted by the
+  Slurm prolog **only for jobs submitted with `--constraint=LSDF`** (`-C LSDF`); all hk2 CPU, agent
+  and GPU nodes have the feature. The cvhci project dir is `/lsdf/kit/anthropomatik/projects/cvhci`,
+  exported as `$LSDF` in `~/.bashrc` / `~/.zshrc` (on the cvhci cluster set `LSDF=/lsdf`, so paths
+  written as `$LSDF/...` work on both systems). `env.sh` sets
+  `OMNIFALL_ROOT=$LSDF/data/activity/fall_detection/cvhci_fall` and `WANFALL_ROOT=$LSDF/data/activity/WanFall`.
+- The LSDF (`/gfse/data/LSDF/lsdf01`) is mounted in the agent session as well.
 
 ## Open questions / to verify
 
-1. **Data location** (workspace vs `$PROJECT` vs split) — decide with supervisor.
+1. ~~**Data location**~~ — resolved 2026-09-25: read directly from the LSDF with `-C LSDF` (see Storage).
 2. ~~**NVIDIA driver version**~~ — resolved 2026-09-25 on `dev-gpu-h100` (hkn0901): driver 595.71.05,
    CUDA 13.2 → `cu130` wheels would also work; current env (torch 2.11.0+cu129) runs fine.
 3. ~~**Internet access from compute nodes**~~ — resolved 2026-09-25: huggingface.co, pypi.org and
@@ -81,5 +87,6 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 sacctmgr show user -n -P format=DefaultAccount   # default account
 squeue --me                                       # own jobs
 ws_allocate falldet 60 && ws_find falldet         # create workspace
-salloc -p dev-gpu-h100 --gres=gpu:1 -c 16 --mem=64G -t 01:00:00   # interactive GPU
+salloc -p dev-gpu-h100 -C LSDF --gres=gpu:1 -c 16 --mem=64G -t 01:00:00   # interactive GPU + LSDF
+sbatch -C LSDF ...                                # any job that reads datasets
 ```
