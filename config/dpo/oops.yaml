@@ -1,0 +1,16 @@
+# OOPS DPO (809 train clips), matching the 2026-09-21 random-negative run (W&B wey6g0yr).
+# Effective batch = per_device * grad_accum * num_gpus = 1 * 4 * 2 = 8 on two GPUs;
+# on one GPU set gradient_accumulation_steps=8. ~101 optimizer steps per epoch.
+# Every epoch is saved: lowest eval loss did not pick the best classifier last time.
+defaults:
+  - full
+  - _self_
+
+gradient_accumulation_steps: 4
+num_train_epochs: 10
+max_steps: -1
+logging_steps: 5
+save_strategy: epoch
+save_total_limit: 10
+eval_strategy: epoch
+use_liger_kernel: true

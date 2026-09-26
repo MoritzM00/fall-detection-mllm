@@ -11,7 +11,7 @@ transformers==5.8.0
 
 # Fine-tuning (TRL SFTTrainer + LoRA)
 datasets==4.8.5
-liger-kernel==0.8.0
+liger-kernel==0.8.2
 peft==0.19.1
 trl==1.12.0
 
