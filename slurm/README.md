@@ -1,6 +1,7 @@
 # Running on HoreKa 2 (hk2) — Findings & Migration Plan
 
-Status: **investigation only, nothing set up yet** (2026-09-24).
+Status (2026-09-26): environment (`slurm/env.sh`, `make env-hk install-hk flash-attn-hk`) and
+`slurm/inference.sbatch` work end to end on `gpu-h100`. SFT, tensor cache and ablation jobs are not ported yet.
 Docs: <https://docs.nhr.kit.edu/> (work in progress), legacy: <https://www.nhr.kit.edu/userdocs/horeka/>.
 
 ## Cluster facts
@@ -22,10 +23,11 @@ Docs: <https://docs.nhr.kit.edu/> (work in progress), legacy: <https://www.nhr.k
 ## Software modules (verified to load together)
 
 ```shell
-module load Python/3.12.3-GCCcore-13.3.0 FFmpeg/7.0.2-GCCcore-13.3.0 CUDA/13.0.2
+module load Python/3.12.3-GCCcore-13.3.0 FFmpeg/7.0.2-GCCcore-13.3.0 CUDA/12.9.1
 ```
 
-This covers everything `environment.yml` gets from conda (python 3.12, ffmpeg, cuda-toolkit 13.0)
+CUDA 12.9 (not 13.0) matches the `vllm+cu129` wheel / torch 2.11+cu129. This covers everything
+`environment.yml` gets from conda (python 3.12, ffmpeg, cuda-toolkit)
 except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available: `git`,
 `CMake`, `GCC` 13–16, `NCCL`/`cuDNN` (only for CUDA 12.x).
 
@@ -78,8 +80,7 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 4. **Paths**: `outputs/` and `logs/` are repo-relative; with the repo in `$PROJECT` they no longer
    hit the `$HOME` quota. `HF_HOME` → `$PROJECT/.cache/huggingface`; point dataset roots at the chosen data location.
    Transfer datasets via `rsync`.
-5. **Minor**: `curl` deny in `.claude/settings.json` blocks installers/connectivity checks;
-   LaTeX scripts write to `~/thesis-overleaf/...` (irrelevant on cluster).
+5. **Minor**: LaTeX scripts write to `~/thesis-overleaf/...` (irrelevant on cluster).
 
 ## Useful commands
 
