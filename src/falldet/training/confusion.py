@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_PREDICTION = "prediction"
 SOURCE_CONFUSION = "confusion"
+SOURCE_RANDOM = "random"
 
 
 def load_prediction_records(paths: Sequence[str | Path]) -> tuple[list[dict], list[str]]:
@@ -102,7 +103,10 @@ def negative_distribution(counts: np.ndarray, uniform_mix: float) -> np.ndarray:
 
 
 class ConfusionNegativeSelector:
-    """Pick the previous model's own mistake, else sample from its confusion row."""
+    """Pick the previous model's own mistake, else sample from ``distribution``.
+
+    ``sampled_source`` names the sampled rows in ``sources`` (confusion or random).
+    """
 
     def __init__(
         self,
@@ -110,6 +114,7 @@ class ConfusionNegativeSelector:
         distribution: np.ndarray,
         seed: int,
         row_predictions: Sequence[str | None] | None = None,
+        sampled_source: str = SOURCE_CONFUSION,
     ):
         if seed < 0:
             raise ValueError("Preference seed must be non-negative")
@@ -130,7 +135,7 @@ class ConfusionNegativeSelector:
             rng = np.random.default_rng(np.random.SeedSequence([seed, index]))
             choice = int(rng.choice(len(label2idx), p=distribution[label2idx[positive]]))
             negatives.append(idx2label[choice])
-            sources.append(SOURCE_CONFUSION)
+            sources.append(sampled_source)
 
         self.negative_labels = tuple(negatives)
         self.sources = tuple(sources)

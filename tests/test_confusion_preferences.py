@@ -8,6 +8,7 @@ from falldet.data.video_dataset import label2idx
 from falldet.training.confusion import (
     SOURCE_CONFUSION,
     SOURCE_PREDICTION,
+    SOURCE_RANDOM,
     ConfusionNegativeSelector,
     align_predictions_to_dataset,
     confusion_counts,
@@ -105,6 +106,26 @@ def test_selector_prefers_row_prediction_and_is_deterministic():
     assert first.select(1, "fall") != "fall"
     assert first.select(2, "walk") != "walk"
     assert first.prediction_fraction() == pytest.approx(1 / 3)
+
+
+def test_random_sampling_keeps_model_errors_and_ignores_confusion_row():
+    counts = np.zeros((len(label2idx), len(label2idx)), dtype=np.int64)
+    counts[label2idx["fall"], label2idx["jump"]] = 100
+    distribution = negative_distribution(counts, uniform_mix=1.0)
+    labels = ["fall"] * 200
+    rows = ["lying"] + [None] * 199
+
+    selector = ConfusionNegativeSelector(
+        labels, distribution, seed=0, row_predictions=rows, sampled_source=SOURCE_RANDOM
+    )
+
+    assert selector.negative_labels[0] == "lying"
+    assert selector.sources[0] == SOURCE_PREDICTION
+    assert set(selector.sources[1:]) == {SOURCE_RANDOM}
+    sampled = selector.negative_labels[1:]
+    assert "fall" not in sampled
+    assert sampled.count("jump") < 40
+    assert len(set(sampled)) == len(label2idx) - 1
 
 
 def test_selector_rejects_label_mismatch():

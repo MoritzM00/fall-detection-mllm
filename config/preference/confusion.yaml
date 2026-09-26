@@ -7,5 +7,8 @@ train_predictions_paths: ???
 validation_predictions_paths: []
 # Use the previous model's own wrong prediction for a row when available.
 use_row_predictions: true
+# Rejected label for every other row (model was right, or no prediction for the row):
+# `confusion_matrix` samples the positive's confusion row, `random` a uniform wrong label.
+sample_from: confusion_matrix
 # Weight of the uniform distribution over wrong labels mixed into each confusion row.
 uniform_mix: 0.1

@@ -415,6 +415,8 @@ class PreferenceConfig(BaseConfig):
     train_predictions_paths: list[str] = Field(default_factory=list)
     validation_predictions_paths: list[str] = Field(default_factory=list)
     use_row_predictions: bool = True
+    # Rejected label for rows without a model error: confusion-row sample or uniform random.
+    sample_from: Literal["confusion_matrix", "random"] = "confusion_matrix"
     uniform_mix: float = Field(0.1, ge=0.0, le=1.0)
 
     @model_validator(mode="after")

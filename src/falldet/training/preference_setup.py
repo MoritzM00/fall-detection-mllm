@@ -13,6 +13,8 @@ from falldet.data.video_dataset import label2idx
 from falldet.embeddings import load_embeddings
 from falldet.schemas import DPOTrainingConfig
 from falldet.training.confusion import (
+    SOURCE_CONFUSION,
+    SOURCE_RANDOM,
     ConfusionNegativeSelector,
     align_predictions_to_dataset,
     confusion_counts,
@@ -130,7 +132,12 @@ def _build_confusion(
             "predictions to avoid leaking evaluation errors into training"
         )
     counts = confusion_counts(records)
-    distribution = negative_distribution(counts, preference.uniform_mix)
+    if preference.sample_from == "random":
+        distribution = negative_distribution(counts, uniform_mix=1.0)
+        sampled_source = SOURCE_RANDOM
+    else:
+        distribution = negative_distribution(counts, preference.uniform_mix)
+        sampled_source = SOURCE_CONFUSION
 
     train_rows, train_coverage = _row_predictions(
         train_dataset, preference.train_predictions_paths, preference.use_row_predictions
@@ -139,10 +146,14 @@ def _build_confusion(
         validation_dataset, preference.validation_predictions_paths, preference.use_row_predictions
     )
     train_selector = ConfusionNegativeSelector(
-        _labels_for_rows(train_dataset), distribution, preference.seed, train_rows
+        _labels_for_rows(train_dataset), distribution, preference.seed, train_rows, sampled_source
     )
     validation_selector = ConfusionNegativeSelector(
-        _labels_for_rows(validation_dataset), distribution, preference.seed, validation_rows
+        _labels_for_rows(validation_dataset),
+        distribution,
+        preference.seed,
+        validation_rows,
+        sampled_source,
     )
 
     total = int(counts.sum())
@@ -156,6 +167,7 @@ def _build_confusion(
             "labels": list(label2idx),
             "counts": counts.tolist(),
         },
+        "sample_from": preference.sample_from,
         "uniform_mix": preference.uniform_mix,
         "train_prediction_coverage": train_coverage,
         "validation_prediction_coverage": validation_coverage,
