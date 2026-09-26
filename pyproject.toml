@@ -23,7 +23,7 @@ packages = ["src/falldet"]
 [tool.ruff]
 line-length = 100
 extend-exclude = ["src/falldet/__init__.py"]
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint.extend-per-file-ignores]
 # Also ignore `E402` in all `__init__.py` files.
@@ -49,6 +49,10 @@ extend-ignore = [
     "D213",    # Multi-line docstring summary should start at the second line
     "SIM108",   # dont always prefer ternary operator
 ]
+
+[tool.ruff.lint.isort]
+# A local wandb/ run directory would otherwise make ruff treat wandb as first-party
+known-third-party = ["wandb"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -78,7 +82,7 @@ exclude = [
 ]
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.12"
 
 [tool.ty.analysis]
 # Allow unresolved imports for third-party packages during initial setup

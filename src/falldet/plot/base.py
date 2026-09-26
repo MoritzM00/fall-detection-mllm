@@ -1,14 +1,14 @@
 """Shared plotting defaults and publication-oriented matplotlib configuration."""
 
 from collections.abc import Mapping
-from typing import Literal, TypeAlias, cast
+from typing import Literal, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-SeabornContext: TypeAlias = Literal["paper", "notebook", "talk", "poster"]
-SeabornStyle: TypeAlias = Literal["white", "dark", "whitegrid", "darkgrid", "ticks"]
+type SeabornContext = Literal["paper", "notebook", "talk", "poster"]
+type SeabornStyle = Literal["white", "dark", "whitegrid", "darkgrid", "ticks"]
 
 PUBLICATION_TARGET_DEFAULTS: dict[str, dict[str, float | int]] = {
     "paper": {

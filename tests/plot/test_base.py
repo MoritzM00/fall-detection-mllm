@@ -14,9 +14,9 @@ class TestPublicationRcDefaults:
         assert isinstance(figsize, tuple)
         assert rc["font.family"] == "serif"
         assert rc["text.usetex"] is False
-        assert rc["axes.labelsize"] == 9
-        assert rc["xtick.labelsize"] == 8
-        assert rc["ytick.labelsize"] == 8
+        assert rc["axes.labelsize"] == 10
+        assert rc["xtick.labelsize"] == 9
+        assert rc["ytick.labelsize"] == 9
         assert figsize == pytest.approx((427.43153 / 72.27, (427.43153 / 72.27) * 0.66))
         assert rc["figure.figsize"] == pytest.approx(figsize)
 

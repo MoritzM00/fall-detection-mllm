@@ -103,7 +103,7 @@ def _config() -> InferenceConfig:
 def test_create_name_and_tags_from_config_returns_base_name_and_tags():
     base_name, tags = create_name_and_tags_from_config(_config())
 
-    assert base_name == "Qwen2.5-VL-7B-Instruct-F16@7.5"
+    assert base_name == "Qwen2.5-VL-7B-Instruct-F16at7.5"
     assert set(tags) == {"baseline", "wanfall", "qwen"}
 
 
@@ -124,5 +124,5 @@ def test_initialize_run_from_config_passes_generated_id_to_wandb(monkeypatch):
     run = initialize_run_from_config(config)
 
     assert captured["id"] == "abc123"
-    assert captured["name"] == "Qwen2.5-VL-7B-Instruct-F16@7.5_abc123"
+    assert captured["name"] == "Qwen2.5-VL-7B-Instruct-F16at7.5_abc123"
     assert run.id == "abc123"

@@ -76,7 +76,18 @@ conda activate cu130_vllm20_py312
 make install
 ```
 
-At the time of writing, `make install` installs `vllm==0.20.1` with the `cu130` torch backend and `flash-attn==2.8.3`. If you need a different CUDA stack, adjust the install commands in the `Makefile` or install vLLM from source.
+At the time of writing, `make install` installs `vllm==0.20.2` with the `cu130` torch backend and `flash-attn==2.8.3`. If you need a different CUDA stack, adjust the install commands in the `Makefile` or install vLLM from source.
+
+On HoreKa 2 (no conda), use Lmod modules and a uv venv instead, then submit jobs via Slurm:
+
+```shell
+make env-hk install-hk       # .venv from slurm/env.sh modules, vLLM cu129 wheel
+make flash-attn-hk           # SFT only; compiles, so run it inside a CPU job
+sbatch slurm/inference.sbatch experiment=zeroshot model.params=8B
+sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G slurm/train.sbatch training=full
+```
+
+See `slurm/README.md` for cluster notes (partitions, storage, LSDF dataset access).
 
 Useful development commands:
 

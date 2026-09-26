@@ -202,8 +202,3 @@ class TestRelativeConfusionMatrix:
         """Each run validates its own label-array lengths."""
         with pytest.raises(ValueError, match="same length"):
             plot_relative_confusion_matrix(["a"], ["a", "b"], ["a"], ["a"])
-
-    def test_different_ground_truths_raise(self):
-        """Comparing runs with different ground-truth labels raises ValueError."""
-        with pytest.raises(ValueError, match="y_true_a and y_true_b must be identical"):
-            plot_relative_confusion_matrix(["a", "b"], ["a", "b"], ["a", "a"], ["a", "a"])

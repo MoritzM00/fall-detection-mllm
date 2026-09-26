@@ -23,7 +23,7 @@ scikit-learn==1.8.0
 # Logging / W&B
 plotext==5.3.2
 rich==15.0.0
-wandb==0.26.1
+wandb[media]==0.26.1
 
 # Plotting
 matplotlib==3.10.9
