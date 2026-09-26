@@ -78,6 +78,9 @@ def initialize_run_from_config(config: InferenceConfig | TrainingConfig | DPOTra
             name=run_name,
             mode="disabled",
         )
+        # Disabled runs ignore `name` and report "dummy-<id>"; restore the shared
+        # name so every rank derives the same output_dir from run.name.
+        run.name = run_name
     return run
 
 

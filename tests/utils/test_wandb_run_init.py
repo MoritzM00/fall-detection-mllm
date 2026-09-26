@@ -126,3 +126,22 @@ def test_initialize_run_from_config_passes_generated_id_to_wandb(monkeypatch):
     assert captured["id"] == "abc123"
     assert captured["name"] == "Qwen2.5-VL-7B-Instruct-F16at7.5_abc123"
     assert run.id == "abc123"
+
+
+def test_non_main_rank_run_shares_broadcast_name(monkeypatch):
+    config = _config()
+
+    def fake_broadcast(payload, src):
+        payload[:] = ["abc123", "Qwen2.5-VL-7B-Instruct-F16at7.5_abc123"]
+
+    monkeypatch.setattr(
+        "falldet.utils.wandb.PartialState",
+        lambda: SimpleNamespace(is_main_process=False, num_processes=2),
+    )
+    monkeypatch.setattr("falldet.utils.wandb.dist.is_initialized", lambda: True)
+    monkeypatch.setattr("falldet.utils.wandb.dist.broadcast_object_list", fake_broadcast)
+    monkeypatch.setenv("WANDB_MODE", "disabled")
+
+    run = initialize_run_from_config(config)
+
+    assert run.name == "Qwen2.5-VL-7B-Instruct-F16at7.5_abc123"
