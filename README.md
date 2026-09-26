@@ -84,6 +84,7 @@ On HoreKa 2 (no conda), use Lmod modules and a uv venv instead, then submit jobs
 make env-hk install-hk       # .venv from slurm/env.sh modules, vLLM cu129 wheel
 make flash-attn-hk           # SFT only; compiles, so run it inside a CPU job
 sbatch slurm/inference.sbatch experiment=zeroshot model.params=8B
+sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G slurm/train.sbatch training=full
 ```
 
 See `slurm/README.md` for cluster notes (partitions, storage, LSDF dataset access).

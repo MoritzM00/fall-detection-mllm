@@ -1,7 +1,8 @@
 # Running on HoreKa 2 (hk2) — Findings & Migration Plan
 
 Status (2026-09-26): environment (`slurm/env.sh`, `make env-hk install-hk flash-attn-hk`) and
-`slurm/inference.sbatch` work end to end on `gpu-h100`. SFT, tensor cache and ablation jobs are not ported yet.
+`slurm/inference.sbatch` and `slurm/train.sbatch` (SFT smoke test on 1 and 2 GPUs) work end to end on `gpu-h100`.
+Tensor cache and ablation jobs are not ported yet.
 Docs: <https://docs.nhr.kit.edu/> (work in progress), legacy: <https://www.nhr.kit.edu/userdocs/horeka/>.
 
 ## Cluster facts
@@ -71,7 +72,7 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 2. **Slurm scripts** (new `slurm/` directory):
    - `env.sh`: modules, venv activation, `HF_HOME`, `OMNIFALL_ROOT`, `WANFALL_ROOT`, `VLLM_CONFIGURE_LOGGING=0`.
    - inference job: `-p gpu-h100 --gres=gpu:1 --cpus-per-task=16 --mem=…`.
-   - SFT job: `--gres=gpu:2` + `accelerate launch --num_processes 2` (matches `config/accelerate/ddp_bf16.yaml`).
+   - SFT job (`train.sbatch`): `accelerate launch` with one DDP process per GPU; `sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G`.
    - tensor cache build on `cpu` partition.
    - Do **not** export `CUDA_VISIBLE_DEVICES` (Slurm sets it). `tensor_parallel_size=null` uses
      `torch.cuda.device_count()`, which respects the allocation — no code change needed.
