@@ -75,11 +75,11 @@ def observed_labels(dataset: Dataset) -> tuple[str, ...]:
     return tuple(sorted(labels, key=label2idx.__getitem__))
 
 
-def _segment_for_index(dataset: Dataset, index: int) -> tuple[dict, str | None]:
+def segment_for_index(dataset: Dataset, index: int) -> tuple[dict, str | None]:
     """Return segment metadata and its dataset name without decoding video."""
 
     if isinstance(dataset, Subset):
-        return _segment_for_index(dataset.dataset, int(dataset.indices[index]))
+        return segment_for_index(dataset.dataset, int(dataset.indices[index]))
 
     child_datasets = getattr(dataset, "datasets", None)
     cumulative_sizes = getattr(dataset, "cumulative_sizes", None)
@@ -87,7 +87,7 @@ def _segment_for_index(dataset: Dataset, index: int) -> tuple[dict, str | None]:
         previous = 0
         for child, end in zip(child_datasets, cumulative_sizes, strict=True):
             if index < end:
-                return _segment_for_index(child, index - previous)
+                return segment_for_index(child, index - previous)
             previous = end
         raise IndexError(index)
 
@@ -99,7 +99,7 @@ def _segment_for_index(dataset: Dataset, index: int) -> tuple[dict, str | None]:
     return segments[index], getattr(dataset, "dataset_name", None)
 
 
-def _sample_identity(sample: dict, dataset_name: str | None = None) -> tuple:
+def sample_identity(sample: dict, dataset_name: str | None = None) -> tuple:
     """Build the stable identity shared by video rows and embedding manifests."""
 
     try:
@@ -133,7 +133,7 @@ def align_embeddings_to_dataset(
 
     artifact_indices: dict[tuple, int] = {}
     for index, sample in enumerate(samples):
-        identity = _sample_identity(sample)
+        identity = sample_identity(sample)
         if identity in artifact_indices:
             raise ValueError(f"Duplicate embedding sample identity: {identity}")
         artifact_indices[identity] = index
@@ -141,8 +141,8 @@ def align_embeddings_to_dataset(
     row_indices = []
     length = len(dataset)  # ty: ignore[invalid-argument-type]
     for index in range(length):
-        segment, dataset_name = _segment_for_index(dataset, index)
-        identity = _sample_identity(segment, dataset_name)
+        segment, dataset_name = segment_for_index(dataset, index)
+        identity = sample_identity(segment, dataset_name)
         try:
             row_indices.append(artifact_indices[identity])
         except KeyError as error:

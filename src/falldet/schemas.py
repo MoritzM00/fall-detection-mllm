@@ -405,14 +405,20 @@ class TrainingConfig(BaseConfig):
 
 
 class PreferenceConfig(BaseConfig):
-    strategy: Literal["random", "similarity"] = "random"
+    strategy: Literal["random", "similarity", "confusion"] = "random"
     seed: int = Field(0, ge=0)
     train_embeddings_path: str | None = None
     validation_embeddings_path: str | None = None
     chunk_size: int = Field(256, gt=0)
+    # Confusion: prediction JSONLs of a previous model. Train predictions define the
+    # confusion matrix; rows it got wrong use its own prediction as the negative.
+    train_predictions_paths: list[str] = Field(default_factory=list)
+    validation_predictions_paths: list[str] = Field(default_factory=list)
+    use_row_predictions: bool = True
+    uniform_mix: float = Field(0.1, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
-    def validate_embedding_paths(self) -> "PreferenceConfig":
+    def validate_strategy_inputs(self) -> "PreferenceConfig":
         if self.strategy == "similarity" and (
             self.train_embeddings_path is None or self.validation_embeddings_path is None
         ):
@@ -420,6 +426,8 @@ class PreferenceConfig(BaseConfig):
                 "Similarity preferences require train_embeddings_path and "
                 "validation_embeddings_path"
             )
+        if self.strategy == "confusion" and not self.train_predictions_paths:
+            raise ValueError("Confusion preferences require train_predictions_paths")
         return self
 
 

@@ -1,0 +1,11 @@
+strategy: confusion
+seed: 0
+# Prediction JSONLs (outputs/predictions/<project>/<run_id>.jsonl) of the previous model on the
+# training split (data.mode=train). They define P(negative | positive) and per-row hard negatives.
+train_predictions_paths: ???
+# Optional: predictions on the validation split for per-row hard negatives during eval.
+validation_predictions_paths: []
+# Use the previous model's own wrong prediction for a row when available.
+use_row_predictions: true
+# Weight of the uniform distribution over wrong labels mixed into each confusion row.
+uniform_mix: 0.1

@@ -41,6 +41,29 @@ def test_similarity_preference_rejects_missing_embedding_paths():
         PreferenceConfig(strategy="similarity")
 
 
+def test_confusion_preference_config_accepts_prediction_paths():
+    config_dir = str(Path(__file__).parents[1] / "config")
+    with initialize_config_dir(config_dir=config_dir, version_base=None):
+        cfg = compose(
+            config_name="dpo_config",
+            overrides=[
+                "preference=confusion",
+                "preference.train_predictions_paths=[/tmp/a.jsonl,/tmp/b.jsonl]",
+            ],
+        )
+
+    config = from_dictconfig_dpo(cfg)
+    assert config.preference.strategy == "confusion"
+    assert config.preference.train_predictions_paths == ["/tmp/a.jsonl", "/tmp/b.jsonl"]
+    assert config.preference.validation_predictions_paths == []
+    assert config.preference.uniform_mix == 0.1
+
+
+def test_confusion_preference_rejects_missing_prediction_paths():
+    with pytest.raises(ValueError, match="require train_predictions_paths"):
+        PreferenceConfig(strategy="confusion")
+
+
 def test_dpo_config_accepts_resume_checkpoint_path():
     config_dir = str(Path(__file__).parents[1] / "config")
     checkpoint = "/tmp/dpo/checkpoint-102"
