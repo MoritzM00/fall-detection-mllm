@@ -111,11 +111,10 @@ def _build_similarity(
 
 
 def _row_predictions(
-    dataset: Dataset, paths: list[str], enabled: bool
+    dataset: Dataset, records: list[dict]
 ) -> tuple[list[str | None] | None, float]:
-    if not enabled or not paths:
+    if not records:
         return None, 0.0
-    records, _ = load_prediction_records(paths)
     aligned = align_predictions_to_dataset(dataset, records)
     coverage = sum(prediction is not None for prediction in aligned) / max(len(aligned), 1)
     return aligned, coverage
@@ -139,12 +138,13 @@ def _build_confusion(
         distribution = negative_distribution(counts, preference.uniform_mix)
         sampled_source = SOURCE_CONFUSION
 
+    validation_records: list[dict] = []
+    if preference.use_row_predictions and preference.validation_predictions_paths:
+        validation_records, _ = load_prediction_records(preference.validation_predictions_paths)
     train_rows, train_coverage = _row_predictions(
-        train_dataset, preference.train_predictions_paths, preference.use_row_predictions
+        train_dataset, records if preference.use_row_predictions else []
     )
-    validation_rows, validation_coverage = _row_predictions(
-        validation_dataset, preference.validation_predictions_paths, preference.use_row_predictions
-    )
+    validation_rows, validation_coverage = _row_predictions(validation_dataset, validation_records)
     train_selector = ConfusionNegativeSelector(
         _labels_for_rows(train_dataset), distribution, preference.seed, train_rows, sampled_source
     )

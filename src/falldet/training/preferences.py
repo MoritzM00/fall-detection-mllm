@@ -179,7 +179,25 @@ class RandomNegativeSelector:
         return candidates[int(rng.integers(len(candidates)))]
 
 
-class EmbeddingSimilarityNegativeSelector:
+class PrecomputedNegativeSelector:
+    """Serve negatives fixed per query row; subclasses set both label tuples."""
+
+    query_labels: tuple[str, ...]
+    negative_labels: tuple[str, ...]
+
+    def select(self, query_index: int, positive_label: str) -> str:
+        if query_index < 0 or query_index >= len(self.query_labels):
+            raise IndexError(query_index)
+        positive = canonicalize_label(positive_label)
+        expected = self.query_labels[query_index]
+        if positive != expected:
+            raise ValueError(
+                f"Query label mismatch at index {query_index}: dataset={positive!r}, selector={expected!r}"
+            )
+        return self.negative_labels[query_index]
+
+
+class EmbeddingSimilarityNegativeSelector(PrecomputedNegativeSelector):
     """Choose the label of the most similar wrong-class corpus example."""
 
     def __init__(
@@ -240,14 +258,3 @@ class EmbeddingSimilarityNegativeSelector:
         self.corpus_indices = tuple(selected_indices)
         self.scores = tuple(selected_scores)
         self.negative_labels = tuple(self.corpus_labels[index] for index in self.corpus_indices)
-
-    def select(self, query_index: int, positive_label: str) -> str:
-        if query_index < 0 or query_index >= len(self.query_labels):
-            raise IndexError(query_index)
-        positive = canonicalize_label(positive_label)
-        expected = self.query_labels[query_index]
-        if positive != expected:
-            raise ValueError(
-                f"Query label mismatch at index {query_index}: dataset={positive!r}, embeddings={expected!r}"
-            )
-        return self.negative_labels[query_index]

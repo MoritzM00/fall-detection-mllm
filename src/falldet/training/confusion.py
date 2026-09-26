@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 
 from falldet.data.video_dataset import idx2label, label2idx
 from falldet.training.preferences import (
+    PrecomputedNegativeSelector,
     canonicalize_label,
     sample_identity,
     segment_for_index,
@@ -102,7 +103,7 @@ def negative_distribution(counts: np.ndarray, uniform_mix: float) -> np.ndarray:
     return (1.0 - uniform_mix) * error_rows + uniform_mix * uniform
 
 
-class ConfusionNegativeSelector:
+class ConfusionNegativeSelector(PrecomputedNegativeSelector):
     """Pick the previous model's own mistake, else sample from ``distribution``.
 
     ``sampled_source`` names the sampled rows in ``sources`` (confusion or random).
@@ -139,17 +140,6 @@ class ConfusionNegativeSelector:
 
         self.negative_labels = tuple(negatives)
         self.sources = tuple(sources)
-
-    def select(self, query_index: int, positive_label: str) -> str:
-        if query_index < 0 or query_index >= len(self.query_labels):
-            raise IndexError(query_index)
-        positive = canonicalize_label(positive_label)
-        expected = self.query_labels[query_index]
-        if positive != expected:
-            raise ValueError(
-                f"Query label mismatch at index {query_index}: dataset={positive!r}, selector={expected!r}"
-            )
-        return self.negative_labels[query_index]
 
     def prediction_fraction(self) -> float:
         return self.sources.count(SOURCE_PREDICTION) / max(len(self.sources), 1)

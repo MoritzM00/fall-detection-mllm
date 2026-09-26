@@ -88,9 +88,7 @@ def build_dpo_compute_metrics(tokenizer, label2idx: dict[str, int]):
             return true_label
         text = tokenizer.decode(pred_ids[: mismatches[0] + 1], skip_special_tokens=True)
         answer = text.rsplit(":", 1)[-1].strip().lower()
-        if answer in label2idx and answer != true_label:
-            return answer
-        for label in labels_by_length:
+        for label in labels_by_length:  # shortest first, so an exact label wins
             if answer and label != true_label and label.startswith(answer):
                 return label
         return "other"  # like the inference parser for unparseable output
