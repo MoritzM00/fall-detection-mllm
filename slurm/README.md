@@ -36,8 +36,8 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 
 | Location | Path | Properties | Suggested use |
 | --- | --- | --- | --- |
-| `$HOME` | `/home/ka_anthropomatik/ka_dt0662` | 50 GB, 2M inodes | dotfiles, CLI tools |
-| `$PROJECT` | `/hfs2/data/project/hk-project-p0029156/ka_dt0662` | permanent, backed up, 10 TB shared quota; one private subdir per member of the project group | repo + uv venv, `.cache/uv`, `.cache/huggingface` (HF_HOME) |
+| `$HOME` | `/home/<group>/<user>` | 50 GB, 2M inodes | dotfiles, CLI tools |
+| `$PROJECT` | `/hfs2/data/project/hk-project-p0029156/<user>` | permanent, backed up, 10 TB shared quota; one private subdir per member of the project group | repo + uv venv, `.cache/uv`, `.cache/huggingface` (HF_HOME) |
 | Workspace | `ws_allocate <name> <days>` | no backup, 60 days, 3× extendable | datasets, HF cache, tensor cache |
 | `$TMPDIR` (job) | node-local NVMe | fast, wiped after job | stage dataset / tensor cache per job |
 

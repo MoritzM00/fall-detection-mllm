@@ -31,7 +31,7 @@ fi
 export FALLDET_REPO="$(cd "$(dirname "$_falldet_env")/.." && pwd)"
 unset _falldet_env
 
-export PROJECT="${PROJECT:-/hfs2/data/project/hk-project-p0029156/ka_dt0662}"
+export PROJECT="${PROJECT:-/hfs2/data/project/hk-project-p0029156/$USER}"
 # Cache and venv must share a fileset so uv can hardlink
 export UV_CACHE_DIR="$PROJECT/.cache/uv"
 export UV_PYTHON_DOWNLOADS=never
