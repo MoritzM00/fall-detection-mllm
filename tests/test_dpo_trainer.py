@@ -118,3 +118,30 @@ def test_optimizer_changes_policy_but_not_reference(tmp_path):
         torch.equal(value, reference_before[name])
         for name, value in trainer.ref_model.named_parameters()
     )
+
+
+def test_prediction_step_returns_chosen_answer_argmax_and_masked_gold(tmp_path):
+    trainer = _trainer(tmp_path)
+    batch = FixedPreferenceCollator()([{}])
+    trainer.model.eval()
+
+    loss, preds, labels = trainer.prediction_step(trainer.model, batch, prediction_loss_only=False)
+    with torch.no_grad():
+        logits = trainer.model(
+            input_ids=batch["input_ids"].to(trainer.accelerator.device),
+            attention_mask=batch["attention_mask"].to(trainer.accelerator.device),
+        ).logits
+
+    assert loss is not None
+    assert preds.tolist() == logits[:1, :-1].argmax(-1).tolist()
+    assert labels.tolist() == [[-100, 3]]
+
+
+def test_prediction_step_loss_only_skips_predictions(tmp_path):
+    trainer = _trainer(tmp_path)
+    batch = FixedPreferenceCollator()([{}])
+
+    loss, preds, labels = trainer.prediction_step(trainer.model, batch, prediction_loss_only=True)
+
+    assert loss is not None
+    assert preds is None and labels is None

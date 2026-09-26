@@ -29,6 +29,7 @@ from falldet.training.collator import VideoPreferenceCollator
 from falldet.training.dataset import DPOConversationDataset, as_lazy_hf_dataset
 from falldet.training.dpo_trainer import VideoDPOTrainer
 from falldet.training.eval_sampling import stratified_sample_indices
+from falldet.training.metrics import build_dpo_compute_metrics
 from falldet.training.preference_setup import build_negative_selectors, write_preference_manifest
 from falldet.training.preferences import label_for_index, observed_labels
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
@@ -237,8 +238,8 @@ def main(cfg: DictConfig) -> None:
         eval_steps=config.dpo.eval_steps,
         eval_on_start=config.dpo.eval_on_start,
         load_best_model_at_end=config.dpo.load_best_model_at_end,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
+        metric_for_best_model=config.dpo.metric_for_best_model,
+        greater_is_better=config.dpo.greater_is_better,
         gradient_checkpointing=config.dpo.gradient_checkpointing,
         max_length=None,
         report_to=config.dpo.report_to,
@@ -267,6 +268,11 @@ def main(cfg: DictConfig) -> None:
         eval_dataset=eval_dataset,
         data_collator=collator,
         processing_class=processor,
+        compute_metrics=(
+            build_dpo_compute_metrics(processor.tokenizer, label2idx)
+            if config.dpo.classification_metrics
+            else None
+        ),
     )
 
     unexpected_trainable = [
@@ -331,7 +337,7 @@ def main(cfg: DictConfig) -> None:
                     run_name=run_name,
                     log_model=config.wandb.log_model,
                     best_metric=trainer.state.best_metric,
-                    metric_for_best_model="eval_loss",
+                    metric_for_best_model=config.dpo.metric_for_best_model or "eval_loss",
                 )
             logger.info(
                 "Run vLLM inference with:\n"

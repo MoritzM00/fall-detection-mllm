@@ -1,5 +1,6 @@
 sft_adapter_path: null
 beta: 0.1
+classification_metrics: false
 loss_type: sigmoid
 attn_implementation: flash_attention_2
 per_device_train_batch_size: 1

@@ -64,6 +64,35 @@ def test_confusion_preference_rejects_missing_prediction_paths():
         PreferenceConfig(strategy="confusion")
 
 
+def test_oops_preset_selects_on_classification_metrics_without_liger():
+    config_dir = str(Path(__file__).parents[1] / "config")
+    with initialize_config_dir(config_dir=config_dir, version_base=None):
+        cfg = compose(config_name="dpo_config", overrides=["dpo=oops"])
+
+    config = from_dictconfig_dpo(cfg)
+    assert config.dpo.classification_metrics is True
+    assert config.dpo.use_liger_kernel is False
+    assert config.dpo.metric_for_best_model == "eval_balanced_accuracy"
+    assert config.dpo.greater_is_better is True
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (["dpo.use_liger_kernel=true"], "need logits"),
+        (["dpo.classification_metrics=false"], "requires dpo.classification_metrics"),
+        (["dpo.greater_is_better=false"], "greater_is_better=true"),
+    ],
+)
+def test_classification_selection_rejects_inconsistent_settings(overrides, message):
+    config_dir = str(Path(__file__).parents[1] / "config")
+    with initialize_config_dir(config_dir=config_dir, version_base=None):
+        cfg = compose(config_name="dpo_config", overrides=["dpo=oops", *overrides])
+
+    with pytest.raises(ValueError, match=message):
+        from_dictconfig_dpo(cfg)
+
+
 def test_dpo_config_accepts_resume_checkpoint_path():
     config_dir = str(Path(__file__).parents[1] / "config")
     checkpoint = "/tmp/dpo/checkpoint-102"

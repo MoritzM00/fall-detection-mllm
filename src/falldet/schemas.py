@@ -438,6 +438,9 @@ class DPOHyperparams(TrainingHyperparams):
 
     sft_adapter_path: str | None = None
     beta: float = Field(0.1, gt=0.0)
+    # Teacher-forced classification metrics (accuracy, balanced accuracy, F1) on the
+    # chosen answers during eval. Needs full logits, so incompatible with Liger.
+    classification_metrics: bool = False
     loss_type: Literal["sigmoid"] = "sigmoid"
     precompute_ref_log_probs: Literal[False] = False
     padding_free: Literal[False] = False
@@ -488,10 +491,19 @@ class DPOTrainingConfig(BaseConfig):
             raise ValueError("DPO save_steps and eval_steps must match")
         if not self.dpo.load_best_model_at_end:
             raise ValueError("DPO requires load_best_model_at_end=true")
-        if self.dpo.metric_for_best_model not in {"eval_loss", "loss"}:
-            raise ValueError("DPO selects checkpoints using eval_loss")
-        if self.dpo.greater_is_better is not False:
-            raise ValueError("DPO eval_loss selection requires greater_is_better=false")
+        if self.dpo.classification_metrics and self.dpo.use_liger_kernel:
+            raise ValueError("DPO classification_metrics need logits; set use_liger_kernel=false")
+        if self.dpo.metric_for_best_model in {"eval_loss", "loss"}:
+            if self.dpo.greater_is_better is not False:
+                raise ValueError("DPO eval_loss selection requires greater_is_better=false")
+        else:
+            if not self.dpo.classification_metrics:
+                raise ValueError(
+                    f"metric_for_best_model={self.dpo.metric_for_best_model!r} requires "
+                    "dpo.classification_metrics=true"
+                )
+            if self.dpo.greater_is_better is not True:
+                raise ValueError("Classification metric selection requires greater_is_better=true")
         return self
 
 
