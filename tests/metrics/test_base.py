@@ -171,3 +171,16 @@ def test_example_usage():
     assert "fall_f1" in metrics
     print(f"Accuracy: {metrics['accuracy']:.2f}")
     print(f"Fall F1: {metrics['fall_f1']:.2f}")
+
+
+def test_per_class_metrics_stay_aligned_when_classes_are_absent():
+    # fall (1) and standing (8) only: every class in between is absent
+    references = np.array([1] * 4 + [8] * 4)
+    predictions = np.array([1] * 8)
+
+    metrics = compute_metrics(predictions, references)
+
+    assert metrics["fall_sensitivity"] == 1.0
+    assert metrics["fall_precision"] == 0.5
+    assert metrics["standing_sensitivity"] == 0.0
+    assert metrics["standing_f1"] == 0.0

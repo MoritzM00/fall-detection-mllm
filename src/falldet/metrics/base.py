@@ -104,10 +104,16 @@ def compute_metrics(
 
     # Per-class metrics (accuracy, precision, sensitivity, specificity, NPV, F1)
     # These are computed per-class treating each class as a binary problem (one-vs-rest)
-    per_class_f1_scores = f1_score(references, predictions, average=None, zero_division=0)
-    per_class_recall_scores = recall_score(references, predictions, average=None, zero_division=0)
+    # Fixed label list so position i is class i even when some classes are absent
+    class_indices = np.arange(len(idx2label))
+    per_class_f1_scores = f1_score(
+        references, predictions, labels=class_indices, average=None, zero_division=0
+    )
+    per_class_recall_scores = recall_score(
+        references, predictions, labels=class_indices, average=None, zero_division=0
+    )
     per_class_precision_scores = precision_score(
-        references, predictions, average=None, zero_division=0
+        references, predictions, labels=class_indices, average=None, zero_division=0
     )
 
     # Per-class accuracy, specificity, and NPV: computed per class (one-vs-rest)
