@@ -333,6 +333,8 @@ class TrainingHyperparams(BaseConfig):
     metric_for_best_model: str | None = None
     greater_is_better: bool | None = None
     gradient_checkpointing: bool = False
+    # None keeps the HF Trainer default (True for PEFT-wrapped models)
+    ddp_find_unused_parameters: bool | None = None
     max_length: int | None = None
     report_to: str = "none"
     seed: int = 0

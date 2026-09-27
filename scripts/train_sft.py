@@ -217,6 +217,7 @@ def main(cfg: DictConfig) -> None:
         metric_for_best_model=metric_for_best_model,
         greater_is_better=config.training.greater_is_better,
         gradient_checkpointing=config.training.gradient_checkpointing,
+        ddp_find_unused_parameters=config.training.ddp_find_unused_parameters,
         max_length=config.training.max_length,
         report_to=config.training.report_to,
         seed=config.training.seed,

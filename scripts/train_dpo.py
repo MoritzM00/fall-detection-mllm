@@ -241,6 +241,7 @@ def main(cfg: DictConfig) -> None:
         metric_for_best_model=config.dpo.metric_for_best_model,
         greater_is_better=config.dpo.greater_is_better,
         gradient_checkpointing=config.dpo.gradient_checkpointing,
+        ddp_find_unused_parameters=config.dpo.ddp_find_unused_parameters,
         max_length=None,
         report_to=config.dpo.report_to,
         seed=config.dpo.seed,
