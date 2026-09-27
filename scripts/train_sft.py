@@ -51,7 +51,7 @@ from falldet.schemas import TrainingConfig, from_dictconfig_training
 from falldet.training.collator import PromptMaskedSFTCollator
 from falldet.training.dataset import SFTConversationDataset, as_lazy_hf_dataset
 from falldet.training.eval_sampling import stratified_sample_indices
-from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
+from falldet.training.metrics import build_compute_metrics, preprocess_logits_for_metrics
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
 from falldet.utils.wandb import initialize_run_from_config, log_adapter_artifact
 
@@ -244,7 +244,9 @@ def main(cfg: DictConfig) -> None:
         eval_dataset=eval_ds,
         data_collator=collator,
         processing_class=processor,
-        compute_metrics=build_sft_compute_metrics(processor.tokenizer, omnifall_label2idx),
+        compute_metrics=build_compute_metrics(
+            processor.tokenizer, omnifall_label2idx, processor.tokenizer.eos_token_id
+        ),
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
 

@@ -29,7 +29,7 @@ from falldet.training.collator import VideoPreferenceCollator
 from falldet.training.dataset import DPOConversationDataset, as_lazy_hf_dataset
 from falldet.training.dpo_trainer import VideoDPOTrainer
 from falldet.training.eval_sampling import stratified_sample_indices
-from falldet.training.metrics import build_dpo_compute_metrics
+from falldet.training.metrics import build_compute_metrics
 from falldet.training.preference_setup import build_negative_selectors, write_preference_manifest
 from falldet.training.preferences import label_for_index, observed_labels
 from falldet.utils.logging import disable_logging_for_non_main_process, setup_logging
@@ -269,7 +269,7 @@ def main(cfg: DictConfig) -> None:
         data_collator=collator,
         processing_class=processor,
         compute_metrics=(
-            build_dpo_compute_metrics(processor.tokenizer, label2idx)
+            build_compute_metrics(processor.tokenizer, label2idx, processor.tokenizer.eos_token_id)
             if config.dpo.classification_metrics
             else None
         ),

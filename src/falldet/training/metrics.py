@@ -2,11 +2,11 @@
 
 ``preprocess_logits_for_metrics`` is passed to SFTTrainer to reduce the
 per-step logit tensors from (N, seq_len, vocab_size) to (N, seq_len) argmax
-IDs before they accumulate in CPU memory.
+IDs before they accumulate in CPU memory. DPO gets the same (argmax, gold)
+pair from ``VideoDPOTrainer.prediction_step``.
 
-``build_sft_compute_metrics`` returns the ``compute_metrics`` callback that
-decodes the argmax predictions and ground-truth labels from the unmasked
-completion tokens, then delegates to the project-wide ``compute_metrics``.
+``build_compute_metrics`` returns the ``compute_metrics`` callback shared by
+SFT and DPO, so both report the same greedy-equivalent classification metrics.
 """
 
 from __future__ import annotations
@@ -34,46 +34,14 @@ def preprocess_logits_for_metrics(
     return shifted
 
 
-def build_sft_compute_metrics(tokenizer, label2idx: dict[str, int]):
-    """Return a compute_metrics callback wired to the given tokenizer.
+def build_compute_metrics(tokenizer, label2idx: dict[str, int], eos_token_id: int | None = None):
+    """Return a compute_metrics callback for teacher-forced eval predictions.
 
-    Args:
-        tokenizer: HuggingFace tokenizer (processor.tokenizer).
-        label2idx: Label-to-index mapping used to instantiate the parser.
-
-    Returns:
-        Callable compatible with Trainer's compute_metrics signature.
-    """
-    parser = KeywordOutputParser(label2idx)
-
-    def _decode(token_ids: np.ndarray, mask: np.ndarray) -> str:
-        unmasked = token_ids[mask != -100]
-        return tokenizer.decode(unmasked, skip_special_tokens=True)
-
-    def sft_compute_metrics(eval_pred) -> dict[str, float]:
-        pred_ids, label_ids = eval_pred  # numpy (N, seq_len) after preprocessing
-
-        y_pred: list[str] = []
-        y_true: list[str] = []
-
-        for pred_row, label_row in zip(pred_ids, label_ids):
-            gt_text = _decode(label_row, label_row)
-            pred_text = _decode(pred_row, label_row)
-
-            y_true.append(parser.parse(gt_text).label)
-            y_pred.append(parser.parse(pred_text).label)
-
-        return compute_metrics(y_pred, y_true)
-
-    return sft_compute_metrics
-
-
-def build_dpo_compute_metrics(tokenizer, label2idx: dict[str, int]):
-    """Return a compute_metrics callback for teacher-forced DPO eval predictions.
-
-    Inputs are ``(pred_ids, label_ids)`` from ``VideoDPOTrainer.prediction_step``:
-    argmax tokens and gold chosen-answer tokens (-100 outside the answer). A row is
-    correct iff every answer token matches, which equals greedy decoding. For wrong
+    Inputs are ``(pred_ids, label_ids)``: argmax tokens aligned with the gold answer
+    tokens (-100 outside the answer), from SFT's ``preprocess_logits_for_metrics`` or
+    ``VideoDPOTrainer.prediction_step``. Gold is cut after the first ``eos_token_id``
+    because generation stops there. A row is correct iff every answer token matches,
+    which equals greedy decoding. For wrong
     rows, only the argmax tokens up to the first mismatch are decoded, because later
     positions are conditioned on the gold prefix (e.g. " fall" + "_up" -> "fall_up").
     A truncated answer maps to the shortest wrong label it prefixes, else "other"
@@ -93,13 +61,21 @@ def build_dpo_compute_metrics(tokenizer, label2idx: dict[str, int]):
                 return label
         return "other"  # like the inference parser for unparseable output
 
-    def dpo_compute_metrics(eval_pred) -> dict[str, float]:
+    def _answer_positions(label_row: np.ndarray) -> np.ndarray:
+        positions = np.flatnonzero(label_row != -100)
+        if eos_token_id is not None:
+            eos = np.flatnonzero(label_row[positions] == eos_token_id)
+            if eos.size:
+                positions = positions[: eos[0] + 1]
+        return positions
+
+    def teacher_forced_compute_metrics(eval_pred) -> dict[str, float]:
         pred_ids, label_ids = eval_pred
 
         y_pred: list[str] = []
         y_true: list[str] = []
         for pred_row, label_row in zip(pred_ids, label_ids):
-            keep = label_row != -100
+            keep = _answer_positions(label_row)
             gold = label_row[keep]
             true_label = parser.parse(tokenizer.decode(gold, skip_special_tokens=True)).label
             y_true.append(true_label)
@@ -107,4 +83,4 @@ def build_dpo_compute_metrics(tokenizer, label2idx: dict[str, int]):
 
         return compute_metrics(y_pred, y_true)
 
-    return dpo_compute_metrics
+    return teacher_forced_compute_metrics

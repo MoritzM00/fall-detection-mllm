@@ -1,8 +1,8 @@
-"""Tests for teacher-forced DPO eval metrics."""
+"""Tests for teacher-forced SFT/DPO eval metrics."""
 
 import numpy as np
 
-from falldet.training.metrics import build_dpo_compute_metrics
+from falldet.training.metrics import build_compute_metrics
 
 LABEL2IDX = {"walk": 0, "fall": 1, "fallen": 2, "lie_down": 5, "stand_up": 7, "other": 9}
 
@@ -18,6 +18,7 @@ VOCAB = {
     9: " other",
     10: " xyz",
     11: "<eos>",
+    12: "\n",
 }
 
 
@@ -40,7 +41,7 @@ def _rows(pairs):
 
 
 def _metrics(pairs):
-    return build_dpo_compute_metrics(FakeTokenizer(), LABEL2IDX)(_rows(pairs))
+    return build_compute_metrics(FakeTokenizer(), LABEL2IDX, eos_token_id=11)(_rows(pairs))
 
 
 def test_all_tokens_matching_counts_as_correct():
@@ -77,3 +78,10 @@ def test_unparseable_prediction_maps_to_other():
 
     assert metrics["accuracy"] == 0.0
     assert metrics["pred_dist_other"] == 1.0
+
+
+def test_tokens_after_eos_are_ignored():
+    # Generation stops at EOS, so the chat-template newline after it is not scored.
+    metrics = _metrics([([1, 3, 11, 9], [1, 3, 11, 12])])
+
+    assert metrics["accuracy"] == 1.0
