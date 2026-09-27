@@ -240,6 +240,7 @@ def _build_scores(
         "preference_strategy": "scores",
         "train_scores_path": preference.train_scores_path,
         "validation_scores_path": preference.validation_scores_path,
+        "balance": preference.balance,
     }
     for split, dataset, path in (
         ("train", train_dataset, preference.train_scores_path),
@@ -250,7 +251,7 @@ def _build_scores(
             metadata, records = load_label_scores(path)
             _check_score_source(config, metadata, Path(path))
         selector = ScoredNegativeSelector(
-            _labels_for_rows(dataset), _row_scores(dataset, records), fallback
+            _labels_for_rows(dataset), _row_scores(dataset, records), fallback, preference.balance
         )
         selectors[split] = selector
         summary |= selector.summary(split)

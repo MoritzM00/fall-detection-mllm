@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from falldet.training.scored import (
     SOURCE_FALLBACK,
     SOURCE_SCORE,
     ScoredNegativeSelector,
+    balanced_negatives,
     load_label_scores,
 )
 
@@ -39,6 +41,7 @@ def test_rejects_highest_scoring_wrong_label():
         "train_score_coverage": 1.0,
         "train_scoring_model_accuracy": 0.5,
         "train_score_margin_mean": -0.75,
+        "train_hardest_negative_fraction": 1.0,
     }
 
 
@@ -126,3 +129,41 @@ def test_build_scores_preferences_from_config(tmp_path, caplog):
 def test_scores_preference_requires_train_scores_path():
     with pytest.raises(ValueError, match="require train_scores_path"):
         PreferenceConfig(strategy="scores")
+
+
+def test_balanced_negatives_reject_each_label_as_often_as_chosen():
+    positives = ["fall", "walk", "jump"]
+    # Hardest wrong label would reject "jump" twice; the only balanced options are the
+    # two 3-cycles, and fall->walk->jump->fall scores -2 - 3 - 2 = -7 vs -1 - 9 - 9 = -19
+    rows = [
+        _scores(jump=-1.0, walk=-2.0),
+        _scores(jump=-3.0, fall=-9.0),
+        _scores(fall=-2.0, walk=-9.0),
+    ]
+
+    assert balanced_negatives(positives, rows) == ["walk", "jump", "fall"]
+
+
+def test_selector_balance_keeps_scores_and_reports_hardest_fraction():
+    fallback = RandomNegativeSelector(tuple(label2idx), seed=0)
+    positives = ["fall", "walk", "jump"]
+    rows = [
+        _scores(fall=0.0, jump=-1.0, walk=-2.0),
+        _scores(walk=0.0, jump=-3.0, fall=-9.0),
+        _scores(jump=0.0, fall=-2.0, walk=-9.0),
+    ]
+
+    unbalanced = ScoredNegativeSelector(positives, rows, fallback)
+    balanced = ScoredNegativeSelector(positives + ["walk"], rows + [None], fallback, balance=True)
+
+    assert unbalanced.negative_labels == ("jump", "jump", "fall")
+    assert balanced.negative_labels[:3] == ("walk", "jump", "fall")
+    assert Counter(balanced.negative_labels[:3]) == Counter(positives)
+    assert balanced.sources[3] == SOURCE_FALLBACK
+    assert balanced.correct[:3] == (True, True, True)
+    assert balanced.summary("train")["train_hardest_negative_fraction"] == pytest.approx(2 / 3)
+
+
+def test_balanced_negatives_reject_infeasible_majority_label():
+    with pytest.raises(ValueError, match="infeasible"):
+        balanced_negatives(["fall", "fall", "walk"], [_scores(), _scores(), _scores()])

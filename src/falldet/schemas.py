@@ -424,6 +424,8 @@ class PreferenceConfig(BaseConfig):
     # Rows without scores (e.g. validation when no path is given) get random negatives.
     train_scores_path: str | None = None
     validation_scores_path: str | None = None
+    # Scores: reject each label as often as it is chosen (no net push on the label prior).
+    balance: bool = False
 
     @model_validator(mode="after")
     def validate_strategy_inputs(self) -> "PreferenceConfig":
