@@ -16,15 +16,28 @@ from typing import Any
 from datasets import Dataset as HFDataset
 from torch.utils.data import Dataset
 
+from falldet.data.video_dataset import label2idx
 from falldet.inference.conversation import ConversationBuilder
+from falldet.schemas import PromptConfig
 from falldet.training.preferences import NegativeSelector, canonicalize_label, label_for_index
+
+
+def answer_text(label: str) -> str:
+    return f"The best answer is: {label}"
+
+
+def preference_prompt_config(prompt: PromptConfig) -> PromptConfig:
+    """Prompt used for DPO pairs: all labels, plain-text answer, zero-shot, no CoT."""
+    return prompt.model_copy(
+        update={"labels": list(label2idx), "output_format": "text", "num_shots": 0, "cot": False}
+    )
 
 
 def _assistant_answer(label: str) -> list[dict]:
     return [
         {
             "role": "assistant",
-            "content": [{"type": "text", "text": f"The best answer is: {label}"}],
+            "content": [{"type": "text", "text": answer_text(label)}],
         }
     ]
 

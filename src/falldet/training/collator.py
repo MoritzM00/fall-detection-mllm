@@ -91,6 +91,11 @@ class PromptMaskedSFTCollator:
         return batch
 
 
+def completion_text(answer: str, eos: str) -> str:
+    """Completion text appended after the generation prompt, as scored by DPO."""
+    return answer + eos + "\n"
+
+
 def _answer_text(example: dict, field: str) -> str:
     messages = example[field]
     if len(messages) != 1 or messages[0].get("role") != "assistant":
@@ -122,8 +127,8 @@ class VideoPreferenceCollator:
         if not eos:
             raise ValueError("The processor tokenizer must define an EOS token")
         completion_texts = [
-            *[_answer_text(example, "chosen") + eos + "\n" for example in examples],
-            *[_answer_text(example, "rejected") + eos + "\n" for example in examples],
+            *[completion_text(_answer_text(example, "chosen"), eos) for example in examples],
+            *[completion_text(_answer_text(example, "rejected"), eos) for example in examples],
         ]
         if any(
             _answer_text(example, "chosen") == _answer_text(example, "rejected")

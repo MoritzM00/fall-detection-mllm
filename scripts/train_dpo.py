@@ -26,7 +26,11 @@ from falldet.data.video_dataset_factory import get_video_datasets
 from falldet.inference.conversation import ConversationBuilder
 from falldet.schemas import DPOTrainingConfig, from_dictconfig_dpo
 from falldet.training.collator import VideoPreferenceCollator
-from falldet.training.dataset import DPOConversationDataset, as_lazy_hf_dataset
+from falldet.training.dataset import (
+    DPOConversationDataset,
+    as_lazy_hf_dataset,
+    preference_prompt_config,
+)
 from falldet.training.dpo_trainer import VideoDPOTrainer
 from falldet.training.eval_sampling import stratified_sample_indices
 from falldet.training.metrics import build_compute_metrics
@@ -130,11 +134,8 @@ def main(cfg: DictConfig) -> None:
         )
         initialization_source = "pretrained_instruct"
 
-    prompt_config = config.prompt.model_copy(
-        update={"labels": list(label2idx), "output_format": "text", "num_shots": 0, "cot": False}
-    )
     conversation_builder = ConversationBuilder(
-        config=prompt_config,
+        config=preference_prompt_config(config.prompt),
         label2idx=label2idx,
         model_fps=config.model_fps,
         needs_video_metadata=config.model.needs_video_metadata,
