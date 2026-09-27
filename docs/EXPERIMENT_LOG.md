@@ -138,9 +138,9 @@ After enough training, both confusion variants beat zero-shot on accuracy (+10 p
 - Predictions: `outputs/predictions/fall-detection-dpo-eval/{njvp8y93,fry4cw8i,zpdfkhpj,j89x04em}.jsonl`
 - Smoke test: `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_jtyocum5/` (5 steps, 1 GPU)
 
-## 2026-09-27 — LoRA SFT on the full data mix (in progress)
+## 2026-09-27 — LoRA SFT on the full data mix
 
-Logged: 2026-09-27 (training running; results to be added)
+Logged: 2026-09-27
 
 ### Goal
 
@@ -152,7 +152,7 @@ Fine-tune Qwen3-VL-8B-Instruct with LoRA SFT on all OmniFall + WanFall training 
 - Data: 42,189 train samples (10 datasets, CS / random split); validation 6,637 samples across 9 datasets, capped at 1,000 per dataset (stratified)
 - Training: `training=full`, 4,000 steps ≈ 3.03 epochs (1,318 steps/epoch); per-device batch 8, no gradient accumulation, 4 GPUs → effective batch 32; LR 1e-4 cosine, 400 warmup steps; FlashAttention 2 + Liger; DDP (no DeepSpeed)
 - Eval and save every 1,000 steps plus eval at start; all checkpoints kept; no best-model selection
-- Hardware: 4× H100 (HoreKa 2 `gpu-h100`, hkn0905), ~3.0 s/step, ~3.5 h expected
+- Hardware: 4× H100 (HoreKa 2 `gpu-h100`, hkn0905), ~3.0 s/step, 3h 39m total (job 31987)
 - Command: `sbatch --gres=gpu:4 --cpus-per-task=64 --mem=512G --time=12:00:00 slurm/train.sbatch training=full training.max_steps=4000 training.eval_steps=1000 training.save_steps=1000 training.save_total_limit=null training.load_best_model_at_end=false training.metric_for_best_model=null dataset=omnifall/video/all dataset@dataset_val=omnifall/video/all 'wandb.tags=[sft,all,4000steps]'`
 - Git revision: `b041a41` plus the `ddp_find_unused_parameters` change (committed as `909656a`); the working tree also held another session's uncommitted edits to `src/falldet/training/collator.py` and `dataset.py`.
 
@@ -167,23 +167,41 @@ Fine-tune Qwen3-VL-8B-Instruct with LoRA SFT on all OmniFall + WanFall training 
 
 ### Results
 
-Pending. Zero-shot baseline (eval at step 0, validation subsets):
+Validation balanced accuracy (%) per dataset; step 0 is the zero-shot model:
 
-| Dataset | Balanced accuracy | Macro F1 |
-|---|---:|---:|
-| cmdfall | 47.33% | 27.94% |
-| up_fall | 48.19% | 26.35% |
-| le2i | 43.18% | 36.51% |
-| gmdcsa24 | 63.12% | 39.57% |
-| edf | 37.31% | 25.84% |
-| occu | 29.39% | 21.29% |
-| caucafall | 59.38% | 46.56% |
-| OOPS | 30.91% | 27.18% |
-| wanfall | 57.98% | 46.97% |
+| Dataset | Step 0 | 1k | 2k | 3k | 4k (final) | Macro F1 at 4k |
+|---|---:|---:|---:|---:|---:|---:|
+| cmdfall | 47.3 | 75.6 | 77.4 | 79.7 | 79.0 | 79.4 |
+| up_fall | 48.2 | 84.4 | 85.2 | 86.6 | 87.0 | 86.7 |
+| le2i | 43.2 | 71.1 | 73.3 | 71.3 | 70.8 | 69.3 |
+| gmdcsa24 | 63.1 | 75.8 | 76.6 | 67.3 | 71.1 | 71.4 |
+| edf | 37.3 | 32.1 | 45.2 | 44.4 | 45.6 | 42.7 |
+| occu | 29.4 | 74.7 | 84.2 | 85.4 | 89.4 | 85.8 |
+| caucafall | 59.4 | 71.9 | 78.1 | 90.6 | 90.6 | 89.0 |
+| OOPS | 30.9 | 37.6 | 40.2 | 43.0 | 43.0 | 45.5 |
+| wanfall | 58.0 | 54.2 | 59.0 | 73.0 | 66.1 | 63.6 |
+| **Mean** | 46.3 | 64.2 | 68.8 | 71.3 | 71.4 | |
+
+mcfd has no CS validation/test clips and is skipped. Final training loss 0.042.
+
+OOPS-CS test (2,804 clips, vLLM greedy, final adapter), compared with the OOPS-only SFT run:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 | Fall ∪ fallen F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| Zero-shot (`p1r3exbe`) | 45.4% | 36.4% | 26.3% | 67.8% | 29.2% | — |
+| SFT r8, OOPS only, 300 steps (`olspo2r0`) | **64.6%** | 38.0% | 39.3% | **84.9%** | **68.3%** | **83.3%** |
+| SFT r8, all datasets, 4,000 steps (`4xo9l0um`) | 62.5% | **38.9%** | **42.1%** | 82.1% | 65.1% | 80.5% |
+
+Rare-class F1, OOPS-only → all-data SFT: sit_down 0.18 → 0.38, lie_down 0.00 → 0.17, lying 0.00 → 0.16; other 0.62 → 0.57.
+
+### Finding
+
+Training on the full mix lifts every lab dataset by 25–60 points of validation balanced accuracy over zero-shot, with mean balanced accuracy still rising at 3k steps and flat from 3k to 4k (71.3 → 71.4), so ~3 epochs is about right; per-dataset swings on the small sets (gmdcsa24, caucafall, wanfall) are noisy. On OOPS test the extra data trades ~2 points of accuracy and fall/fallen F1 for +0.9 balanced accuracy and +2.8 macro F1: the rare OOPS classes benefit from lab-dataset examples, while the frequent fall/other classes are slightly worse than with OOPS-only training. Validation overstated the OOPS gain (43.0% vs 38.9% on test).
 
 ### Artifacts
 
 - Job 31987, log `logs/slurm/falldet-sft-31987.out`
+- OOPS test eval: job 32379, W&B `fall-detection-sft-eval/4xo9l0um`, `outputs/evaluation_results/fall-detection-sft-eval/test_results_sft-all-r8-4000steps-7emiqqt3-oops-test_4xo9l0um.json` (a full-mix test eval, job 32362 / `di2lx0ym`, was cancelled)
 - W&B: `moritzm00/falldet-mllm-finetune/7emiqqt3`
 - Training: `outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_7emiqqt3/` (adapter in `adapter/`)
 - Reference OOPS SFT run: W&B `74ilzwnw`, `outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_74ilzwnw/` (300 steps, final validation accuracy 66.0%, balanced accuracy 37.7%, macro F1 39.3%)
@@ -284,9 +302,36 @@ Prepare DPO on top of the OOPS SFT model (`74ilzwnw`). Confusion negatives from 
 - Finding: DPO with hardest-wrong-label negatives does not clearly improve the OOPS SFT model. Validation: +1.4 accuracy, +0.7 balanced accuracy, −2.1 macro F1; test: −0.4 accuracy, +1.4 balanced accuracy, +0.8 macro F1, driven by a handful of rare-class clips. Validation DPO loss rose from step 100 on while accuracy improved.
 - Per-class sensitivities in these eval logs (and all earlier ones) were misaligned by a bug in `src/falldet/metrics/base.py` (per-class sklearn scores indexed by position among present labels, not by class index), fixed on 2026-09-27. Accuracy, balanced accuracy, macro F1 and OOPS fall/fallen metrics were not affected.
 
+### Follow-up: label-balanced score negatives
+
+- `preference.balance=true` (`05342d7`): rejected labels are assigned so every label is rejected exactly as often as it is chosen (net 0 for all labels), maximizing the summed score of the rejected labels (linear assignment). On the SFT train scores 70% of clips keep their hardest wrong label, 94% one of their top three; mean margin 2.59 vs 2.25. Most frequent pairs become two-way: other→fall 64, fall→other 61, standing→other 52, fallen→fall 49, other→standing 48, fall→fallen 41.
+- Otherwise identical to the run above (job 32385, W&B `falldet-mllm-finetune/xje7ahi5`, 33 min, revision `05342d7`).
+
+| Step | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 |
+|---:|---:|---:|---:|---:|---:|
+| 0 (SFT) | 66.3% | 38.3% | **38.6%** | **85.3%** | **77.7%** |
+| 50 | **67.0%** | **39.3%** | 36.1% | 85.1% | 75.3% |
+| 100 | 64.6% | 38.2% | 35.3% | 83.6% | 71.6% |
+| 150 | 65.3% | 38.3% | 33.2% | 84.3% | 73.2% |
+| 200 | 65.8% | 38.4% | 33.4% | 84.3% | 73.8% |
+| 204 | 66.3% | 38.8% | 33.7% | 84.3% | 72.3% |
+
+Best checkpoint: step 50. Full OOPS-CS test (job 32418, W&B `fall-detection-dpo-eval/8lc8j0w1`):
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 | Fall ∪ fallen F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| SFT `74ilzwnw` | **64.6%** | 38.0% | 39.3% | **84.9%** | **68.3%** | **83.3%** |
+| + DPO score negatives, step 204 | 64.2% | 39.4% | 40.1% | 83.7% | 68.1% | 83.2% |
+| + DPO balanced score negatives, step 50 | 64.0% | **42.1%** | **42.4%** | 83.3% | 63.5% | 80.3% |
+
+- The +4.1 balanced-accuracy gain is almost entirely rare classes, each weighted 1/16: kneel_down 0 → 1/3 clips (+2.1 points alone), lie_down 0 → 3/11 (+1.7), lying 0 → 2/17 (+0.7), squat_down 2 → 3/14 (+0.4). Macro F1 gains the same way.
+- Frequent classes trade off: stand_up recall 0.55 → 0.66 and walk 0.64 → 0.70, but fallen 0.71 → 0.58 (61 of 318 fallen clips now predicted stand_up), standing 0.53 → 0.45, sitting 0.53 → 0.41. 388/2,804 test predictions changed.
+- Finding: balancing removes the push towards "fall", but DPO on top of the SFT model still gives no robust improvement. Validation shows only a step-50 bump, and the test gains hang on a handful of rare-class clips while fallen detection (a primary target) drops 4.8 F1 points. The unbalanced run's net push was not the main reason DPO fails to help here.
+
 ### Artifacts
 
-- DPO: job 32181, W&B `falldet-mllm-finetune/7lh9v3yp`, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_7lh9v3yp/`
+- DPO: job 32181, W&B `falldet-mllm-finetune/7lh9v3yp`, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_7lh9v3yp/`; balanced: job 32385, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_xje7ahi5/`
+- Test predictions: `outputs/predictions/fall-detection-dpo-eval/{ym1mcl23,8lc8j0w1}.jsonl`
 - Scores: `outputs/predictions/fall-detection-label-scores/4tzsgxi1.jsonl` (train), `nclzeglc.jsonl` (validation); smoke `outputs/predictions/fall-detection-label-scores-smoke/twjcrxna.jsonl`
 - Logs: `logs/slurm/falldet-score-val-32066.out`, `logs/slurm/falldet-score-train-32065.out`, `logs/slurm/falldet-score-smoke-32046.out`
 
