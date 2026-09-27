@@ -137,3 +137,105 @@ After enough training, both confusion variants beat zero-shot on accuracy (+10 p
 - W&B: `moritzm00/falldet-mllm-finetune/6i6nebez` (training), `moritzm00/fall-detection-dpo-eval/njvp8y93` (epoch 3 test), `fry4cw8i` (epoch 10 test); random-sampling run `8lctvfqg` (training), `zpdfkhpj` (epoch 3 test), `j89x04em` (epoch 7 test)
 - Predictions: `outputs/predictions/fall-detection-dpo-eval/{njvp8y93,fry4cw8i,zpdfkhpj,j89x04em}.jsonl`
 - Smoke test: `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_jtyocum5/` (5 steps, 1 GPU)
+
+## 2026-09-27 — Random-negative DPO with classification-metric selection
+
+Logged: 2026-09-27
+
+### Goal
+
+Check that teacher-forced validation classification metrics (`dpo.classification_metrics=true`, `291fbcb`) are a usable checkpoint-selection signal for DPO, unlike DPO validation loss.
+
+### Setup
+
+- Same as the 2026-09-21 random-negative run except: 4 epochs (408 steps) instead of 10, so the cosine schedule decays over 4 epochs; Liger off (classification metrics need full logits); best checkpoint by `eval_balanced_accuracy`.
+- Pretrained Qwen3-VL-8B-Instruct + fresh LoRA rank 8, 16 frames at 7.5 FPS, size 448, prompt with clip overlap note, sigmoid DPO beta 0.1, LR 1e-5 cosine with 10% warmup, random negatives over all 16 labels, seed 0.
+- Validation: all 409 OOPS-CS validation clips, before training and after every epoch (~2 min per pass).
+- Hardware: 2× H100 (`gpu-h100`), per-device batch 1, gradient accumulation 4 → effective batch 8; 6.6 s/step without Liger (vs ~4.3 s/step with it), 46 min total.
+- Command: `sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G --time=04:00:00 slurm/dpo.sbatch dpo=oops dataset=omnifall/video/oops dataset@dataset_val=omnifall/video/oops preference=random dpo.num_train_epochs=4`
+- Git revision: `e1f3896` (clean tree).
+
+### Results
+
+Teacher-forced validation metrics (a clip counts as correct only if every answer token is the argmax, which equals greedy decoding):
+
+| Epoch | DPO loss | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 0.693 | 45.5% | 31.2% | 27.5% | 65.7% | 25.5% |
+| 1 | 0.236 | 52.1% | 29.6% | 28.7% | 68.3% | 64.9% |
+| 2 | 0.216 | 56.0% | 33.4% | 31.9% | 71.7% | 67.5% |
+| 3 | 0.208 | **56.7%** | **33.4%** | **32.0%** | **73.0%** | 66.7% |
+| 4 | 0.206 | 56.5% | 33.2% | 32.0% | **73.0%** | **67.5%** |
+
+Best checkpoint by balanced accuracy: epoch 3 (`checkpoint-306`). Not yet evaluated on test.
+
+### Finding
+
+The classification metrics track what the earlier runs showed on test: at step 0 they match zero-shot greedy decoding (accuracy 45.5% on validation vs 45.4% on test; fall F1 65.7% vs 67.8%), balanced accuracy dips after epoch 1 and recovers from epoch 2. They are a usable selection signal; DPO loss decreases monotonically and is not. Epochs 2–4 are within 0.2 points of balanced accuracy, so a short schedule is enough.
+
+### Artifacts
+
+- Job 31977, log `logs/slurm/falldet-dpo-31977.out`
+- W&B: `moritzm00/falldet-mllm-finetune/xhe9sy4e`
+- Training: `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_xhe9sy4e/` (checkpoints 102/204/306/408)
+
+## 2026-09-27 — Teacher-forced label scores for per-clip hard DPO negatives
+
+Logged: 2026-09-27
+
+### Goal
+
+Prepare DPO on top of the OOPS SFT model (`74ilzwnw`). Confusion negatives from the zero-shot model do not fit it (another model's errors, and they pushed label priors), and the SFT model's own train predictions are likely memorized. Instead, score all 16 labels per clip with the SFT model and reject the highest-scoring wrong label, which gives a hard negative for every clip, including those the model gets right.
+
+### Implementation
+
+- `scripts/score_labels.py` (+ `slurm/score_labels.sbatch`): for each clip, one vLLM request per label whose prompt ends with that label's exact DPO completion (`The best answer is: <label><|im_end|>\n`; prompt and completion come from the same helpers as DPO). Scores are the summed prompt logprobs of the label-dependent completion tokens (the 5 shared leading tokens are skipped). Output is a prediction JSONL (`predicted_label` = top label) with `label_logprobs`, plus the usual metrics.
+- `preference=scores` (`src/falldet/training/scored.py`): the rejected label is the highest-scoring wrong label; rows without scores (e.g. validation without `validation_scores_path`) get random negatives. Warns if the scores came from a different prompt config or adapter than `dpo.sft_adapter_path`.
+- Prefix caching cannot be used: with `skip_reading_prefix_cache=False`, vLLM 0.20 returned out-of-range token ids in the prompt logprobs (`OverflowError`); by default vLLM already skips reading the cache for prompt-logprob requests. So each label is a full prefill: ~1.3 s per clip for all 16 labels on one H100.
+- A failing run left the vLLM engine process alive and the Slurm job hanging after `sys.exit`; the script now exits with `os._exit(1)` on errors.
+
+### Smoke test (zero-shot model, 32 OOPS train clips)
+
+- 43.5 s for 32 clips (job 32046, W&B `fall-detection-label-scores-smoke/twjcrxna`).
+- Top label agrees with greedy zero-shot predictions (`themoiiq`) on 29/32 clips. `themoiiq` ran with `prompt.clip_overlap_note=false`, the scorer with `true`; the 3 disagreements have clear margins (3–13 nats), consistent with the prompt difference. Not yet confirmed by rescoring without the note.
+
+### SFT scoring (`74ilzwnw` adapter = `checkpoint-300`)
+
+- Validation (409 clips, job 32066, W&B `fall-detection-label-scores/nclzeglc`, 544 s): accuracy 66.0%, balanced accuracy 39.1%, macro F1 36.6%. Accuracy matches the SFT run's own final validation accuracy (66.0%), a cross-check that the scores reproduce the model's decisions.
+- Hardest-negative pairs on validation: other→standing 35, standing→other 32, walk→other 31, fall→jump 24, fall→other 21. Net chosen − rejected: fall +70, fallen +8 vs other −23, standing −21, lie_down −15, jump −14, lying −14. The label-prior imbalance seen with confusion negatives appears here too, now favouring fall.
+- Train (809 clips, job 32065, W&B `fall-detection-label-scores/4tzsgxi1`, 1,069 s): accuracy 79.4%, balanced accuracy 75.9%, macro F1 77.3%. The SFT model has **not** memorized its 809 training clips after 300 steps: 167 are still wrong, the median positive-minus-hardest-negative margin is 2.25 nats, and 381 clips have a margin below 2 nats, so DPO gets real signal from these negatives.
+- Hardest-negative pairs on train: other→standing 74, fall→jump 60, standing→other 56, fall→other 47, walk→other 45, stand_up→fallen 37, other→walk 35. Net chosen − rejected: fall +122, stand_up +22, sitting +11 vs standing −47, jump −43, lie_down −26, lying −24, other −23. As on validation, DPO will push the prior towards fall and away from standing/jump.
+
+### DPO from the SFT adapter with score negatives
+
+- Setup: `dpo=oops` from `74ilzwnw/adapter`, train and validation negatives from the scores above, 2 epochs (204 steps), validation and checkpoints every 50 steps, selection by validation balanced accuracy; otherwise as the random-negative run (beta 0.1, LR 1e-5 cosine, effective batch 8 on 2× H100, Liger off). 33 min.
+- Command: `sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G --time=04:00:00 slurm/dpo.sbatch dpo=oops dataset=omnifall/video/oops dataset@dataset_val=omnifall/video/oops dpo.sft_adapter_path=outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_74ilzwnw/adapter dpo.num_train_epochs=2 dpo.eval_strategy=steps dpo.eval_steps=50 dpo.save_strategy=steps dpo.save_steps=50 preference=scores preference.train_scores_path=outputs/predictions/fall-detection-label-scores/4tzsgxi1.jsonl preference.validation_scores_path=outputs/predictions/fall-detection-label-scores/nclzeglc.jsonl`
+- Git revision: `909656a` plus the uncommitted label-scoring code.
+
+| Step | DPO loss | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 (SFT) | 0.693 | 66.3% | 38.3% | **38.6%** | 85.3% | **77.7%** |
+| 50 | 0.604 | 65.8% | 37.9% | 35.8% | 81.1% | 74.4% |
+| 100 | 0.592 | 66.8% | 37.7% | 35.0% | 84.9% | 72.3% |
+| 150 | 0.665 | 67.5% | 38.6% | 36.1% | **85.9%** | 74.4% |
+| 200 | 0.679 | 67.5% | 38.8% | 36.5% | **85.9%** | 73.8% |
+| 204 | 0.680 | **67.7%** | **39.0%** | 36.5% | **85.9%** | 75.3% |
+
+- Best checkpoint: `checkpoint-204` (exported `adapter/`).
+- Full OOPS-CS test (2,804 clips; job 32359, W&B `fall-detection-dpo-eval/ym1mcl23`) vs the SFT adapter (W&B `fall-detection-sft-eval/olspo2r0`, same eval setup):
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 | Fall ∪ fallen F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| SFT `74ilzwnw` | **64.6%** | 38.0% | 39.3% | **84.9%** | **68.3%** | **83.3%** |
+| + DPO score negatives, step 204 | 64.2% | **39.4%** | **40.1%** | 83.7% | 68.1% | 83.2% |
+
+- On test, 251/2,804 predictions changed. The balanced-accuracy and macro-F1 gains come from a few rare-class clips (lying 0 → 2/17, lie_down 0 → 2/11, squatting 2 → 4/7, squat_down 2 → 3/14, kneeling 12 → 14/45); recall fell for standing (0.53 → 0.49), sitting (0.53 → 0.46), stand_up (0.55 → 0.53) and jump (0.49 → 0.47), the labels the negatives rejected most. Frequent classes are essentially unchanged. Validation (macro F1 −2.1) and test (+0.8) disagree in sign, so the effect is within noise.
+- Predicted-label shares moved with the negative imbalance: fall 0.218 → 0.288 (step 50) → 0.254 (step 100) vs true 0.230; standing 0.098 → 0.034 → 0.064 vs true 0.105.
+- Finding: DPO with hardest-wrong-label negatives does not clearly improve the OOPS SFT model. Validation: +1.4 accuracy, +0.7 balanced accuracy, −2.1 macro F1; test: −0.4 accuracy, +1.4 balanced accuracy, +0.8 macro F1, driven by a handful of rare-class clips. Validation DPO loss rose from step 100 on while accuracy improved.
+- Per-class sensitivities in these eval logs (and all earlier ones) were misaligned by a bug in `src/falldet/metrics/base.py` (per-class sklearn scores indexed by position among present labels, not by class index), fixed on 2026-09-27. Accuracy, balanced accuracy, macro F1 and OOPS fall/fallen metrics were not affected.
+
+### Artifacts
+
+- DPO: job 32181, W&B `falldet-mllm-finetune/7lh9v3yp`, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_7lh9v3yp/`
+- Scores: `outputs/predictions/fall-detection-label-scores/4tzsgxi1.jsonl` (train), `nclzeglc.jsonl` (validation); smoke `outputs/predictions/fall-detection-label-scores-smoke/twjcrxna.jsonl`
+- Logs: `logs/slurm/falldet-score-val-32066.out`, `logs/slurm/falldet-score-train-32065.out`, `logs/slurm/falldet-score-smoke-32046.out`
