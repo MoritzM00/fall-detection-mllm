@@ -10,7 +10,7 @@ Docs: <https://docs.nhr.kit.edu/> (work in progress), legacy: <https://www.nhr.k
 - Account / project group: `hk-project-p0029156` (default account).
 - Target partition: **`gpu-h100`** (HoreKa Teal) — 4× H100, AMD EPYC 9354 (64 cores), 768 GiB RAM,
   2× 3.84 TB local NVMe, max walltime 2 days, 21 nodes. B200 (`gpu-b200`, ARM Grace) is not online yet.
-- `dev-gpu-h100`: max 1 h, 1 concurrent job — use for smoke tests (`salloc`).
+- `dev-gpu-h100`: max 1 h, 1 concurrent job — interactive use only (`salloc`); batch smoke tests go to `gpu-h100` with a short `--time`.
 - Other GPU partitions: `gpu-h200` (4× H200), `gpu-h200-8` (8× H200, 1 node).
 - `agent` partition: single-core, max 3 days — where Claude Code / VS Code Remote sessions run
   (2 CPUs, no GPU). Interactive AI agent usage on login nodes is prohibited.
