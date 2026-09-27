@@ -407,7 +407,7 @@ class TrainingConfig(BaseConfig):
 
 
 class PreferenceConfig(BaseConfig):
-    strategy: Literal["random", "similarity", "confusion"] = "random"
+    strategy: Literal["random", "similarity", "confusion", "scores"] = "random"
     seed: int = Field(0, ge=0)
     train_embeddings_path: str | None = None
     validation_embeddings_path: str | None = None
@@ -420,6 +420,10 @@ class PreferenceConfig(BaseConfig):
     # Rejected label for rows without a model error: confusion-row sample or uniform random.
     sample_from: Literal["confusion_matrix", "random"] = "confusion_matrix"
     uniform_mix: float = Field(0.1, ge=0.0, le=1.0)
+    # Scores: scripts/score_labels.py outputs; the highest-scoring wrong label is rejected.
+    # Rows without scores (e.g. validation when no path is given) get random negatives.
+    train_scores_path: str | None = None
+    validation_scores_path: str | None = None
 
     @model_validator(mode="after")
     def validate_strategy_inputs(self) -> "PreferenceConfig":
@@ -432,6 +436,8 @@ class PreferenceConfig(BaseConfig):
             )
         if self.strategy == "confusion" and not self.train_predictions_paths:
             raise ValueError("Confusion preferences require train_predictions_paths")
+        if self.strategy == "scores" and self.train_scores_path is None:
+            raise ValueError("Score preferences require train_scores_path")
         return self
 
 

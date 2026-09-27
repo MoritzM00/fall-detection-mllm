@@ -26,8 +26,10 @@ from falldet.training.preferences import (
     NegativeSelector,
     RandomNegativeSelector,
     align_embeddings_to_dataset,
+    align_records_to_dataset,
     label_for_index,
 )
+from falldet.training.scored import ScoredNegativeSelector, load_label_scores
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +201,94 @@ def _build_confusion(
     return PreferenceSetup(train_selector, validation_selector, summary, manifest)
 
 
+def _check_score_source(config: DPOTrainingConfig, metadata: dict, path: Path) -> None:
+    """Warn when the scores were produced with another prompt or starting adapter."""
+
+    source = metadata.get("config", {})
+    source_prompt = source.get("prompt", {})
+    prompt = json.loads(config.prompt.model_dump_json())
+    differing = sorted(key for key in prompt if source_prompt.get(key) != prompt[key])
+    if differing:
+        logger.warning(f"Label scores {path} used a different prompt config: {differing}")
+    source_adapter = source.get("lora", {}).get("path")
+    adapter = config.dpo.sft_adapter_path
+    resolved = [
+        None if p is None else str(Path(p).expanduser().resolve())
+        for p in (source_adapter, adapter)
+    ]
+    if resolved[0] != resolved[1]:
+        logger.warning(
+            f"Label scores {path} come from adapter {source_adapter}, but DPO starts from {adapter}"
+        )
+
+
+def _row_scores(dataset: Dataset, records: list[dict]) -> list[dict[str, float] | None]:
+    return [
+        None if record is None else record["label_logprobs"]
+        for record in align_records_to_dataset(dataset, records)
+    ]
+
+
+def _build_scores(
+    config: DPOTrainingConfig, train_dataset: Dataset, validation_dataset: Dataset
+) -> PreferenceSetup:
+    preference = config.preference
+    assert preference.train_scores_path is not None
+    fallback = RandomNegativeSelector(tuple(label2idx), seed=preference.seed)
+    selectors: dict[str, ScoredNegativeSelector] = {}
+    summary: dict = {
+        "preference_strategy": "scores",
+        "train_scores_path": preference.train_scores_path,
+        "validation_scores_path": preference.validation_scores_path,
+    }
+    for split, dataset, path in (
+        ("train", train_dataset, preference.train_scores_path),
+        ("validation", validation_dataset, preference.validation_scores_path),
+    ):
+        records: list[dict] = []
+        if path is not None:
+            metadata, records = load_label_scores(path)
+            _check_score_source(config, metadata, Path(path))
+        selector = ScoredNegativeSelector(
+            _labels_for_rows(dataset), _row_scores(dataset, records), fallback
+        )
+        selectors[split] = selector
+        summary |= selector.summary(split)
+    if summary["train_score_coverage"] < 1.0:
+        logger.warning(
+            f"Only {summary['train_score_coverage']:.1%} of train rows have label scores; "
+            "the rest use random negatives"
+        )
+    logger.info(
+        "Score negatives: scoring-model train accuracy %.3f, mean margin %.2f",
+        summary["train_scoring_model_accuracy"],
+        summary["train_score_margin_mean"],
+    )
+
+    manifest: list[dict[str, ManifestValue]] = []
+    for split, selector in selectors.items():
+        for query_index, (positive, negative, source, margin) in enumerate(
+            zip(
+                selector.query_labels,
+                selector.negative_labels,
+                selector.sources,
+                selector.margins,
+                strict=True,
+            )
+        ):
+            manifest.append(
+                {
+                    "split": split,
+                    "query_index": query_index,
+                    "positive_label": positive,
+                    "negative_label": negative,
+                    "source": source,
+                    "score_margin": margin,
+                }
+            )
+    return PreferenceSetup(selectors["train"], selectors["validation"], summary, manifest)
+
+
 def build_negative_selectors(
     config: DPOTrainingConfig, train_dataset: Dataset, validation_dataset: Dataset
 ) -> PreferenceSetup:
@@ -212,6 +302,8 @@ def build_negative_selectors(
         )
     if strategy == "similarity":
         return _build_similarity(config, train_dataset, validation_dataset)
+    if strategy == "scores":
+        return _build_scores(config, train_dataset, validation_dataset)
     return _build_confusion(config, train_dataset, validation_dataset)
 
 
