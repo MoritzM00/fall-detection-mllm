@@ -138,6 +138,56 @@ After enough training, both confusion variants beat zero-shot on accuracy (+10 p
 - Predictions: `outputs/predictions/fall-detection-dpo-eval/{njvp8y93,fry4cw8i,zpdfkhpj,j89x04em}.jsonl`
 - Smoke test: `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_jtyocum5/` (5 steps, 1 GPU)
 
+## 2026-09-27 — LoRA SFT on the full data mix (in progress)
+
+Logged: 2026-09-27 (training running; results to be added)
+
+### Goal
+
+Fine-tune Qwen3-VL-8B-Instruct with LoRA SFT on all OmniFall + WanFall training data (`dataset=omnifall/video/all`) and track per-dataset validation metrics.
+
+### Setup
+
+- Model: `Qwen/Qwen3-VL-8B-Instruct` + fresh LoRA (`lora=train`); 16 frames at 7.5 FPS, size 448
+- Data: 42,189 train samples (10 datasets, CS / random split); validation 6,637 samples across 9 datasets, capped at 1,000 per dataset (stratified)
+- Training: `training=full`, 4,000 steps ≈ 3.03 epochs (1,318 steps/epoch); per-device batch 8, no gradient accumulation, 4 GPUs → effective batch 32; LR 1e-4 cosine, 400 warmup steps; FlashAttention 2 + Liger; DDP (no DeepSpeed)
+- Eval and save every 1,000 steps plus eval at start; all checkpoints kept; no best-model selection
+- Hardware: 4× H100 (HoreKa 2 `gpu-h100`, hkn0905), ~3.0 s/step, ~3.5 h expected
+- Command: `sbatch --gres=gpu:4 --cpus-per-task=64 --mem=512G --time=12:00:00 slurm/train.sbatch training=full training.max_steps=4000 training.eval_steps=1000 training.save_steps=1000 training.save_total_limit=null training.load_best_model_at_end=false training.metric_for_best_model=null dataset=omnifall/video/all dataset@dataset_val=omnifall/video/all 'wandb.tags=[sft,all,4000steps]'`
+- Git revision: `b041a41` plus the `ddp_find_unused_parameters` change (committed as `909656a`); the working tree also held another session's uncommitted edits to `src/falldet/training/collator.py` and `dataset.py`.
+
+### Decisions
+
+- **Batch size**: the OOPS SFT run (`74ilzwnw`, job 31978, per-device batch 8 on 2 GPUs) used 87–88 of 96 GB per GPU at 99–100% utilization, so per-device batch stays at 8; the larger effective batch (16 → 32) comes from 4 GPUs. Step time is unchanged (~3 s), so more GPUs add samples per step, not speed.
+- **Steps**: first submitted with 10,000 steps (job 31984), cancelled after ~15 steps. That would have been ~7.6 epochs; the single-label target is memorized quickly (OOPS run: 97% token accuracy, loss 0.08 at ~3 epochs), and with cosine decay over 10k steps an intermediate checkpoint is not equivalent to a shorter run.
+- **Multi-node**: not used. `train.sbatch` / `config/accelerate/ddp_bf16.yaml` are single-node only, and at a fixed step count extra nodes only raise the batch size, not throughput.
+- **DeepSpeed**: not used (untested). ZeRO-2 saves little with LoRA; memory is dominated by activations.
+- **Best-model selection**: disabled. With several validation datasets `metric_for_best_model` is rewritten to the first dataset's metric (cmdfall); a cross-dataset average is needed first.
+- **DDP**: set `ddp_find_unused_parameters=false` for SFT presets (`909656a`); HF defaults to `True` for PEFT models, which added an extra autograd traversal per step.
+
+### Results
+
+Pending. Zero-shot baseline (eval at step 0, validation subsets):
+
+| Dataset | Balanced accuracy | Macro F1 |
+|---|---:|---:|
+| cmdfall | 47.33% | 27.94% |
+| up_fall | 48.19% | 26.35% |
+| le2i | 43.18% | 36.51% |
+| gmdcsa24 | 63.12% | 39.57% |
+| edf | 37.31% | 25.84% |
+| occu | 29.39% | 21.29% |
+| caucafall | 59.38% | 46.56% |
+| OOPS | 30.91% | 27.18% |
+| wanfall | 57.98% | 46.97% |
+
+### Artifacts
+
+- Job 31987, log `logs/slurm/falldet-sft-31987.out`
+- W&B: `moritzm00/falldet-mllm-finetune/7emiqqt3`
+- Training: `outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_7emiqqt3/` (adapter in `adapter/`)
+- Reference OOPS SFT run: W&B `74ilzwnw`, `outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_74ilzwnw/` (300 steps, final validation accuracy 66.0%, balanced accuracy 37.7%, macro F1 39.3%)
+
 ## 2026-09-27 — Random-negative DPO with classification-metric selection
 
 Logged: 2026-09-27
@@ -239,3 +289,79 @@ Prepare DPO on top of the OOPS SFT model (`74ilzwnw`). Confusion negatives from 
 - DPO: job 32181, W&B `falldet-mllm-finetune/7lh9v3yp`, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_7lh9v3yp/`
 - Scores: `outputs/predictions/fall-detection-label-scores/4tzsgxi1.jsonl` (train), `nclzeglc.jsonl` (validation); smoke `outputs/predictions/fall-detection-label-scores-smoke/twjcrxna.jsonl`
 - Logs: `logs/slurm/falldet-score-val-32066.out`, `logs/slurm/falldet-score-train-32065.out`, `logs/slurm/falldet-score-smoke-32046.out`
+
+## 2026-09-27 — OOPS SFT (rank 8, 300 steps) and confusion DPO on top
+
+Logged: 2026-09-27
+
+### Goal
+
+Train a short LoRA SFT baseline on OOPS-CS, then continue it with confusion-guided DPO built from the SFT model's own train-split errors, and compare both with zero-shot and the DPO-from-pretrained runs on the full test split.
+
+### SFT setup
+
+- Pretrained Qwen3-VL-8B-Instruct + fresh LoRA rank 8 (alpha 16, dropout 0.05, all attention/MLP projections), 16 frames at 7.5 FPS, size 448, default prompt (with clip overlap note)
+- `training=full`: 300 steps; per-device batch 8, 2 GPUs → effective batch 16, 50 steps/epoch → 6 epochs; LR 1e-4 cosine, 30 warmup steps; FlashAttention 2 + Liger
+- Eval and save every 50 steps (= every epoch) plus at start, on all 409 validation clips; best checkpoint by `eval_balanced_accuracy`
+- Hardware: 2× H100 (`gpu-h100`), ~2.9 s/step, 19 min training, 22 min job
+- Command: `sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G --time=06:00:00 slurm/train.sbatch training=full training.max_steps=300 lora.r=8 lora.lora_alpha=16 training.eval_steps=50 training.save_steps=50 training.save_total_limit=6 training.load_best_model_at_end=true training.metric_for_best_model=eval_balanced_accuracy 'wandb.tags=[sft,oops,r8,300steps]'`
+- Git revision: `e1f3896` (clean tree). The validation metrics therefore used the old SFT decoding (every teacher-forced argmax token after a mismatch is decoded and keyword-parsed); accuracy and balanced accuracy are unaffected, macro F1 is not comparable with DPO runs. `b041a41` replaced it with the shared greedy-equivalent DPO decoding (on the untrained model: accuracy 46.0% vs 45.5%, balanced accuracy 31.3% vs 31.2%, macro F1 30.4% vs 27.5%).
+
+### SFT results
+
+Teacher-forced validation (old SFT decoding):
+
+| Epoch | Loss | Accuracy | Balanced accuracy |
+|---:|---:|---:|---:|
+| 0 | 0.711 | 46.0% | 31.3% |
+| 1 | 0.150 | 59.4% | 37.7% |
+| 2 | 0.135 | 64.1% | 36.1% |
+| 3 | 0.133 | 64.3% | 36.3% |
+| 4 | 0.138 | 64.1% | 37.6% |
+| 5 | 0.148 | 65.8% | 37.3% |
+| 6 | 0.147 | **66.0%** | **37.7%** |
+
+Best checkpoint: `checkpoint-300` (37.72% vs 37.69% at epoch 1), exported as `adapter/`. vLLM greedy (`experiment=zeroshot`, same prompt): train split (809 clips) accuracy 79.1%, balanced accuracy 75.9%, macro F1 77.3%; test split in the table below. Validation tracked test closely (balanced accuracy 37.7% vs 38.0%).
+
+### DPO on top of SFT
+
+- Initialization: `dpo.sft_adapter_path` = the SFT `adapter/`; the frozen reference is a copy of it (step-0 DPO loss 0.6931 = ln 2)
+- Negatives: `preference=confusion` from the SFT model's own vLLM train predictions (`qisfpq56.jsonl`, 169/809 wrong). Mining: 169 train clips use the model's own wrong prediction; the other 640 train clips and all 409 validation clips are sampled from the SFT confusion matrix (0.9 errors + 0.1 uniform)
+- `dpo=oops` with 2 epochs (204 steps): sigmoid, beta 0.1, LR 1e-5 cosine, 10% warmup; per-device batch 1, gradient accumulation 4, 2 GPUs → effective batch 8; Liger off; eval every epoch and at start, best by `eval_balanced_accuracy`
+- Hardware: 2× H100, 7.2 s/step, 24.5 min training, 26 min job
+- Command: `sbatch --gres=gpu:2 --cpus-per-task=32 --mem=256G --time=03:00:00 slurm/dpo.sbatch dpo=oops dpo.num_train_epochs=2 dpo.sft_adapter_path=outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_74ilzwnw/adapter dataset=omnifall/video/oops dataset@dataset_val=omnifall/video/oops preference=confusion 'preference.train_predictions_paths=[outputs/predictions/fall-detection-sft-eval/qisfpq56.jsonl]' 'wandb.tags=[dpo,confusion,oops,on-sft,sft-74ilzwnw]'`
+- Git revision: `909656a` plus another session's uncommitted refactor (`align_records_to_dataset`, `completion_text`, `preference_prompt_config`); read before the run, behavior-preserving for this path, confirmed by the 169 own-error rows in the mining manifest.
+
+Teacher-forced validation (shared decoding):
+
+| Epoch | DPO loss | Accuracy | Balanced accuracy | Macro F1 |
+|---:|---:|---:|---:|---:|
+| 0 (= SFT) | 0.693 | 66.3% | 38.3% | 38.6% |
+| 1 | 0.308 | **66.8%** | **39.0%** | 36.1% |
+| 2 | 0.328 | 66.3% | 38.5% | 36.0% |
+
+Best checkpoint: epoch 1 (`checkpoint-102`), exported as `adapter/`.
+
+### Test results (OOPS-CS test, 2,804 clips, vLLM greedy)
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Fall F1 | Fallen F1 | Fall ∪ fallen F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| Zero-shot (`p1r3exbe`) | 45.4% | 36.4% | 26.3% | 67.8% | 29.2% | — |
+| DPO random negatives from pretrained, epoch 3 | 56.6% | 36.2% | 34.3% | — | — | — |
+| SFT r8, 300 steps | **64.6%** | 38.0% | **39.3%** | **84.9%** | **68.3%** | **83.3%** |
+| SFT → confusion DPO, epoch 1 | 63.7% | **40.2%** | 39.0% | 83.6% | 67.8% | 82.6% |
+
+Fall: sensitivity 83.8% → 82.2%, precision 86.0% → 84.9%. Fallen: sensitivity 71.4% → 69.2%, precision 65.4% → 66.5%. Fall ∪ fallen: sensitivity 83.9% → 82.3%, specificity 91.0% → 91.2%.
+
+Per-class test recall, SFT → SFT+DPO: jump 0.49 → 0.60 (167 clips), sitting 0.53 → 0.59, squatting 0.29 → 0.57, lie_down 0.00 → 0.18, lying 0.00 → 0.12, kneeling 0.27 → 0.29; other 0.65 → 0.59, fall 0.84 → 0.82, fallen 0.71 → 0.69, crawl 0.33 → 0.00 (3 clips); walk, stand_up, standing, sit_down, squat_down, kneel_down unchanged. Prediction counts: other 719 → 589, jump 123 → 162, sitting 72 → 107, lie_down 4 → 18, lying 1 → 9.
+
+### Finding
+
+SFT is the strongest single step: +19 points accuracy, +13 macro F1 and +17 fall F1 over zero-shot in 22 minutes, but balanced accuracy only +1.6, because the rare classes (1–8 train clips each) are memorized (train balanced accuracy 75.9% vs test 38.0%). Confusion DPO on top of it, with the SFT model's own errors as negatives, un-collapses rare classes and moves predictions away from "other" (+2.2 balanced accuracy on test, the best so far), at the cost of −0.9 accuracy and slightly lower fall/fallen F1; macro F1 is flat because the extra rare-class predictions are often wrong. Validation predicted the direction (+0.7 balanced accuracy). Unlike confusion DPO from the zero-shot model, starting from SFT did not collapse rare classes. Many rare-class test counts are 3–17 clips, so their recall changes rest on a few clips; jump and other are the robust shifts.
+
+### Artifacts
+
+- SFT: job 31978, W&B `moritzm00/falldet-mllm-finetune/74ilzwnw`, `outputs/training/Qwen3-VL-8B-Instruct-F16at7.5_74ilzwnw/` (checkpoints 50–300, `adapter/` = 300)
+- SFT vLLM evals: train job 31983, W&B `fall-detection-sft-eval/qisfpq56`, `outputs/predictions/fall-detection-sft-eval/qisfpq56.jsonl`; test job 31986, W&B `fall-detection-sft-eval/olspo2r0`, `outputs/evaluation_results/fall-detection-sft-eval/test_results_sft-r8-300steps-74ilzwnw-best-test_olspo2r0.json` (the train-split file is also prefixed `test_results_`)
+- DPO: job 32042, W&B `moritzm00/falldet-mllm-finetune/fh51hvwg`, `outputs/dpo/Qwen3-VL-8B-Instruct-F16at7.5_fh51hvwg/` (checkpoints 102/204, `adapter/` = 102, `preference_mining.jsonl`)
+- DPO test eval: job 32055, W&B `fall-detection-dpo-eval/s90jn7pi`, `outputs/evaluation_results/fall-detection-dpo-eval/test_results_dpo-confusion-on-sft-fh51hvwg-ep1_s90jn7pi.json`, `outputs/predictions/fall-detection-dpo-eval/s90jn7pi.jsonl`
