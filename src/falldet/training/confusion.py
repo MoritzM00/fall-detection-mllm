@@ -12,9 +12,8 @@ from torch.utils.data import Dataset
 from falldet.data.video_dataset import idx2label, label2idx
 from falldet.training.preferences import (
     PrecomputedNegativeSelector,
+    align_records_to_dataset,
     canonicalize_label,
-    sample_identity,
-    segment_for_index,
 )
 from falldet.utils.predictions import load_predictions_jsonl
 
@@ -69,19 +68,10 @@ def confusion_counts(records: Sequence[dict]) -> np.ndarray:
 def align_predictions_to_dataset(dataset: Dataset, records: Sequence[dict]) -> list[str | None]:
     """Return the previous model's predicted label per dataset row (None if not predicted)."""
 
-    by_identity: dict[tuple, str | None] = {}
-    for record in records:
-        identity = sample_identity(record)
-        if identity in by_identity:
-            raise ValueError(f"Duplicate prediction sample identity: {identity}")
-        by_identity[identity] = _predicted_label(record)
-
-    length = len(dataset)  # ty: ignore[invalid-argument-type]
-    aligned: list[str | None] = []
-    for index in range(length):
-        segment, dataset_name = segment_for_index(dataset, index)
-        aligned.append(by_identity.get(sample_identity(segment, dataset_name)))
-    return aligned
+    return [
+        None if record is None else _predicted_label(record)
+        for record in align_records_to_dataset(dataset, records)
+    ]
 
 
 def negative_distribution(counts: np.ndarray, uniform_mix: float) -> np.ndarray:

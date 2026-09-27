@@ -117,6 +117,24 @@ def sample_identity(sample: dict, dataset_name: str | None = None) -> tuple:
     return (str(source).casefold(), video_path, round(start, 6), round(end, 6), label)
 
 
+def align_records_to_dataset(dataset: Dataset, records: Sequence[dict]) -> list[dict | None]:
+    """Return the record matching each dataset row by sample identity (None if absent)."""
+
+    by_identity: dict[tuple, dict] = {}
+    for record in records:
+        identity = sample_identity(record)
+        if identity in by_identity:
+            raise ValueError(f"Duplicate sample identity: {identity}")
+        by_identity[identity] = record
+
+    length = len(dataset)  # ty: ignore[invalid-argument-type]
+    aligned: list[dict | None] = []
+    for index in range(length):
+        segment, dataset_name = segment_for_index(dataset, index)
+        aligned.append(by_identity.get(sample_identity(segment, dataset_name)))
+    return aligned
+
+
 def align_embeddings_to_dataset(
     dataset: Dataset,
     embeddings: torch.Tensor,
