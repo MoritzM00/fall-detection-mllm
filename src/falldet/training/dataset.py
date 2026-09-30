@@ -10,9 +10,6 @@ inference see identical user prompts.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
-
 from datasets import Dataset as HFDataset
 from torch.utils.data import Dataset
 
@@ -105,9 +102,9 @@ class _LazyRowsTransform:
     def __init__(self, source: Dataset):
         self.source = source
 
-    def __call__(self, rows: dict[str, Any]) -> dict[str, list]:
+    def __call__(self, rows: dict[str, int | list[int]]) -> dict[str, list]:
         raw_indices = rows["row_index"]
-        if isinstance(raw_indices, Sequence):
+        if isinstance(raw_indices, list):
             indices = [int(index) for index in raw_indices]
         else:
             indices = [int(raw_indices)]

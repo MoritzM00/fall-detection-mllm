@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Protocol
+from typing import Protocol
 
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ class NegativeSelector(Protocol):
     def select(self, query_index: int, positive_label: str) -> str: ...
 
 
-def canonicalize_label(value: Any) -> str:
+def canonicalize_label(value: object) -> str:
     """Convert repository label metadata to a validated canonical label string."""
 
     if isinstance(value, torch.Tensor):

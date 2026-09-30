@@ -15,12 +15,12 @@ it returns corrupt prompt logprobs in vLLM 0.20), so every label costs a full pr
 import logging
 import os
 import time
-from typing import Any, cast
+from typing import cast
 
 import hydra
 import wandb
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
 from transformers import AutoProcessor
 
@@ -65,7 +65,7 @@ def main(cfg: DictConfig):
         max_size=config.data.max_size,
         seed=config.data.seed,
     )
-    individual = cast(dict[str, Any], multi_dataset)["individual"]
+    individual = cast(dict[str, dict[str, Dataset]], multi_dataset)["individual"]
     if len(individual) != 1:
         raise ValueError(f"Label scoring supports one dataset, got {list(individual)}")
     dataset_name, dataset = next(iter(individual.items()))
@@ -108,11 +108,11 @@ def main(cfg: DictConfig):
 
     llm = create_llm_engine(config)
     params = SamplingParams(max_tokens=1, temperature=0.0, prompt_logprobs=0, detokenize=False)
-    gen_kwargs: dict[str, Any] = {}
+    lora_request = None
     if config.lora.path is not None:
         from vllm.lora.request import LoRARequest
 
-        gen_kwargs["lora_request"] = LoRARequest(config.lora.name, 1, config.lora.path)
+        lora_request = LoRARequest(config.lora.name, 1, config.lora.path)
 
     predictions: list[dict] = []
     num_labels = len(labels)
@@ -127,7 +127,7 @@ def main(cfg: DictConfig):
             [r for clip in requests for r in clip],
             sampling_params=params,
             use_tqdm=False,
-            **gen_kwargs,
+            lora_request=lora_request,
         )
         for i, sample in enumerate(batch):
             scores = score_clip(flat[i * num_labels : (i + 1) * num_labels], completions)
