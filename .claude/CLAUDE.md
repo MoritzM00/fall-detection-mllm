@@ -14,6 +14,9 @@ See `README.md` for project overview, important commands and quickstart guide.
 fall-detection-mllm/
 ├── config/                          # Hydra configuration files
 │   ├── inference_config.yaml        # Main config (composes groups below)
+│   ├── training_config.yaml         # SFT config; training/ and lora/ hold its presets
+│   ├── dpo_config.yaml              # DPO config; dpo/ holds its presets
+│   ├── preference/                  # DPO negative selection (random, similarity, confusion, scores)
 │   ├── dataset/                     # Dataset + split definitions (omnifall, wanfall, combined)
 │   ├── model/                       # Model configs (e.g., QwenVL, InternVL, Molmo)
 │   ├── prompt/                      # Prompt templates/components (baseline, fewshot, CoT)
@@ -24,6 +27,9 @@ fall-detection-mllm/
 ├── notebooks/                       # Analysis / exploratory notebooks
 ├── scripts/                         # Experiment + plotting scripts
 │   ├── vllm_inference.py            # Main inference script (Hydra entry point)
+│   ├── train_sft.py                 # LoRA SFT (Hydra entry point)
+│   ├── train_dpo.py                 # LoRA DPO (Hydra entry point)
+│   ├── score_labels.py              # Teacher-forced per-label scores (DPO hard negatives)
 │   ├── run_oops_experiments.py      # Run OOPS zero-shot experiments
 │   ├── plot_cot_comparison.py       # Plot CoT comparisons
 │   ├── plot_comparison_by_size.py   # Plot comparisons by model size
@@ -38,11 +44,14 @@ fall-detection-mllm/
 │   │   ├── engine.py                # vLLM engine wrapper / runner
 │   │   ├── mock_vllm.py             # Mock engine (tests/dev)
 │   │   └── prompts/                 # Prompt builder, components, parsers
+│   ├── training/                    # SFT/DPO datasets, collators, preferences, eval metrics
 │   ├── evaluation/                  # Evaluation orchestration + visualizations
 │   ├── metrics/                     # Metric computation (incl. subgroup metrics)
 │   ├── utils/                       # Formatting, logging, LaTeX, wandb helpers
 │   └── visualization.py             # High-level visualization utilities
 │
+├── docs/                            # Fine-tuning experiment log (SFT and DPO results)
+├── slurm/                           # Slurm job scripts + cluster notes
 ├── tests/                           # pytest test suite
 ├── README.md                        # Usage + setup
 ├── LICENSE

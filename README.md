@@ -22,12 +22,15 @@ fall-detection-mllm/
 ├── config/                          # Hydra configuration files
 │   ├── inference_config.yaml        # Main inference config
 │   ├── training_config.yaml         # Main training config
+│   ├── dpo_config.yaml              # Main DPO config
 │   ├── dataset/                     # Dataset + split definitions (omnifall, wanfall, combined)
 │   ├── model/                       # Model configs (qwenvl, internvl, molmo, keyevl)
 │   ├── prompt/                      # Prompt presets (default, baseline, cot, fewshot, embed)
 │   ├── sampling/                    # Decoding configs (greedy, nucleus, low_temp, qwen3)
 │   ├── lora/                        # LoRA configs (none, train)
 │   ├── training/                    # Training presets (smoke, quick, full)
+│   ├── dpo/                         # DPO presets (smoke, quick, full, oops)
+│   ├── preference/                  # DPO negative selection (random, similarity, confusion, scores)
 │   ├── vllm/                        # vLLM engine settings
 │   ├── accelerate/                  # DDP / DeepSpeed launch configs
 │   ├── deepspeed/                   # DeepSpeed ZeRO configs
@@ -36,6 +39,8 @@ fall-detection-mllm/
 ├── scripts/                         # Experiment runners and utilities
 │   ├── vllm_inference.py            # vLLM inference + embedding generation (Hydra entrypoint)
 │   ├── train_sft.py                 # LoRA supervised fine-tuning (Hydra entrypoint)
+│   ├── train_dpo.py                 # LoRA direct preference optimization (Hydra entrypoint)
+│   ├── score_labels.py              # Teacher-forced per-label scores (DPO hard negatives)
 │   ├── build_tensor_cache.py        # Precompute deterministic video tensors
 │   ├── run_oops_experiments.py      # OOPS zero-shot experiment runner
 │   ├── ablations/                   # Sweep runners (component, prompt, fewshot, SFT, size)
@@ -49,13 +54,15 @@ fall-detection-mllm/
 │   │   └── prompts/                 # Prompt builder, components, parsers
 │   ├── evaluation/                  # Evaluation orchestration + subgroup analysis
 │   ├── metrics/                     # Classification and subgroup-stratified metric computation
-│   ├── training/                    # SFT data pipeline: dataset, collator, eval sampling
+│   ├── training/                    # SFT/DPO data pipeline: dataset, collator, preferences, eval metrics
 │   ├── plot/                        # Confusion matrices, metric charts, video grids
 │   ├── utils/                       # Shared helpers: formatting, LaTeX, logging, W&B
 │   ├── schemas.py                   # Pydantic / dataclass schemas
 │   ├── config.py                    # Hydra config dataclasses
 │   └── embeddings.py                # Embedding utilities
 │
+├── docs/                            # Fine-tuning experiment log (SFT and DPO results)
+├── slurm/                           # Slurm job scripts and cluster notes (HoreKa 2)
 ├── tests/                           # pytest test suite
 ├── notebooks/                       # Exploratory analysis and development notebooks
 ├── README.md
@@ -402,25 +409,37 @@ free-running generation. For each eval batch the model produces logits over the
 ground-truth completion; `preprocess_logits_for_metrics`
 (`src/falldet/training/metrics.py`) reduces the `(N, seq_len, vocab)` logits to
 `(N, seq_len)` next-token argmax IDs (shifted by one so a prediction aligns with
-its target) to keep CPU memory bounded. The `compute_metrics` callback then
-decodes only the unmasked completion tokens (those not set to `-100`) for both
-predictions and labels, parses each decoded string into a class label with
-`KeywordOutputParser`, and delegates to the project-wide
-`falldet.metrics.base.compute_metrics`. That produces the same metric suite used
-at inference time: `accuracy`, `balanced_accuracy`, `macro_f1`, the binary
-fall / fallen / fall∪fallen sensitivity-specificity-F1 triples, per-class
-metrics, and class-distribution / sample-count diagnostics. All metrics are
-logged to W&B (`report_to=wandb`).
+its target) to keep CPU memory bounded. The `compute_metrics` callback
+(`build_compute_metrics`, shared with DPO) then compares argmax and ground-truth
+tokens on the answer positions only (not `-100`, and cut after the first EOS
+because generation stops there):
 
-Note that these validation metrics are **not directly comparable** to the real
-(autoregressive) inference metrics. Because each position's argmax is
-conditioned on the ground-truth prefix, the decoded tokens can form a label that
-generation would never produce, so `KeywordOutputParser` falls back to the
-`other` class and logs `No valid label found in text. Defaulting to 'other'.`.
-These warnings are expected and far more frequent during teacher-forced
-validation than at inference time; treat the validation numbers as a proxy for
-tracking relative progress across steps, not as a substitute for the inference
-evaluation.
+- A sample is **correct iff every answer token matches**. This is exactly the
+  outcome of greedy decoding, since all positions up to the last one were then
+  conditioned on a prefix the model itself would have generated.
+- For a wrong sample, only the argmax tokens **up to and including the first
+  mismatch** are decoded; later positions are conditioned on the ground-truth
+  prefix rather than the model's own output and are discarded (decoding them
+  produced artifacts such as `fall` + `_up`). The truncated answer is mapped to
+  the shortest wrong label it is a prefix of, otherwise to `other`, as the
+  inference parser does for unparseable output.
+
+The resulting labels go to the project-wide `falldet.metrics.base.compute_metrics`,
+which produces the same metric suite used at inference time: `accuracy`,
+`balanced_accuracy`, `macro_f1`, the binary fall / fallen / fall∪fallen
+sensitivity-specificity-F1 triples, per-class metrics, and class-distribution /
+sample-count diagnostics. All metrics are logged to W&B (`report_to=wandb`).
+
+Accuracy and correct/incorrect decisions are therefore *greedy-equivalent* and
+match autoregressive inference on the same clips and frames. The predicted label
+of a *wrong* sample is an approximation (the first mismatching token does not
+always identify the label generation would continue to), so metrics that depend
+on which wrong class was predicted, such as `macro_f1` and per-class precision,
+can deviate slightly from inference. Remaining differences come from the
+validation split, the `max_eval_samples_per_ds` cap, and frame sampling. Runs
+from before this change decoded every argmax token after a mismatch; their
+validation `macro_f1` is not comparable to newer runs (accuracy is nearly
+unaffected).
 
 **Best-model tracking — no automatic early stopping.** No
 `EarlyStoppingCallback` is registered, so training always runs to `max_steps`
@@ -479,6 +498,47 @@ Relevant training configs:
 - `config/lora/train.yaml` defines PEFT LoRA hyperparameters.
 - `config/accelerate/` contains single-node DDP and DeepSpeed launch configs.
 - `config/deepspeed/zero2.json` is the DeepSpeed config used by torchrun or Accelerate.
+
+## Direct Preference Optimization
+
+`scripts/train_dpo.py` trains a LoRA policy with TRL `DPOTrainer` on (video, correct label, wrong label) pairs, one pair per clip. It reuses the SFT dataset, model, and prompt config groups and the same teacher-forced validation metrics.
+
+```shell
+python scripts/train_dpo.py dpo=smoke      # short wiring check (default)
+python scripts/train_dpo.py dpo=quick
+python scripts/train_dpo.py dpo=full
+python scripts/train_dpo.py dpo=oops dataset=omnifall/video/oops dataset@dataset_val=omnifall/video/oops
+```
+
+Initialization is controlled by `dpo.sft_adapter_path`:
+
+- `null` (default): a fresh LoRA on the pretrained Instruct model, with the base model as the frozen reference.
+- an SFT `adapter/` directory: training continues from that adapter, and a frozen copy of it is the reference.
+
+`dpo.classification_metrics=true` computes teacher-forced accuracy, balanced accuracy, and macro F1 during validation so the best checkpoint can be selected by e.g. `eval_balanced_accuracy` instead of `eval_loss` (requires `use_liger_kernel=false`). Only the policy adapter is exported to `outputs/dpo/<run_name>/adapter`; evaluate it with `vllm_inference.py` through `lora.path` like an SFT adapter.
+
+The rejected label is chosen by the `preference` config group:
+
+| `preference=` | Rejected label | Required inputs |
+|---|---|---|
+| `random` | Uniform random wrong label, fixed per clip | — |
+| `similarity` | Label of the nearest wrong-class training clip in embedding space | `train_embeddings_path`, `validation_embeddings_path` |
+| `confusion` | The previous model's own wrong prediction, otherwise sampled from its confusion matrix | `train_predictions_paths` (prediction JSONLs on the train split) |
+| `scores` | The wrong label the previous model scores highest (`balance=true` rejects each label as often as it is chosen) | `train_scores_path` from `scripts/score_labels.py` |
+
+`scripts/score_labels.py` scores every class label per clip with teacher forcing through vLLM and writes a prediction JSONL with a `label_logprobs` field:
+
+```shell
+python scripts/score_labels.py dataset=omnifall/video/oops data.mode=train \
+    lora.path=outputs/training/<run_name>/adapter
+python scripts/train_dpo.py dpo=oops preference=scores \
+    preference.train_scores_path=outputs/predictions/<project>/<run_id>.jsonl \
+    dpo.sft_adapter_path=outputs/training/<run_name>/adapter
+```
+
+Multi-GPU runs use the same DDP launch as SFT (`accelerate launch --config_file config/accelerate/ddp_bf16.yaml ... scripts/train_dpo.py`); `slurm/dpo.sbatch` and `slurm/score_labels.sbatch` wrap both scripts for Slurm.
+
+Setups, results, and findings of the SFT and DPO runs are recorded in [`docs/finetuning_experiments.md`](docs/finetuning_experiments.md).
 
 ## Ablation Runners
 
@@ -606,6 +666,7 @@ outputs/predictions/<wandb-project>/<run_id>.jsonl
 outputs/evaluation_results/<wandb-project>/
 outputs/embeddings/
 outputs/training/<run_name>/
+outputs/dpo/<run_name>/
 logs/local_logs.log
 logs/training.log
 logs/build_tensor_cache.log

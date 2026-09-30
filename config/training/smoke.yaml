@@ -20,6 +20,7 @@ eval_on_start: true
 per_device_eval_batch_size: 1
 max_eval_samples_per_ds: 8
 gradient_checkpointing: false
+ddp_find_unused_parameters: false  # LoRA uses all adapter params
 max_length: null
 report_to: wandb
 seed: 0

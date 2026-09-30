@@ -1,0 +1,9 @@
+strategy: scores
+seed: 0
+# Label-score JSONL (scripts/score_labels.py, data.mode=train) of the model DPO starts from.
+# Each clip's rejected label is the wrong label that model scores highest.
+train_scores_path: ???
+# Optional scores on the validation split; without them validation negatives are random.
+validation_scores_path: null
+# Reject each label exactly as often as it is chosen, keeping negatives as hard as possible.
+balance: false

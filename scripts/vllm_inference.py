@@ -295,7 +295,7 @@ def hydra_main(cfg: DictConfig):
     try:
         main(cfg)
     except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
+        logger.error("Fatal error: %s", e, exc_info=True, extra={"markup": False})
         wandb.finish(exit_code=1)
         sys.exit(1)
 

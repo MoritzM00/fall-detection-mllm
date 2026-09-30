@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from falldet.training.metrics import build_sft_compute_metrics, preprocess_logits_for_metrics
+from falldet.training.metrics import build_compute_metrics, preprocess_logits_for_metrics
 
 LABEL2IDX = {
     "walk": 0,
@@ -77,7 +77,7 @@ class TestPreprocessLogits:
 
 
 # ---------------------------------------------------------------------------
-# build_sft_compute_metrics
+# build_compute_metrics (SFT inputs)
 # ---------------------------------------------------------------------------
 
 
@@ -118,7 +118,7 @@ def _make_batch(true_labels: list[str], pred_labels: list[str]):
 class TestBuildSftComputeMetrics:
     def setup_method(self):
         self.tokenizer = FakeTokenizer()
-        self.compute = build_sft_compute_metrics(self.tokenizer, LABEL2IDX)
+        self.compute = build_compute_metrics(self.tokenizer, LABEL2IDX)
 
     def test_perfect_predictions(self):
         labels = ["walk", "fall", "fallen", "sit_down"]

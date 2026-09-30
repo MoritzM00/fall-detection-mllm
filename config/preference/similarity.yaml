@@ -1,0 +1,5 @@
+strategy: similarity
+seed: 0
+train_embeddings_path: ???
+validation_embeddings_path: ???
+chunk_size: 256

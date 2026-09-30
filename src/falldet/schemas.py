@@ -333,6 +333,8 @@ class TrainingHyperparams(BaseConfig):
     metric_for_best_model: str | None = None
     greater_is_better: bool | None = None
     gradient_checkpointing: bool = False
+    # None keeps the HF Trainer default (True for PEFT-wrapped models)
+    ddp_find_unused_parameters: bool | None = None
     max_length: int | None = None
     report_to: str = "none"
     seed: int = 0
@@ -402,6 +404,126 @@ class TrainingConfig(BaseConfig):
     dataset_train: DatasetConfig | None = None
     dataset_val: DatasetConfig | None = None
     dataset_test: DatasetConfig | None = None
+
+
+class PreferenceConfig(BaseConfig):
+    strategy: Literal["random", "similarity", "confusion", "scores"] = "random"
+    seed: int = Field(0, ge=0)
+    train_embeddings_path: str | None = None
+    validation_embeddings_path: str | None = None
+    chunk_size: int = Field(256, gt=0)
+    # Confusion: prediction JSONLs of a previous model. Train predictions define the
+    # confusion matrix; rows it got wrong use its own prediction as the negative.
+    train_predictions_paths: list[str] = Field(default_factory=list)
+    validation_predictions_paths: list[str] = Field(default_factory=list)
+    use_row_predictions: bool = True
+    # Rejected label for rows without a model error: confusion-row sample or uniform random.
+    sample_from: Literal["confusion_matrix", "random"] = "confusion_matrix"
+    uniform_mix: float = Field(0.1, ge=0.0, le=1.0)
+    # Scores: scripts/score_labels.py outputs; the highest-scoring wrong label is rejected.
+    # Rows without scores (e.g. validation when no path is given) get random negatives.
+    train_scores_path: str | None = None
+    validation_scores_path: str | None = None
+    # Scores: reject each label as often as it is chosen (no net push on the label prior).
+    balance: bool = False
+
+    @model_validator(mode="after")
+    def validate_strategy_inputs(self) -> "PreferenceConfig":
+        if self.strategy == "similarity" and (
+            self.train_embeddings_path is None or self.validation_embeddings_path is None
+        ):
+            raise ValueError(
+                "Similarity preferences require train_embeddings_path and "
+                "validation_embeddings_path"
+            )
+        if self.strategy == "confusion" and not self.train_predictions_paths:
+            raise ValueError("Confusion preferences require train_predictions_paths")
+        if self.strategy == "scores" and self.train_scores_path is None:
+            raise ValueError("Score preferences require train_scores_path")
+        return self
+
+
+class DPOHyperparams(TrainingHyperparams):
+    """Supported TRL DPO configuration for the first video milestone."""
+
+    sft_adapter_path: str | None = None
+    beta: float = Field(0.1, gt=0.0)
+    # Teacher-forced classification metrics (accuracy, balanced accuracy, F1) on the
+    # chosen answers during eval. Needs full logits, so incompatible with Liger.
+    classification_metrics: bool = False
+    loss_type: Literal["sigmoid"] = "sigmoid"
+    precompute_ref_log_probs: Literal[False] = False
+    padding_free: Literal[False] = False
+    remove_unused_columns: Literal[False] = False
+    use_liger_kernel: bool = False
+    max_length: Literal[None] = None
+    resume_from_checkpoint: str | None = None
+
+
+class DPOTrainingConfig(BaseConfig):
+    """Root configuration for DPO from pretrained Instruct or an SFT LoRA adapter."""
+
+    model: ModelConfig
+    data: DataConfig
+    prompt: PromptConfig
+    dataset: DatasetConfig
+    dataset_val: DatasetConfig
+    wandb: WandbConfig
+    lora: LoraTrainConfig
+    preference: PreferenceConfig
+    dpo: DPOHyperparams
+
+    model_fps: float = 7.5
+    num_frames: int = 16
+    num_workers: int = 8
+    prefetch_factor: int = 2
+    persistent_workers: bool = True
+    pin_memory: bool = True
+    output_dir: str = "outputs/dpo"
+    dataset_train: DatasetConfig | None = None
+    dataset_test: DatasetConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_first_milestone(self) -> "DPOTrainingConfig":
+        if self.model.family.lower() != "qwen" or self.model.variant != "Instruct":
+            raise ValueError("DPO currently supports only Qwen3-VL Instruct")
+        if self.prompt.num_shots != 0 or self.prompt.cot:
+            raise ValueError("DPO currently supports only zero-shot prompts without CoT")
+        if len(self.dataset.video_datasets) != 1:
+            raise ValueError("DPO requires exactly one training dataset")
+        if len(self.dataset_val.video_datasets) != 1:
+            raise ValueError("DPO requires exactly one validation dataset")
+        if self.dpo.eval_strategy == "no":
+            raise ValueError("DPO requires validation to select the policy checkpoint")
+        if self.dpo.save_strategy != self.dpo.eval_strategy:
+            raise ValueError("DPO save and evaluation strategies must match")
+        if self.dpo.save_strategy == "steps" and self.dpo.save_steps != self.dpo.eval_steps:
+            raise ValueError("DPO save_steps and eval_steps must match")
+        if not self.dpo.load_best_model_at_end:
+            raise ValueError("DPO requires load_best_model_at_end=true")
+        if self.dpo.classification_metrics and self.dpo.use_liger_kernel:
+            raise ValueError("DPO classification_metrics need logits; set use_liger_kernel=false")
+        if self.dpo.metric_for_best_model in {"eval_loss", "loss"}:
+            if self.dpo.greater_is_better is not False:
+                raise ValueError("DPO eval_loss selection requires greater_is_better=false")
+        else:
+            if not self.dpo.classification_metrics:
+                raise ValueError(
+                    f"metric_for_best_model={self.dpo.metric_for_best_model!r} requires "
+                    "dpo.classification_metrics=true"
+                )
+            if self.dpo.greater_is_better is not True:
+                raise ValueError("Classification metric selection requires greater_is_better=true")
+        return self
+
+
+def from_dictconfig_dpo(cfg: DictConfig) -> DPOTrainingConfig:
+    """Convert a composed Hydra DPO config to its validated schema."""
+
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    assert isinstance(raw, dict)
+    raw.pop("hydra", None)
+    return DPOTrainingConfig.model_validate(raw)
 
 
 def from_dictconfig_training(cfg: DictConfig) -> TrainingConfig:

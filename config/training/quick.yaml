@@ -29,6 +29,7 @@ load_best_model_at_end: false
 metric_for_best_model: null
 greater_is_better: true
 gradient_checkpointing: true
+ddp_find_unused_parameters: false  # LoRA uses all adapter params
 max_length: null
 report_to: wandb
 seed: 0
