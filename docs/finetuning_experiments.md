@@ -1,6 +1,6 @@
-# ML Experiment Logbook
+# Fine-Tuning Experiments: LoRA SFT and DPO
 
-Local, uncommitted record of completed experiments.
+Chronological record of completed fine-tuning experiments on Qwen3-VL (setup, results, findings, artifacts). Paths under `outputs/` and Slurm job IDs refer to the HoreKa 2 working copy.
 
 ## 2026-09-21 — Random-negative DPO from pretrained Qwen3-VL
 

@@ -76,6 +76,7 @@ def _trainer(tmp_path):
             padding_free=False,
             beta=0.1,
             loss_type="sigmoid",
+            bf16=False,  # TRL defaults to bf16, which needs a GPU
         ),
         train_dataset=dataset,
         data_collator=FixedPreferenceCollator(),

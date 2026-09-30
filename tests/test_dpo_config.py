@@ -6,6 +6,12 @@ from hydra import compose, initialize_config_dir
 from falldet.schemas import PreferenceConfig, from_dictconfig_dpo
 
 
+@pytest.fixture(autouse=True)
+def _dataset_roots(monkeypatch):
+    # The default DPO dataset config interpolates the dataset root; no videos are read.
+    monkeypatch.setenv("WANFALL_ROOT", "/nonexistent/wanfall")
+
+
 @pytest.mark.parametrize("preset", ["smoke", "quick", "full"])
 def test_dpo_presets_allow_pretrained_instruct_initialization(preset):
     config_dir = str(Path(__file__).parents[1] / "config")

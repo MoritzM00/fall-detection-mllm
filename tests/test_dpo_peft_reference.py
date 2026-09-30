@@ -45,6 +45,7 @@ def _peft_trainer(tmp_path):
             padding_free=False,
             beta=0.1,
             loss_type="sigmoid",
+            bf16=False,  # TRL defaults to bf16, which needs a GPU
         ),
         train_dataset=dataset,
         data_collator=FixedPreferenceCollator(),
@@ -148,6 +149,7 @@ def test_pretrained_base_uses_fresh_lora_policy_against_base_reference(tmp_path)
             padding_free=False,
             beta=0.1,
             loss_type="sigmoid",
+            bf16=False,  # TRL defaults to bf16, which needs a GPU
         ),
         train_dataset=dataset,
         data_collator=FixedPreferenceCollator(),

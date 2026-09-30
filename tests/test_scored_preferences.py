@@ -96,7 +96,9 @@ def _write_scores(path, rows, prompt, adapter):
     path.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
 
 
-def test_build_scores_preferences_from_config(tmp_path, caplog):
+def test_build_scores_preferences_from_config(tmp_path, caplog, monkeypatch):
+    # The default DPO dataset config interpolates the dataset root; no videos are read.
+    monkeypatch.setenv("WANFALL_ROOT", "/nonexistent/wanfall")
     path = tmp_path / "scores.jsonl"
     config_dir = str(Path(__file__).parents[1] / "config")
     with initialize_config_dir(config_dir=config_dir, version_base=None):
