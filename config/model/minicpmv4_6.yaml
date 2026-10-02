@@ -1,0 +1,13 @@
+# MiniCPM-V 4.6; fails in vLLM 0.30.0 (meta tensor in vision encoder at engine init)
+org: openbmb
+family: MiniCPM-V
+version: "4_6"
+variant: null
+params: null
+name_override: MiniCPM-V-4.6
+
+active_params: null
+
+needs_video_metadata: true
+
+mm_processor_kwargs: {}

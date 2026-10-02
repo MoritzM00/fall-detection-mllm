@@ -126,6 +126,7 @@ class VLLMConfig(BaseConfig):
     trust_remote_code: bool = True
     async_scheduling: bool = True
     skip_mm_profiling: bool = False
+    mm_encoder_attn_backend: str | None = None
     enable_prefix_caching: bool = False
     mm_processor_kwargs: dict[str, Any] = {}
     limit_mm_per_prompt: dict[str, int] = {
@@ -133,6 +134,9 @@ class VLLMConfig(BaseConfig):
         "video": 1,
     }  # mutable default is safe with pydantic
     enable_expert_parallel: bool | None = None
+
+
+VideoFormat = Literal["tchw", "thwc", "pil"]
 
 
 class ModelConfig(BaseConfig):
@@ -146,7 +150,8 @@ class ModelConfig(BaseConfig):
     active_params: str | None = None
     name_override: str | None = None
     needs_video_metadata: bool = True
-    video_channels_last: bool = False
+    # Frame layout handed to vLLM: (T, C, H, W) tensor, (T, H, W, C) tensor or list of PIL images
+    video_format: VideoFormat = "tchw"
     mm_processor_kwargs: dict[str, Any] = {}
 
     @field_validator("version", mode="before")

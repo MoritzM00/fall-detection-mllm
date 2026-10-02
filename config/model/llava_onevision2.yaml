@@ -13,4 +13,4 @@ needs_video_metadata: true
 mm_processor_kwargs: {}
 
 # OV2 builds PIL frames from (T, H, W, C) uint8 arrays
-video_channels_last: true
+video_format: thwc
