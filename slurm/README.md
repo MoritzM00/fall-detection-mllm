@@ -27,7 +27,7 @@ Docs: <https://docs.nhr.kit.edu/> (work in progress), legacy: <https://www.nhr.k
 module load Python/3.12.3-GCCcore-13.3.0 FFmpeg/7.0.2-GCCcore-13.3.0 CUDA/12.9.1
 ```
 
-CUDA 12.9 (not 13.0) matches the `vllm+cu129` wheel / torch 2.11+cu129. This covers everything
+CUDA 12.9 (not 13.0) matches the `vllm+cu129` wheel / torch 2.13+cu129. This covers everything
 `environment.yml` gets from conda (python 3.12, ffmpeg, cuda-toolkit)
 except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available: `git`,
 `CMake`, `GCC` 13–16, `NCCL`/`cuDNN` (only for CUDA 12.x).
@@ -57,7 +57,7 @@ except `uv`, `av`, `psutil`, `ninja`, which are pip-installable. Also available:
 
 1. ~~**Data location**~~ — resolved 2026-09-25: read directly from the LSDF with `-C LSDF` (see Storage).
 2. ~~**NVIDIA driver version**~~ — resolved 2026-09-25 on `dev-gpu-h100` (hkn0901): driver 595.71.05,
-   CUDA 13.2 → `cu130` wheels would also work; current env (torch 2.11.0+cu129) runs fine.
+   CUDA 13.2 → `cu130` wheels would also work; current env (torch 2.13.0+cu129) runs fine.
 3. ~~**Internet access from compute nodes**~~ — resolved 2026-09-25: huggingface.co, pypi.org and
    api.wandb.ai are reachable from `dev-gpu-h100`. A GPU smoke test passed (torch CUDA + vLLM
    generate with Qwen2.5-0.5B).

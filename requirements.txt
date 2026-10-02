@@ -1,6 +1,6 @@
 # Inference + fine-tuning runtime deps.
 # vLLM, flash-attn and torch are installed separately by `make install`.
-# Versions pinned from a known-good cu130_vllm20_py312 environment.
+# Versions pinned from a known-good vLLM 0.30.0 environment (cu130 on conda, cu129 on HoreKa 2).
 
 # Core ML + config
 accelerate==1.13.0

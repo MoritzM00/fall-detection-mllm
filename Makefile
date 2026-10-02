@@ -58,7 +58,7 @@ install-hk:
 	$(HK_ENV) && uv pip install -e .
 
 # Only needed for SFT (attn_implementation=flash_attention_2); vLLM ships its own kernels.
-# No prebuilt wheel for torch 2.11, so this compiles with nvcc: run it in a job with enough CPUs.
+# No prebuilt wheel for torch 2.13, so this compiles with nvcc: run it in a job with enough CPUs.
 # H100 only (sm_90); uv caches the built wheel, so later reinstalls skip the compile.
 flash-attn-hk:
 	$(HK_ENV) && uv pip install ninja psutil packaging
