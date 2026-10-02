@@ -4,8 +4,15 @@ import logging
 from dataclasses import dataclass
 
 import torch
+from PIL import Image
 
-from falldet.schemas import FewshotPreamble, FewshotResponse, InferenceConfig, PromptConfig
+from falldet.schemas import (
+    FewshotPreamble,
+    FewshotResponse,
+    InferenceConfig,
+    PromptConfig,
+    VideoFormat,
+)
 
 from .prompts import PromptBuilder
 from .prompts.components import (
@@ -51,6 +58,8 @@ class ConversationBuilder:
         label2idx: dict,
         model_fps: float = 8.0,
         needs_video_metadata: bool = True,
+        video_format: VideoFormat = "tchw",
+        mm_processor_kwargs: dict[str, object] | None = None,
     ):
         """Initialize the conversation builder.
 
@@ -59,11 +68,17 @@ class ConversationBuilder:
             label2idx: Label to index mapping
             model_fps: Frame rate for video metadata
             needs_video_metadata: Whether model requires video metadata
+            video_format: Frame layout the model's processor expects
+            mm_processor_kwargs: Per-request processor kwargs (default: no frame sampling)
         """
         self.config = config
         self.label2idx = label2idx
         self.model_fps = model_fps
         self.needs_video_metadata = needs_video_metadata
+        self.video_format = video_format
+        self.mm_processor_kwargs = (
+            {"do_sample_frames": False} if mm_processor_kwargs is None else mm_processor_kwargs
+        )
 
         self._prompt_builder = PromptBuilder(config, label2idx)
         self._sample_logged = False
@@ -97,6 +112,17 @@ class ConversationBuilder:
         """Build metadata dict for a video."""
         n = frames.shape[0]
         return dict(total_num_frames=n, fps=self.model_fps, frames_indices=list(range(n)))
+
+    def _model_frames(self, frames: torch.Tensor) -> torch.Tensor | list[Image.Image]:
+        """Convert (T, C, H, W) frames to the layout the model's processor expects."""
+        match self.video_format:
+            case "thwc":
+                return frames.permute(0, 2, 3, 1).contiguous()
+            case "pil":
+                thwc = frames.permute(0, 2, 3, 1).to(torch.uint8).cpu().numpy()
+                return [Image.fromarray(frame) for frame in thwc]
+            case _:
+                return frames
 
     def _make_video(self, frames: torch.Tensor) -> VideoWithMetadata:
         """Wrap frames with computed metadata."""
@@ -241,14 +267,16 @@ class ConversationBuilder:
 
         # Build multi-modal data with list of (frames, metadata) tuples
         if self.needs_video_metadata:
-            mm_data = dict(video=[(v.frames, v.metadata) for v in conv_data.videos])
+            mm_data = dict(
+                video=[(self._model_frames(v.frames), v.metadata) for v in conv_data.videos]
+            )
         else:
-            mm_data = dict(video=[v.frames for v in conv_data.videos])
+            mm_data = dict(video=[self._model_frames(v.frames) for v in conv_data.videos])
 
         return dict(
             prompt=text,
             multi_modal_data=mm_data,
-            mm_processor_kwargs=dict(do_sample_frames=False),
+            mm_processor_kwargs=dict(self.mm_processor_kwargs),
         )
 
     def _format_answer(self, label: str) -> str:
@@ -329,4 +357,6 @@ def create_conversation_builder(
         label2idx=label2idx,
         model_fps=config.model_fps,
         needs_video_metadata=config.model.needs_video_metadata,
+        video_format=config.model.video_format,
+        mm_processor_kwargs=dict(config.vllm.mm_processor_kwargs),
     )

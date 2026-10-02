@@ -11,6 +11,7 @@ max_num_batched_tokens: null
 trust_remote_code: true
 async_scheduling: true
 skip_mm_profiling: false
+mm_encoder_attn_backend: null # e.g. TORCH_SDPA; null = vLLM default
 
 enable_prefix_caching: false  # only enable this for fewshot
 

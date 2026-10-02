@@ -1,0 +1,13 @@
+# NVIDIA Cosmos 3 Edge; needs vLLM >= 0.30
+org: nvidia
+family: Cosmos
+version: "3"
+variant: null
+params: Edge
+name_override: Cosmos3-Edge
+
+active_params: null
+
+needs_video_metadata: true
+
+mm_processor_kwargs: {}
