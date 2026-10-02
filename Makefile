@@ -33,7 +33,7 @@ env:
 # Install all pip dependencies (must be run in active conda env)
 install:
 	@echo "Installing vLLM..."
-	uv pip install vllm==0.20.2 --torch-backend=cu130
+	uv pip install vllm==0.30.0 --torch-backend=cu130
 	@echo "Installing flash-attn (this may take a while)..."
 	MAX_JOBS=$(MAX_JOBS) uv pip install flash-attn==2.8.3 --no-build-isolation
 	@echo "Installing requirements..."
@@ -46,7 +46,7 @@ install:
 
 # HoreKa 2: Lmod modules (CUDA 12.9) + uv venv instead of conda. See slurm/README.md.
 HK_ENV := . slurm/env.sh
-VLLM_CU129_WHEEL := https://github.com/vllm-project/vllm/releases/download/v0.20.2/vllm-0.20.2%2Bcu129-cp38-abi3-manylinux_2_31_x86_64.whl
+VLLM_CU129_WHEEL := https://github.com/vllm-project/vllm/releases/download/v0.30.0/vllm-0.30.0%2Bcu129-cp38-abi3-manylinux_2_28_x86_64.whl
 
 env-hk:
 	$(HK_ENV) && uv venv --python "$$(command -v python3)" .venv
