@@ -146,6 +146,7 @@ class ModelConfig(BaseConfig):
     active_params: str | None = None
     name_override: str | None = None
     needs_video_metadata: bool = True
+    video_channels_last: bool = False
     mm_processor_kwargs: dict[str, Any] = {}
 
     @field_validator("version", mode="before")

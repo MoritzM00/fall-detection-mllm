@@ -1,0 +1,16 @@
+# LLaVA-OneVision-2 (Qwen3-8B backbone, custom processor code); needs vLLM >= 0.30
+org: lmms-lab-encoder
+family: LLaVA-OneVision
+version: 2
+variant: Instruct
+params: 8B # only 8B is released
+name_override: LLaVA-OneVision-2-8B-Instruct
+
+active_params: null
+
+needs_video_metadata: true
+
+mm_processor_kwargs: {}
+
+# OV2 builds PIL frames from (T, H, W, C) uint8 arrays
+video_channels_last: true

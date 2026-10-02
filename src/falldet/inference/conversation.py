@@ -51,6 +51,7 @@ class ConversationBuilder:
         label2idx: dict,
         model_fps: float = 8.0,
         needs_video_metadata: bool = True,
+        video_channels_last: bool = False,
     ):
         """Initialize the conversation builder.
 
@@ -59,11 +60,13 @@ class ConversationBuilder:
             label2idx: Label to index mapping
             model_fps: Frame rate for video metadata
             needs_video_metadata: Whether model requires video metadata
+            video_channels_last: Pass frames as (T, H, W, C) instead of (T, C, H, W)
         """
         self.config = config
         self.label2idx = label2idx
         self.model_fps = model_fps
         self.needs_video_metadata = needs_video_metadata
+        self.video_channels_last = video_channels_last
 
         self._prompt_builder = PromptBuilder(config, label2idx)
         self._sample_logged = False
@@ -97,6 +100,10 @@ class ConversationBuilder:
         """Build metadata dict for a video."""
         n = frames.shape[0]
         return dict(total_num_frames=n, fps=self.model_fps, frames_indices=list(range(n)))
+
+    def _model_frames(self, frames: torch.Tensor) -> torch.Tensor:
+        """Convert frames to the layout the model's processor expects."""
+        return frames.permute(0, 2, 3, 1).contiguous() if self.video_channels_last else frames
 
     def _make_video(self, frames: torch.Tensor) -> VideoWithMetadata:
         """Wrap frames with computed metadata."""
@@ -241,9 +248,11 @@ class ConversationBuilder:
 
         # Build multi-modal data with list of (frames, metadata) tuples
         if self.needs_video_metadata:
-            mm_data = dict(video=[(v.frames, v.metadata) for v in conv_data.videos])
+            mm_data = dict(
+                video=[(self._model_frames(v.frames), v.metadata) for v in conv_data.videos]
+            )
         else:
-            mm_data = dict(video=[v.frames for v in conv_data.videos])
+            mm_data = dict(video=[self._model_frames(v.frames) for v in conv_data.videos])
 
         return dict(
             prompt=text,
@@ -329,4 +338,5 @@ def create_conversation_builder(
         label2idx=label2idx,
         model_fps=config.model_fps,
         needs_video_metadata=config.model.needs_video_metadata,
+        video_channels_last=config.model.video_channels_last,
     )
