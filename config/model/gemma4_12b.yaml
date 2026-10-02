@@ -1,0 +1,14 @@
+# Gemma 4 12B instruct
+org: google
+family: Gemma
+version: "4"
+variant: null
+params: 12B
+name_override: gemma-4-12B-it
+
+active_params: null
+
+needs_video_metadata: true
+
+mm_processor_kwargs: {}
+video_format: pil
