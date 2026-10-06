@@ -36,6 +36,9 @@ export PROJECT="${PROJECT:-/hfs2/data/project/hk-project-p0029156/$USER}"
 export UV_CACHE_DIR="$PROJECT/.cache/uv"
 export UV_PYTHON_DOWNLOADS=never
 export HF_HOME="$PROJECT/.cache/huggingface"
+# The cluster shares one IP for the unauthenticated HF API limit (429s), so jobs read only
+# the local cache. Download beforehand with: HF_HUB_OFFLINE=0 hf download <repo>
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
 export VLLM_CONFIGURE_LOGGING=0
 
 # Datasets live on the LSDF, which is only mounted in jobs with --constraint=LSDF
