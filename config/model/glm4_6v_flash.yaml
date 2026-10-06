@@ -1,0 +1,18 @@
+# GLM-4.6V-Flash (9B dense, GLM-4.1V architecture), native in vLLM and transformers
+org: zai-org
+family: GLM
+version: "4.6V"
+variant: Flash
+params: 9B  # the full GLM-4.6V is a 106B MoE
+name_override: GLM-4.6V-Flash
+
+active_params: null
+
+# vLLM's GLM-4.1V/4.6V video processor requires frame timestamps
+needs_video_metadata: true
+
+mm_processor_kwargs: {}
+
+# GLM-4.6V reasons by default, which max_tokens=64 cuts off before the answer
+chat_template_kwargs:
+  enable_thinking: false
