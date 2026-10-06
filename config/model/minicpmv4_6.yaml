@@ -1,4 +1,6 @@
-# MiniCPM-V 4.6; fails in vLLM 0.30.0 (meta tensor in vision encoder at engine init)
+# MiniCPM-V 4.6 (vLLM >= 0.30). vLLM registers its vision tower under the image modality only,
+# so image: 0 leaves the tower unloaded (meta tensors). Run with
+#   vllm.limit_mm_per_prompt.image=1 ~vllm.mm_processor_kwargs.do_sample_frames
 org: openbmb
 family: MiniCPM-V
 version: "4_6"
