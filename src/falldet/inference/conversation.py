@@ -60,6 +60,7 @@ class ConversationBuilder:
         needs_video_metadata: bool = True,
         video_format: VideoFormat = "tchw",
         mm_processor_kwargs: dict[str, object] | None = None,
+        chat_template_kwargs: dict[str, bool | int | str] | None = None,
     ):
         """Initialize the conversation builder.
 
@@ -70,6 +71,7 @@ class ConversationBuilder:
             needs_video_metadata: Whether model requires video metadata
             video_format: Frame layout the model's processor expects
             mm_processor_kwargs: Per-request processor kwargs (default: no frame sampling)
+            chat_template_kwargs: Extra chat template variables (e.g. enable_thinking)
         """
         self.config = config
         self.label2idx = label2idx
@@ -79,6 +81,7 @@ class ConversationBuilder:
         self.mm_processor_kwargs = (
             {"do_sample_frames": False} if mm_processor_kwargs is None else mm_processor_kwargs
         )
+        self.chat_template_kwargs = chat_template_kwargs or {}
 
         self._prompt_builder = PromptBuilder(config, label2idx)
         self._sample_logged = False
@@ -259,6 +262,7 @@ class ConversationBuilder:
             conv_data.messages,
             tokenize=False,
             add_generation_prompt=True,
+            **self.chat_template_kwargs,
         )
 
         if not self._sample_logged:
@@ -359,4 +363,5 @@ def create_conversation_builder(
         needs_video_metadata=config.model.needs_video_metadata,
         video_format=config.model.video_format,
         mm_processor_kwargs=dict(config.vllm.mm_processor_kwargs),
+        chat_template_kwargs=dict(config.model.chat_template_kwargs),
     )

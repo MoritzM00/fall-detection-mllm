@@ -153,6 +153,8 @@ class ModelConfig(BaseConfig):
     # Frame layout handed to vLLM: (T, C, H, W) tensor, (T, H, W, C) tensor or list of PIL images
     video_format: VideoFormat = "tchw"
     mm_processor_kwargs: dict[str, Any] = {}
+    # Extra variables for the chat template, e.g. {"enable_thinking": False} for Qwen3.5
+    chat_template_kwargs: dict[str, bool | int | str] = {}
 
     @field_validator("version", mode="before")
     @classmethod
