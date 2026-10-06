@@ -1,0 +1,17 @@
+# Qwen3.5 (natively multimodal, hybrid GDN attention); sizes 0.8B, 2B, 4B, 9B, 27B, 35B-A3B
+org: Qwen
+family: Qwen
+version: "3.5"
+variant: null  # Qwen3.5 has no Instruct/Thinking split
+params: 9B  # experiment presets set params=8B, which does not exist: pass model.params=9B
+
+active_params: null  # e.g. "A3B" for 35B-A3B
+
+needs_video_metadata: true
+
+mm_processor_kwargs:
+  do_resize: false
+
+# Qwen3.5 reasons by default, which max_tokens=64 cuts off before the answer
+chat_template_kwargs:
+  enable_thinking: false

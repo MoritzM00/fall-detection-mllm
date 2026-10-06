@@ -1,0 +1,21 @@
+# MiniCPM-V 4.5 (8B, Qwen3-8B backbone). The processor rejects do_sample_frames:
+# run with ~vllm.mm_processor_kwargs.do_sample_frames
+org: openbmb
+family: MiniCPM-V
+version: "4_5"
+variant: null
+params: 8B
+name_override: MiniCPM-V-4_5
+
+active_params: null
+
+needs_video_metadata: true
+
+mm_processor_kwargs: {}
+
+# Its chat template only accepts string content; vLLM's MiniCPM-V video placeholder
+video_placeholder: "(<video>./</video>)"
+
+# Hybrid thinking model; max_tokens=64 cuts off reasoning before the answer
+chat_template_kwargs:
+  enable_thinking: false

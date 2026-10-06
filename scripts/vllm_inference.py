@@ -111,6 +111,9 @@ def main(cfg: DictConfig):
     processor = AutoProcessor.from_pretrained(
         checkpoint_path, trust_remote_code=config.vllm.trust_remote_code
     )
+    if getattr(processor, "chat_template", None) is None:
+        # Some processors (e.g. MiniCPM-V) only ship the template with the tokenizer
+        processor.chat_template = processor.tokenizer.chat_template
     # Initialize vLLM engine and sampling params
     llm = create_llm_engine(config)
     sampling_params = create_sampling_params(config)

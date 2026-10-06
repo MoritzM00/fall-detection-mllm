@@ -1,0 +1,14 @@
+# LLaVA-OneVision (Qwen2-7B backbone, SigLIP encoder), native in vLLM and transformers
+org: llava-hf
+family: LLaVA-OneVision
+version: 1
+variant: ov
+params: 7B  # also 0.5B and 72B
+name_override: llava-onevision-qwen2-7b-ov-hf
+
+active_params: null
+
+# The processor resizes frames to 384x384 and takes no frame timestamps
+needs_video_metadata: false
+
+mm_processor_kwargs: {}

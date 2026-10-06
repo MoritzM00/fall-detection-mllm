@@ -103,6 +103,9 @@ def create_llm_engine(config: InferenceConfig) -> LLM | MockLLM:
         enable_prefix_caching=enable_prefix_caching,
     )
 
+    if config.vllm.mm_encoder_attn_backend is not None:
+        vllm_kwargs["mm_encoder_attn_backend"] = config.vllm.mm_encoder_attn_backend
+
     if not use_mock and config.lora.path is not None:
         vllm_kwargs["enable_lora"] = True
         vllm_kwargs["max_lora_rank"] = config.lora.max_rank

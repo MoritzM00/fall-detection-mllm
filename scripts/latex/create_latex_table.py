@@ -1,3 +1,12 @@
+"""Build the zero-shot results table on OmniFall-In-the-Wild.
+
+Fetches metrics per run from W&B and prepends the hard-coded VMAE-K400 baseline.
+Output: $PROJECT/master-thesis/tables/zeroshot_results.tex.
+"""
+
+import os
+from pathlib import Path
+
 import wandb
 
 # ==========================================
@@ -6,30 +15,60 @@ import wandb
 ENTITY = "moritzm00"
 PROJECT = "fall-detection-zeroshot-v4"
 
-# Mapping run IDs to pretty display names (sorted by model size)
-MODEL_NAMES: dict[str, str] = {
-    "pau6imuk": "InternVL3.5-2B",
-    "d4e8gwu0": "Qwen3-VL-2B",
-    "cn28qd5a": "InternVL3.5-4B",
-    "fdb89xu4": "Qwen3-VL-4B",
-    "mx12190v": "InternVL3.5-8B",
-    "p1r3exbe": "Qwen3-VL-8B",
-    "w7jl4ly0": "Keye-VL-1.5-8B",
-    "hektv801": "InternVL3.5-14B",
-    "3ugpfhso": "InternVL3.5-30B-A3B",
-    "f4imsgcv": "Qwen3-VL-30B-A3B",
-    "toe74d9a": "Qwen3-VL-32B",
-    "pkjbh92w": "InternVL3.5-38B",
-}
+# Output path — set to "" to print to stdout only
+OUTPUT_PATH = Path(os.path.expandvars("$PROJECT/master-thesis/tables/zeroshot_results.tex"))
 
-MODEL_NAMES_COT: dict[str, str] = {
-    "dts57kgz": "InternVL3.5-2B",
-    "91g7t1y1": "Qwen3-VL-2B",
-    "cpe2sto4": "InternVL3.5-8B",
-    "fmmrnf5j": "Qwen3-VL-8B",
-    "73ivqn3d": "Qwen3-VL-32B",
-    "o8i8pojr": "InternVL3.5-38B",
-}
+# A section is (title, groups); a group is a list of (run_id, display_name) separated by
+# \addlinespace. Models are sorted by parameter count, grouped by size.
+Section = tuple[str, list[list[tuple[str, str]]]]
+
+SECTIONS: list[Section] = [
+    (
+        "Open-source MLLMs",
+        [
+            [("pau6imuk", "InternVL3.5-2B"), ("d4e8gwu0", "Qwen3-VL-2B")],
+            [("cn28qd5a", "InternVL3.5-4B"), ("fdb89xu4", "Qwen3-VL-4B")],
+            [
+                ("mx12190v", "InternVL3.5-8B"),
+                ("p1r3exbe", "Qwen3-VL-8B"),
+                ("w7jl4ly0", "Keye-VL-1.5-8B"),
+            ],
+            [("hektv801", "InternVL3.5-14B")],
+            [("3ugpfhso", "InternVL3.5-30B-A3B"), ("f4imsgcv", "Qwen3-VL-30B-A3B")],
+            [("toe74d9a", "Qwen3-VL-32B"), ("pkjbh92w", "InternVL3.5-38B")],
+        ],
+    ),
+    (
+        # New models plus vLLM 0.30 reruns of Qwen3-VL-8B / InternVL3.5-8B for comparison
+        "Open-source MLLMs (vLLM 0.30)",
+        [
+            [("mlsxhlg2", "MiniCPM-V-4.6-1.3B")],
+            [("n11i065x", "Cosmos3-Edge-4B"), ("6b4ewvx8", "Gemma-4-E4B")],
+            [
+                ("tf99x9u2", "InternVL3.5-8B"),
+                ("q8y8l9n4", "Qwen3-VL-8B"),
+                ("wfaqajs1", "LLaVA-OV-7B"),
+                ("d0lrkne1", "LLaVA-OV-2-8B"),
+                # Hybrid thinking models (and Cosmos3-Edge), run with enable_thinking=False
+                ("i8754t01", "MiniCPM-V-4.5-8B"),
+                ("koettehi", "Qwen3.5-9B"),
+                ("jd07gfhg", "GLM-4.6V-Flash-9B"),
+            ],
+            [("p5x00wd9", "Gemma-4-12B")],
+        ],
+    ),
+]
+
+SECTIONS_COT: list[Section] = [
+    (
+        "Open-source MLLMs",
+        [
+            [("dts57kgz", "InternVL3.5-2B"), ("91g7t1y1", "Qwen3-VL-2B")],
+            [("cpe2sto4", "InternVL3.5-8B"), ("fmmrnf5j", "Qwen3-VL-8B")],
+            [("73ivqn3d", "Qwen3-VL-32B"), ("o8i8pojr", "InternVL3.5-38B")],
+        ],
+    ),
+]
 USE_COT = False  # Set to True to use COT runs instead
 
 DATASET = "OOPS"
@@ -138,35 +177,31 @@ def format_value(val, col_index, stats):
     return formatted_str
 
 
+def format_row(name, metrics, col_stats):
+    metrics_str = " & ".join(format_value(val, i, col_stats) for i, val in enumerate(metrics))
+    return f"{name} & {metrics_str} \\\\"
+
+
 def generate_latex():
     api = wandb.Api()
+    sections = SECTIONS_COT if USE_COT else SECTIONS
 
-    # 1. Collect all data into a list of dictionaries
-    all_rows = []
-
-    # Add Specialized Model first
-    all_rows.append(
-        {
-            "name": SPECIALIZED_MODEL_NAME,
-            "metrics": SPECIALIZED_MODEL_METRICS,
-            "type": "specialized",
-        }
-    )
-
-    # Add WandB Models
-    model_dict = MODEL_NAMES_COT if USE_COT else MODEL_NAMES
-    for run_id, display_name in model_dict.items():
-        metrics = fetch_run_data(api, run_id)
-        all_rows.append({"name": display_name, "metrics": metrics, "type": "mllm"})
+    # 1. Fetch metrics, keeping the section/group structure
+    fetched = [
+        (title, [[(name, fetch_run_data(api, run_id)) for run_id, name in group] for group in groups])
+        for title, groups in sections
+    ]
+    all_metrics = [SPECIALIZED_MODEL_METRICS] + [
+        metrics for _, groups in fetched for group in groups for _, metrics in group
+    ]
 
     # 2. Calculate Stats per column (Max and Second Max)
-    # We loop through the number of metrics (0 to 8)
     num_metrics = len(METRICS_ORDER)
     col_stats = []
 
     for i in range(num_metrics):
         # Extract all valid values for this column from all models
-        values = [row["metrics"][i] for row in all_rows if row["metrics"][i] is not None]
+        values = [metrics[i] for metrics in all_metrics if metrics[i] is not None]
 
         # Get unique values sorted descending (full precision for accurate ranking)
         unique_vals = sorted(list(set(values)), reverse=True)
@@ -179,25 +214,8 @@ def generate_latex():
         col_stats.append(stats)
 
     # 3. Format Rows with Highlights
-    specialized_latex = ""
-    mllm_latex_rows = []
+    specialized_latex = format_row(SPECIALIZED_MODEL_NAME, SPECIALIZED_MODEL_METRICS, col_stats)
 
-    for row in all_rows:
-        formatted_metrics = []
-        for i, val in enumerate(row["metrics"]):
-            formatted_metrics.append(format_value(val, i, col_stats))
-
-        metrics_str = " & ".join(formatted_metrics)
-        latex_line = f"{row['name']} & {metrics_str} \\\\"
-
-        if row["type"] == "specialized":
-            specialized_latex = latex_line
-        else:
-            mllm_latex_rows.append(latex_line)
-
-    mllm_body = "\n".join(mllm_latex_rows)
-
-    # 4. Construct Final Table
     # Compute layout dimensions based on INCLUDE_FALL_UNION_FALLEN
     if INCLUDE_FALL_UNION_FALLEN:
         col_spec = "@{}l rrr rrr rrr rrr@{}"
@@ -214,12 +232,24 @@ def generate_latex():
         union_cmidrule = ""
         union_sub_header = ""
 
-    full_table = f"""
-\\begingroup
-\\renewcommand{{\\arraystretch}}{{1.2}}
+    section_blocks = []
+    for title, groups in fetched:
+        group_blocks = [
+            "\n".join(format_row(name, metrics, col_stats) for name, metrics in group)
+            for group in groups
+        ]
+        body = "\n\\addlinespace\n".join(group_blocks)
+        section_blocks.append(
+            f"\\multicolumn{{{total_cols}}}{{@{{}}l}}{{\\textit{{{title}}}}} \\\\\n{body}"
+        )
+    mllm_body = "\n\\midrule\n\n".join(section_blocks)
+
+    # 4. Construct Final Table
+    full_table = f"""\\begingroup
+\\renewcommand{{\\arraystretch}}{{1.1}}
 \\begin{{table}}[htp]
-\caption{{\\textbf{{Zero-shot fall detection results}} on the OmniFall-In-the-Wild dataset.
-We report classification metrics for the 16-class action recognition task, as well as binary metrics for the Fall, Fallen and combined Fall/Fallen classes. Open-source MLLMs are sorted by parameter count. The best results are highlighted in \\textbf{{bold}}, and the second-best are \\underline{{underlined}}. Darker cells indicate better performance.}}
+\\caption[Zero-shot fall detection results on OF-ItW]{{\\textbf{{Zero-shot fall detection results on OmniFall-In-the-Wild.}}
+We report classification metrics for the 16-class action recognition task, as well as binary metrics for the \\Fall, \\Fallen, and \\fallfallen subtasks. Open-source MLLMs are sorted by parameter count. The best results are highlighted in \\textbf{{bold}}, and the second-best are \\underline{{underlined}}. Darker cells indicate better performance. \\textbf{{B}}alanced \\textbf{{Acc}}uracy, \\textbf{{Se}}nsitivity, and \\textbf{{Sp}}ecificity}}
 \\label{{tab:zero_shot_fall_detection_results}}
 
 \\resizebox{{\\columnwidth}}{{!}}{{
@@ -243,8 +273,6 @@ We report classification metrics for the 16-class action recognition task, as we
 {specialized_latex}
 \\midrule
 
-% SECTION 2
-\\multicolumn{{{total_cols}}}{{@{{}}l}}{{\\textit{{Open-source MLLMs}}}} \\\\
 {mllm_body}
 
 \\bottomrule
@@ -253,7 +281,11 @@ We report classification metrics for the 16-class action recognition task, as we
 \\endgroup
 """
 
-    print(full_table)
+    if OUTPUT_PATH:
+        OUTPUT_PATH.write_text(full_table)
+        print(f"Written to {OUTPUT_PATH}")
+    else:
+        print(full_table)
 
 
 if __name__ == "__main__":
