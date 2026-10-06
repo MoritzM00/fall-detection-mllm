@@ -11,3 +11,7 @@ active_params: null
 needs_video_metadata: true
 
 mm_processor_kwargs: {}
+
+# Cosmos3-Edge reasons by default, which max_tokens=64 cuts off before the answer
+chat_template_kwargs:
+  enable_thinking: false
