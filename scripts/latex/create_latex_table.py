@@ -43,16 +43,16 @@ SECTIONS: list[Section] = [
         "Open-source MLLMs (vLLM 0.30)",
         [
             [("mlsxhlg2", "MiniCPM-V-4.6-1.3B")],
-            # Cosmos3-Edge is a reasoner: 4096 max tokens instead of 64
-            [("u30llsrc", "Cosmos3-Edge-4B"), ("6b4ewvx8", "Gemma-4-E4B")],
+            [("n11i065x", "Cosmos3-Edge-4B"), ("6b4ewvx8", "Gemma-4-E4B")],
             [
                 ("tf99x9u2", "InternVL3.5-8B"),
                 ("q8y8l9n4", "Qwen3-VL-8B"),
                 ("wfaqajs1", "LLaVA-OV-7B"),
                 ("d0lrkne1", "LLaVA-OV-2-8B"),
-                # Hybrid thinking models, run with enable_thinking=False
+                # Hybrid thinking models (and Cosmos3-Edge), run with enable_thinking=False
                 ("i8754t01", "MiniCPM-V-4.5-8B"),
                 ("koettehi", "Qwen3.5-9B"),
+                ("jd07gfhg", "GLM-4.6V-Flash-9B"),
             ],
             [("p5x00wd9", "Gemma-4-12B")],
         ],
