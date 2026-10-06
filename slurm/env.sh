@@ -43,6 +43,9 @@ export LSDF="${LSDF:-/lsdf/kit/anthropomatik/projects/cvhci}"
 export OMNIFALL_ROOT="$LSDF/data/activity/fall_detection/cvhci_fall"
 export WANFALL_ROOT="$LSDF/data/activity/WanFall"
 
-if [ -f "$FALLDET_REPO/.venv/bin/activate" ]; then
-    . "$FALLDET_REPO/.venv/bin/activate"
+# vLLM 0.30 venv by default; FALLDET_VENV=.venv selects the old vLLM 0.20 venv
+_falldet_venv="$FALLDET_REPO/${FALLDET_VENV:-.venv-vllm30}"
+if [ -f "$_falldet_venv/bin/activate" ]; then
+    . "$_falldet_venv/bin/activate"
 fi
+unset _falldet_venv
