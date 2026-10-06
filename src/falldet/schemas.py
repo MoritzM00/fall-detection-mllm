@@ -155,6 +155,9 @@ class ModelConfig(BaseConfig):
     mm_processor_kwargs: dict[str, Any] = {}
     # Extra variables for the chat template, e.g. {"enable_thinking": False} for Qwen3.5
     chat_template_kwargs: dict[str, bool | int | str] = {}
+    # Set for chat templates that need string content (e.g. MiniCPM-V 4.5): message parts are
+    # joined into one string and each video part is replaced by this placeholder
+    video_placeholder: str | None = None
 
     @field_validator("version", mode="before")
     @classmethod

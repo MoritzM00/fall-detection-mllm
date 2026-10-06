@@ -659,3 +659,40 @@ class TestFewshotFormats:
             if msg["role"] == "system":
                 video_items = [item for item in msg["content"] if item["type"] == "video"]
                 assert len(video_items) == 0, "System messages must not contain videos"
+
+
+class TestVideoPlaceholder:
+    """Tests for flattening message content for string-only chat templates."""
+
+    def test_flattens_content_to_strings(self):
+        """Each message's content becomes one string with the video placeholder."""
+        captured: list[list[dict]] = []
+
+        class CapturingProcessor:
+            def apply_chat_template(self, messages: list[dict], **kwargs: bool) -> str:
+                captured.append(messages)
+                return ""
+
+        config = PromptConfig(num_shots=2)
+        builder = ConversationBuilder(config, LABEL2IDX, video_placeholder="<vid>")
+        builder.build_vllm_inputs(
+            create_mock_video(), CapturingProcessor(), exemplars=create_mock_exemplars(2)
+        )
+
+        messages = captured[0]
+        assert all(isinstance(m["content"], str) for m in messages)
+        assert sum(m["content"].count("<vid>") for m in messages) == 3
+
+    def test_default_keeps_content_parts(self):
+        """Without a placeholder the processor receives list-of-parts content."""
+        captured: list[list[dict]] = []
+
+        class CapturingProcessor:
+            def apply_chat_template(self, messages: list[dict], **kwargs: bool) -> str:
+                captured.append(messages)
+                return ""
+
+        builder = ConversationBuilder(PromptConfig(num_shots=0), LABEL2IDX)
+        builder.build_vllm_inputs(create_mock_video(), CapturingProcessor())
+
+        assert isinstance(captured[0][-1]["content"], list)

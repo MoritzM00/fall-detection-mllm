@@ -61,6 +61,7 @@ class ConversationBuilder:
         video_format: VideoFormat = "tchw",
         mm_processor_kwargs: dict[str, object] | None = None,
         chat_template_kwargs: dict[str, bool | int | str] | None = None,
+        video_placeholder: str | None = None,
     ):
         """Initialize the conversation builder.
 
@@ -72,6 +73,8 @@ class ConversationBuilder:
             video_format: Frame layout the model's processor expects
             mm_processor_kwargs: Per-request processor kwargs (default: no frame sampling)
             chat_template_kwargs: Extra chat template variables (e.g. enable_thinking)
+            video_placeholder: If set, flatten message content to strings with this
+                placeholder in place of each video (for string-only chat templates)
         """
         self.config = config
         self.label2idx = label2idx
@@ -82,6 +85,7 @@ class ConversationBuilder:
             {"do_sample_frames": False} if mm_processor_kwargs is None else mm_processor_kwargs
         )
         self.chat_template_kwargs = chat_template_kwargs or {}
+        self.video_placeholder = video_placeholder
 
         self._prompt_builder = PromptBuilder(config, label2idx)
         self._sample_logged = False
@@ -126,6 +130,17 @@ class ConversationBuilder:
                 return [Image.fromarray(frame) for frame in thwc]
             case _:
                 return frames
+
+    def _flatten_content(self, messages: list[dict], placeholder: str) -> list[dict]:
+        """Join each message's content parts into one string, videos as placeholders."""
+        flat = []
+        for msg in messages:
+            text = "".join(
+                f"{placeholder}\n" if part["type"] == "video" else part["text"]
+                for part in msg["content"]
+            )
+            flat.append({**msg, "content": text})
+        return flat
 
     def _make_video(self, frames: torch.Tensor) -> VideoWithMetadata:
         """Wrap frames with computed metadata."""
@@ -256,10 +271,13 @@ class ConversationBuilder:
             Dict ready for llm.generate()
         """
         conv_data = self.build(target_video, exemplars=exemplars)
+        messages = conv_data.messages
+        if self.video_placeholder is not None:
+            messages = self._flatten_content(messages, self.video_placeholder)
 
         # Apply chat template
         text = processor.apply_chat_template(
-            conv_data.messages,
+            messages,
             tokenize=False,
             add_generation_prompt=True,
             **self.chat_template_kwargs,
@@ -364,4 +382,5 @@ def create_conversation_builder(
         video_format=config.model.video_format,
         mm_processor_kwargs=dict(config.vllm.mm_processor_kwargs),
         chat_template_kwargs=dict(config.model.chat_template_kwargs),
+        video_placeholder=config.model.video_placeholder,
     )
